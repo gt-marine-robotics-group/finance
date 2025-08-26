@@ -1,13 +1,8 @@
 # Bill Request Automation
 
-1.  Input your GT username on line 46
-2. Input your GT passwrod on line 47
+1. Input your GT Username + Password and the URL of the bill you are editing in the CONFIG (line 13)
 
-
-3. Input the URL for the bill you want to edit on line 90
-    - You must create the bill but leave the budget blank before running the automation script.
-
-4. Download the images for the bill you are submitting and save them in the "/downloads" folder in the same directory as the .xlsx
+2. Download the images for the bill you are submitting on sharepoint and save them in the "/downloads" folder in the same directory as the .xlsx
 5. Downnload the most recent bill .xlsx
 
 4. Run automation.py.
