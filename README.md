@@ -8,7 +8,7 @@
     - You must create the bill but leave the budget blank before running the automation script.
 
 
-4. Run the script.
+4. Run automation.py.
     - If it gets stuck when saving items, click save and it should continue.
 
 
