@@ -7,6 +7,8 @@
 3. Input the URL for the bill you want to edit on line 90
     - You must create the bill but leave the budget blank before running the automation script.
 
+4. Download the images for the bill you are submitting and save them in the "/downloads" folder in the same directory as the .xlsx
+5. Downnload the most recent bill .xlsx
 
 4. Run automation.py.
     - If it gets stuck when saving items, click save and it should continue.
