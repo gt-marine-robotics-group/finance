@@ -44,7 +44,7 @@ def click_save_button(driver, retries=5, wait_between=1.0):
 EXCEL_FILE = "Fall25_Bills_Budget.xlsx"
 DOWNLOAD_DIR = "downloads"
 USERNAME = "awu335"
-PASSWORD = "Georgia_palace5"  # store securely in practice
+PASSWORD = ""  # store securely in practice
 
 
 # === Step 1: Read Excel ===
