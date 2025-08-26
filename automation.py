@@ -6,45 +6,64 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import ElementClickInterceptedException, StaleElementReferenceException
-import time
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.common.exceptions import TimeoutException
 
-def click_save_button(driver, retries=5, wait_between=1.0):
-    xpath = "//a[contains(@class,'button-success') and contains(text(),'Save')]"
-    
-    for attempt in range(retries):
-        try:
-            save_button = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, xpath))
-            )
-
-            # Check if button is disabled
-            is_disabled = save_button.get_attribute("ng-disabled")
-            if is_disabled and ("true" in is_disabled or "1" in is_disabled):
-                print(f"    Save button disabled, waiting...")
-                time.sleep(wait_between)
-                continue
-
-            # Scroll into view + JS click
-            driver.execute_script("arguments[0].scrollIntoView(true);", save_button)
-            driver.execute_script("arguments[0].click();", save_button)
-            print("    Clicked Save button")
-            
-            # Wait for modal or form to disappear (adjust selector if needed)
-            WebDriverWait(driver, 10).until_not(
-                EC.presence_of_element_located((By.XPATH, xpath))
-            )
-            return True
-        except (ElementClickInterceptedException, StaleElementReferenceException) as e:
-            print(f"    Attempt {attempt+1}: Save button click failed, retrying...")
-            time.sleep(wait_between)
-    print("    ERROR: Could not click Save button after retries")
-    return False
 
 # === CONFIG ===
 EXCEL_FILE = "Fall25_Bills_Budget.xlsx"
 DOWNLOAD_DIR = "downloads"
-USERNAME = "awu335"
-PASSWORD = ""  # store securely in practice
+USERNAME = ""  # leave blank to prompt
+PASSWORD = ""  # leave blank to prompt
+BILL_URL = "https://gatech.campuslabs.com/engage/actionCenter/organization/mrg/budgeting/requests#/edit/326798"
+
+# Prompt for credentials if blank
+if not USERNAME:
+    USERNAME = input("Enter your username: ")
+if not PASSWORD:
+    import getpass
+    PASSWORD = getpass.getpass("Enter your password: ")
+if not BILL_URL:
+    BILL_URL = input("Enter the URL of the specific bill to edit: ")
+
+
+# Save button Handler
+
+def click_save_button(driver, retries=5, wait_between=1.0):
+    xpath = "//a[contains(@class,'button-success') and contains(text(),'Save')]"
+    actions = ActionChains(driver)
+
+    for attempt in range(retries):
+        try:
+            # Wait until button is present and enabled
+            save_button = WebDriverWait(driver, 10).until(
+                lambda d: d.find_element(By.XPATH, xpath)
+            )
+            ng_disabled = save_button.get_attribute("ng-disabled")
+            if ng_disabled and ng_disabled.lower() in ("true", "1"):
+                print(f"    Save button disabled, waiting...")
+                time.sleep(wait_between)
+                continue
+
+            # Scroll and move to button
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", save_button)
+            actions.move_to_element(save_button).perform()
+            save_button.click()
+            print("    Clicked Save button")
+            
+            # Give some time for form to process
+            time.sleep(2)
+            
+
+            return True
+
+        except (StaleElementReferenceException, ElementClickInterceptedException, TimeoutException):
+            print(f"    Attempt {attempt+1}: Save button click failed, retrying...")
+            time.sleep(wait_between)
+
+    print("    ERROR: Could not click Save button after retries")
+    return False
+
 
 
 # === Step 1: Read Excel ===
@@ -57,7 +76,7 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 # === Step 2: Start Selenium Browser ===
 options = webdriver.ChromeOptions()
 options.add_argument("--incognito")
-options.add_experimental_option("detach", True)  # <-- keeps Chrome open
+options.add_experimental_option("detach", True)  # keep Chrome open
 
 driver = webdriver.Chrome(options=options)
 driver.get("https://gatech.campuslabs.com/engage/")
@@ -71,7 +90,7 @@ shadow_root = driver.execute_script("return arguments[0].shadowRoot", parent_roo
 sign_in_button = shadow_root.find_element(By.CSS_SELECTOR, "a[href*='/engage/account/login']")
 sign_in_button.click()
 
-# === Step 3: Automatic Login (Duo MFA may still require interaction) ===
+# === Step 3: Automatic Login (Duo MFA still require interaction) ===
 username_input = WebDriverWait(driver, 20).until(
     EC.presence_of_element_located((By.ID, "username"))
 )
@@ -87,7 +106,7 @@ print("Please complete Duo MFA if prompted...")
 WebDriverWait(driver, 60).until(EC.url_contains("gatech.campuslabs.com/engage"))
 
 # === Step 4: Navigate to Specific Bill ===
-driver.get("https://gatech.campuslabs.com/engage/actionCenter/organization/mrg/budgeting/requests#/edit/326798")
+driver.get(BILL_URL)
 
 budget_tab = WebDriverWait(driver, 20).until(
     EC.element_to_be_clickable((By.XPATH, "//a[contains(@analytics-event, 'Tab Budget')]"))
