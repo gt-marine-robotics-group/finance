@@ -10,7 +10,6 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import TimeoutException
 import zipfile
 import xml.etree.ElementTree as ET
-from python_calamine import CalamineWorkbook
 
 # === CONFIG ===
 EXCEL_FILE = "Fall25_Bills_Budget.xlsx"
@@ -202,11 +201,18 @@ for section_name, items in sections:
 
             print("    Filled in item fields")
 
-            # Upload file from downloads using item name
-            filename = f"{item['Item Name']}.png"
-            local_path = os.path.join(DOWNLOAD_DIR, filename)
-            if not os.path.exists(local_path):
-                print(f"    WARNING: File not found: {local_path}")
+            # Upload file from downloads using item name (png or jpg)
+            file_extensions = [".png", ".jpg"]
+            local_path = None
+            for ext in file_extensions:
+                candidate = os.path.join(DOWNLOAD_DIR, f"{item['Item Name']}{ext}")
+                if os.path.exists(candidate):
+                    local_path = candidate
+                    filename = f"{item['Item Name']}{ext}"
+                    break
+
+            if not local_path:
+                print(f"    WARNING: File not found for item '{item['Item Name']}' (tried .png and .jpg)")
             else:
                 file_input = WebDriverWait(driver, 10).until(
                     EC.presence_of_element_located((By.ID, "fileUploadInput"))
@@ -214,6 +220,7 @@ for section_name, items in sections:
                 driver.execute_script("arguments[0].style.display='block';", file_input)
                 file_input.send_keys(os.path.abspath(local_path))
                 print(f"    Uploaded file: {filename}")
+
 
             # Click Save
             success = click_save_button(driver)
