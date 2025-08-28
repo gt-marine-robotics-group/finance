@@ -10,13 +10,14 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import TimeoutException
 import zipfile
 import xml.etree.ElementTree as ET
+from python_calamine import CalamineWorkbook
 
 # === CONFIG ===
 EXCEL_FILE = "Fall25_Bills_Budget.xlsx"
 DOWNLOAD_DIR = "downloads"
-USERNAME = "awu335"  # leave blank to prompt
-PASSWORD = "Georgia_palace5"  # leave blank to prompt
-BILL_URL = "https://gatech.campuslabs.com/engage/actionCenter/organization/mrg/budgeting/requests#/edit/326798"
+USERNAME = ""  # leave blank to prompt
+PASSWORD = ""  # leave blank to prompt
+BILL_URL = ""
 
 # Prompt for credentials if blank
 if not USERNAME:
@@ -29,6 +30,17 @@ if not BILL_URL:
 
 
 # Save button Handler
+def safe_int(val, default=0):
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return default
+
+def safe_float(val, default=0.0):
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
 
 def click_save_button(driver, retries=5, wait_between=1.0):
     xpath = "//a[contains(@class,'button-success') and contains(text(),'Save')]"
@@ -66,23 +78,30 @@ def click_save_button(driver, retries=5, wait_between=1.0):
     return False
 
 
+# === Step 1: Read Excel ===
+df = pd.read_excel(EXCEL_FILE, sheet_name=0)
+df.fillna("", inplace=True)
 
-def read_first_sheet_raw(path):
-    wb = open_workbook_auto(path)
-    sheet = wb.sheet_names()[0]
-    rows = list(wb[sheet].to_records())
+# Strip whitespace from column names
+df.columns = df.columns.str.strip()
 
-    # Find the max number of columns
-    max_len = max(len(r) for r in rows)
+# Fill down Budget Section if there are empty cells
+if "Budget Section" in df.columns:
+    df["Budget Section"] = df["Budget Section"].replace("", pd.NA).ffill()
+else:
+    print("⚠️ 'Budget Section' column not found")
 
-    # Pad each row with None so all rows have the same length
-    normalized = [list(r) + [None]*(max_len - len(r)) for r in rows]
+# Optional: check
+print(df[["Budget Section", "Item Name"]].head(10))
+sections = []
 
-    # First row = header
-    header = normalized[0]
-    data = normalized[1:]
-
-    return pd.DataFrame(data, columns=header)
+if "Budget Section" in df.columns:
+    grouped = df.groupby("Budget Section", sort=False)  # keep Excel order
+    for section_name, items in grouped:
+        # items is a DataFrame containing all rows for this section
+        sections.append((section_name, items))
+else:
+    print("⚠️ Cannot define sections because 'Budget Section' is missing")
 # Ensure download directory exists
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
