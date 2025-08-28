@@ -8,13 +8,14 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import ElementClickInterceptedException, StaleElementReferenceException
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import TimeoutException
-
+import zipfile
+import xml.etree.ElementTree as ET
 
 # === CONFIG ===
 EXCEL_FILE = "Fall25_Bills_Budget.xlsx"
 DOWNLOAD_DIR = "downloads"
-USERNAME = ""  # leave blank to prompt
-PASSWORD = ""  # leave blank to prompt
+USERNAME = "awu335"  # leave blank to prompt
+PASSWORD = "Georgia_palace5"  # leave blank to prompt
 BILL_URL = "https://gatech.campuslabs.com/engage/actionCenter/organization/mrg/budgeting/requests#/edit/326798"
 
 # Prompt for credentials if blank
@@ -66,10 +67,22 @@ def click_save_button(driver, retries=5, wait_between=1.0):
 
 
 
-# === Step 1: Read Excel ===
-df = pd.read_excel(EXCEL_FILE)
-sections = df.groupby("Budget Section")
+def read_first_sheet_raw(path):
+    wb = open_workbook_auto(path)
+    sheet = wb.sheet_names()[0]
+    rows = list(wb[sheet].to_records())
 
+    # Find the max number of columns
+    max_len = max(len(r) for r in rows)
+
+    # Pad each row with None so all rows have the same length
+    normalized = [list(r) + [None]*(max_len - len(r)) for r in rows]
+
+    # First row = header
+    header = normalized[0]
+    data = normalized[1:]
+
+    return pd.DataFrame(data, columns=header)
 # Ensure download directory exists
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
