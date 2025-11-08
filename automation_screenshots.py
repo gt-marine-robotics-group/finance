@@ -1,52 +1,170 @@
-import pandas as pd
 import os
 import time
+import re
+import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-import math
+from selenium.webdriver.common.by import By
 
-# === Configuration ===
-CSV_PATH = "./Fall25_Bills_Budget.csv"            # path to your saved CSV
-SAVE_FOLDER = "./screenshots"        # folder to save screenshots
-DELAY = 3                            # seconds to wait after page load
+# === CONFIG ===
+CSV_PATH = "./Fall25_Bills_Budget.csv"        # input CSV
+OUTPUT_CSV = "./Fall25_Bills_Budget_Updated.csv"
+SAVE_FOLDER = "./screenshots"
+DELAY = 3                                     # seconds to wait after page load
 
-# === Set up Selenium ===
+# === PROMPT USER ===
+bill_title = input("Enter Bill Title: ").strip()
+
+# === PREPARE DIRECTORIES ===
+if os.path.exists(SAVE_FOLDER):
+    for f in os.listdir(SAVE_FOLDER):
+        fp = os.path.join(SAVE_FOLDER, f)
+        if os.path.isfile(fp):
+            os.remove(fp)
+else:
+    os.makedirs(SAVE_FOLDER)
+
+# === LOAD CSV ===
+df = pd.read_csv(CSV_PATH, encoding="utf-8", on_bad_lines="skip")
+df.fillna("", inplace=True)
+df.columns = df.columns.str.strip()
+
+# Ensure required columns exist
+required_cols = {"Item Name", "Link", "Cost", "Bill Title"}
+missing = required_cols - set(df.columns)
+if missing:
+    raise ValueError(f"Missing columns in CSV: {missing}")
+
+# Filter for chosen bill
+mask = df["Bill Title"].astype(str).str.strip().str.lower() == bill_title.lower()
+df_filtered = df[mask].copy()
+
+if df_filtered.empty:
+    print(f"⚠️ No entries found for Bill '{bill_title}' — exiting.")
+    exit(0)
+
+# === Price extraction ===
+def parse_price(s: str):
+    """Return float for first valid price string (e.g. '129.99', '129,99 USD', '8.99')"""
+    if not isinstance(s, str) or not s.strip():
+        return None
+
+    s = s.replace("\xa0", " ").strip()
+
+    # Match numbers with optional decimals
+    match = re.search(r'(\d{1,3}(?:[,\s]\d{3})*(?:[.,]\d{1,2})?|\d+[.,]\d{1,2})', s)
+    if not match:
+        return None
+
+    num_str = match.group(1)
+
+    # Normalize European decimal
+    if "," in num_str and "." not in num_str:
+        num_str = num_str.replace(",", ".")
+    else:
+        num_str = re.sub(r"[,\s]", "", num_str)  # remove thousand separators
+
+    try:
+        return float(num_str)
+    except ValueError:
+        return None
+
+# === SETUP SELENIUM ===
 chrome_options = Options()
-chrome_options.add_argument("--headless=new")  # run headless
+chrome_options.add_argument("--headless=new")
 chrome_options.add_argument("--window-size=1920,1080")
 
 service = Service()  # assumes chromedriver is in PATH
 driver = webdriver.Chrome(service=service, options=chrome_options)
 
-# === Prepare save directory ===
-os.makedirs(SAVE_FOLDER, exist_ok=True)
+# === SCRAPE LOOP ===
+for idx, row in df_filtered.iterrows():
+    item_name = str(row.get("Item Name", "")).strip()
+    url = str(row.get("Link", "")).strip()
 
-# === Load CSV ===
-df = pd.read_csv(CSV_PATH)
-
-# === Visit each valid URL ===
-for _, row in df.iterrows():
-    item = str(row.get("Item Name", "")).strip()
-    url = row.get("Link", "")
-
-    # Skip if url is empty or NaN
-    if not isinstance(url, str) or url.strip() == "" or str(url).lower() == "nan":
-        print(f"Skipping empty URL for item: {item}")
+    if not item_name or not isinstance(url, str) or url.lower() == "nan" or url == "":
+        print(f"⚠️ Skipping empty or invalid row (item='{item_name}')")
         continue
 
-    print(f"Opening {item} → {url}")
+    print(f"\nOpening {item_name} → {url}")
+    scraped_text = ""
+    found = False
 
     try:
         driver.get(url)
         time.sleep(DELAY)
 
-        # Save using exact Item name (spaces preserved)
-        filename = os.path.join(SAVE_FOLDER, f"{item}.png")
-        driver.save_screenshot(filename)
-        print(f"✅ Saved screenshot: {filename}")
+        # --- Amazon-style price (whole + fraction) ---
+        try:
+            whole_parts = driver.find_elements(By.CSS_SELECTOR, ".a-price-whole")
+            fraction_parts = driver.find_elements(By.CSS_SELECTOR, ".a-price-fraction")
+            if whole_parts and fraction_parts and len(whole_parts) == len(fraction_parts):
+                dollars = whole_parts[0].text.replace(",", "").strip()
+                cents = fraction_parts[0].text.strip()
+                if dollars.isdigit() and cents.isdigit():
+                    scraped_text = f"{dollars}.{cents}"
+                    found = True
+        except Exception:
+            pass
+
+        # --- Generic selectors fallback ---
+        if not found:
+            possible_selectors = [
+                '[class*="price"]',
+                '[id*="price"]',
+                '[class*="cost"]',
+                '[id*="cost"]',
+                '[class*="amount"]',
+                '[data-price]',
+                '[itemprop*="price"]',
+                '[data-testid*="price"]',
+            ]
+
+            for sel in possible_selectors:
+                try:
+                    elems = driver.find_elements(By.CSS_SELECTOR, sel)
+                except Exception:
+                    elems = []
+                for el in elems:
+                    text = (el.text or el.get_attribute("innerText") or "").strip()
+                    if not text:
+                        text = (el.get_attribute("content") or "").strip()
+                    if not text:
+                        continue
+                    if re.search(r'\d', text):  # contains digits
+                        scraped_text = text
+                        found = True
+                        break
+                if found:
+                    break
+
+        # --- Fallback to raw HTML ---
+        if not scraped_text:
+            html = driver.page_source
+            m = re.search(r'[\$€£]?\s*\d[\d,]*\.?\d{0,2}', html)
+            if m:
+                scraped_text = m.group(0)
+
+        # --- Save screenshot ---
+        safe_filename = f"{item_name}.png"
+        driver.save_screenshot(os.path.join(SAVE_FOLDER, safe_filename))
+        print(f"✅ Saved screenshot: {safe_filename}")
+
+        # --- Parse & Update Cost ---
+        parsed = parse_price(scraped_text)
+        if parsed is not None and parsed > 0.0:
+            df.at[idx, "Cost"] = f"${parsed:.2f}"
+            print(f"💲 Found cost: {scraped_text} → ${parsed:.2f}")
+        else:
+            print(f"⚠️ Could not parse price from: '{scraped_text}'")
+
     except Exception as e:
-        print(f"⚠️ Error loading {url} for {item}: {e}")
+        print(f"⚠️ Error loading {url}: {e}")
 
 driver.quit()
-print("🎉 All valid screenshots saved.")
+
+# === SAVE UPDATED CSV ===
+df.to_csv(OUTPUT_CSV, index=False, encoding="utf-8-sig")
+print(f"\n🎉 Done. Updated CSV saved as: {OUTPUT_CSV}")
+print(f"Screenshots saved in: {os.path.abspath(SAVE_FOLDER)}")
