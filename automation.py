@@ -16,10 +16,10 @@ import getpass
 # === CONFIG ===
 CSV_FILE = "Fall25_Bills_Budget.csv"
 DOWNLOAD_DIR = "downloads"  # where screenshots are already saved
-USERNAME = ""  # leave blank to prompt
-PASSWORD = ""  # leave blank to prompt
-BILL_URL = ""
-BILL_NO = ""  # prompt dynamically
+USERNAME = "awu335"  # leave blank to prompt
+PASSWORD = "Georgia_palace5"  # leave blank to prompt
+BILL_URL = "https://gatech.campuslabs.com/engage/actionCenter/organization/mrg/budgeting/requests#/edit/344616"
+BILL_NO = "Marine Robotics Group Fall 2025 Bill No. 7"  # prompt dynamically
 
 # === Prompt for credentials and bill info ===
 if not USERNAME:
@@ -77,67 +77,57 @@ def click_save_button(driver, retries=5, wait_between=1.0):
     return False
 
 def clear_existing_line_items(driver, section_name):
-    """Clear all existing line items from a section by opening each and pressing Delete."""
     print(f"  Clearing existing line items in section: {section_name}")
-    try:
-        section_link = WebDriverWait(driver, 15).until(
-            EC.element_to_be_clickable((
-                By.XPATH,
-                f"//h4[@class='groupTitle bdg-margin-vert']/a[contains(text(), '{section_name}')]"
-            ))
-        )
-        section_container = section_link.find_element(By.XPATH, "./../../..")
 
-        # Count once for display
-        initial_items = section_container.find_elements(
-            By.XPATH,
-            ".//a[@ng-click='editLineItem(lineItem)']"
-        )
-        print(f"    Found {len(initial_items)} line items to delete.")
-
-        deleted_count = 0
-        while True:
-            try:
-                # Refetch each iteration (DOM changes after delete)
-                line_items = section_container.find_elements(
+    while True:
+        try:
+            # Re-find the section container *every iteration* (DOM changes after deletions)
+            section_link = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((
                     By.XPATH,
-                    ".//a[@ng-click='editLineItem(lineItem)']"
-                )
-                if not line_items:
-                    break
+                    f"//h4[@class='groupTitle bdg-margin-vert']/a[contains(text(), '{section_name}')]"
+                ))
+            )
+            section_container = section_link.find_element(By.XPATH, "./../../..")
 
-                # Click the first available item
-                item_link = line_items[-1]  # delete from bottom for stability
-                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", item_link)
-                time.sleep(0.5)
-                item_link.click()
-                deleted_count += 1
-                print(f"    Opened line item {deleted_count}")
+            # Refetch line items
+            line_items = section_container.find_elements(
+                By.XPATH,
+                ".//a[@ng-click='editLineItem(lineItem)']"
+            )
 
-                delete_button = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((
-                        By.XPATH,
-                        "//a[@ng-click='deleteLineItem()']"
-                    ))
-                )
-                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", delete_button)
-                time.sleep(0.3)
-                delete_button.click()
-                print(f"      ✅ Deleted line item {deleted_count}")
+            if not line_items:
+                print(f"    ✅ Section '{section_name}' is empty")
+                return
 
-                # Wait for DOM update before re-querying
-                time.sleep(1.5)
+            # Delete bottom item (most stable)
+            item = line_items[-1]
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", item)
+            time.sleep(0.3)
 
-            except Exception as e:
-                print(f"      ⚠️ Error deleting line item {deleted_count}: {e}")
-                # Try refetching after a small delay
-                time.sleep(1)
-                continue
+            item.click()
+            print("    Opened line item")
 
-        print(f"    ✅ Finished clearing section '{section_name}'")
+            delete_button = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, "//a[@ng-click='deleteLineItem()']"))
+            )
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", delete_button)
+            delete_button.click()
+            print("      ✅ Deleted")
 
-    except Exception as e:
-        print(f"  ⚠️ ERROR in section '{section_name}': {e}")
+            # wait for Angular to refresh the DOM
+            time.sleep(1.0)
+
+        except StaleElementReferenceException:
+            # Simply retry since we ALWAYS refetch on each loop
+            print("      ♻️ DOM updated, refetching section...")
+            time.sleep(0.5)
+            continue
+
+        except Exception as e:
+            print(f"      ⚠️ Unexpected error: {e}")
+            time.sleep(0.5)
+            continue
 
 
 # === Step 1: Read CSV ===
