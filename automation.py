@@ -15,13 +15,13 @@ import getpass
 
 # === CONFIG ===
 CSV_FILE = "Fall25_Bills_Budget.csv"
-DOWNLOAD_DIR = "downloads"  # where screenshots are already saved
-USERNAME = "awu335"  # leave blank to prompt
-PASSWORD = "Georgia_palace5"  # leave blank to prompt
+DOWNLOAD_DIR = "downloads"
+USERNAME = "awu335"
+PASSWORD = "Georgia_palace5"
 BILL_URL = "https://gatech.campuslabs.com/engage/actionCenter/organization/mrg/budgeting/requests#/edit/344616"
-BILL_NO = "Marine Robotics Group Fall 2025 Bill No. 7"  # prompt dynamically
+BILL_NO = "Marine Robotics Group Fall 2025 Bill No. 7"
 
-# === Prompt for credentials and bill info ===
+# Prompt if empty
 if not USERNAME:
     USERNAME = input("Enter your username: ")
 if not PASSWORD:
@@ -37,18 +37,16 @@ def safe_int(val, default=0):
         return int(float(val))
     except (ValueError, TypeError):
         return default
-    
+
 def safe_float(val, default=0.0):
-    """Convert value to float safely, stripping symbols and commas."""
     try:
         if isinstance(val, str):
             val = val.replace("$", "").replace(",", "").strip()
         return float(val)
     except (ValueError, TypeError):
         return default
-    
+
 def click_save_button(driver, retries=5, wait_between=1.0):
-    """Try clicking the Save button up to `retries` times."""
     xpath = "//a[contains(@class,'button-success') and contains(text(),'Save')]"
     actions = ActionChains(driver)
 
@@ -59,29 +57,20 @@ def click_save_button(driver, retries=5, wait_between=1.0):
             )
             ng_disabled = save_button.get_attribute("ng-disabled")
             if ng_disabled and ng_disabled.lower() in ("true", "1"):
-                print(f"    Save button disabled, waiting...")
                 time.sleep(wait_between)
                 continue
-
             driver.execute_script("arguments[0].scrollIntoView({block:'center'});", save_button)
             actions.move_to_element(save_button).perform()
             save_button.click()
-            print("    Clicked Save button")
             time.sleep(2)
             return True
         except (StaleElementReferenceException, ElementClickInterceptedException, TimeoutException):
-            print(f"    Attempt {attempt+1}: Save button click failed, retrying...")
             time.sleep(wait_between)
-
-    print("    ERROR: Could not click Save button after retries")
     return False
 
 def clear_existing_line_items(driver, section_name):
-    print(f"  Clearing existing line items in section: {section_name}")
-
     while True:
         try:
-            # Re-find the section container *every iteration* (DOM changes after deletions)
             section_link = WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((
                     By.XPATH,
@@ -89,101 +78,69 @@ def clear_existing_line_items(driver, section_name):
                 ))
             )
             section_container = section_link.find_element(By.XPATH, "./../../..")
-
-            # Refetch line items
             line_items = section_container.find_elements(
-                By.XPATH,
-                ".//a[@ng-click='editLineItem(lineItem)']"
+                By.XPATH, ".//a[@ng-click='editLineItem(lineItem)']"
             )
-
             if not line_items:
-                print(f"    ✅ Section '{section_name}' is empty")
                 return
-
-            # Delete bottom item (most stable)
             item = line_items[-1]
             driver.execute_script("arguments[0].scrollIntoView({block:'center'});", item)
             time.sleep(0.3)
-
             item.click()
-            print("    Opened line item")
-
             delete_button = WebDriverWait(driver, 10).until(
                 EC.element_to_be_clickable((By.XPATH, "//a[@ng-click='deleteLineItem()']"))
             )
             driver.execute_script("arguments[0].scrollIntoView({block:'center'});", delete_button)
             delete_button.click()
-            print("      ✅ Deleted")
-
-            # wait for Angular to refresh the DOM
             time.sleep(1.0)
-
         except StaleElementReferenceException:
-            # Simply retry since we ALWAYS refetch on each loop
-            print("      ♻️ DOM updated, refetching section...")
+            time.sleep(0.5)
+            continue
+        except Exception:
             time.sleep(0.5)
             continue
 
-        except Exception as e:
-            print(f"      ⚠️ Unexpected error: {e}")
-            time.sleep(0.5)
-            continue
-
-
-# === Step 1: Read CSV ===
+# === Read CSV ===
 df = pd.read_csv(CSV_FILE)
 df.fillna("", inplace=True)
 df.columns = df.columns.str.strip()
 
-
-# Normalize Cost column
 if "Cost" in df.columns:
     df["Cost"] = (
         df["Cost"]
         .astype(str)
-        .str.replace(r"[^0-9.\-]", "", regex=True)  # remove $, commas, etc.
+        .str.replace(r"[^0-9.\-]", "", regex=True)
         .replace("", "0")
         .astype(float)
     )
-
 
 required_cols = {"Item Name", "Link", "Cost", "Bill Title"}
 missing = required_cols - set(df.columns)
 if missing:
     raise ValueError(f"Missing columns in CSV: {missing}")
 
-
-# Filter for chosen bill
 mask = df["Bill Title"].astype(str).str.strip().str.lower() == BILL_NO.lower()
 df_filtered = df[mask].copy()
 
 if df_filtered.empty:
-    print(f"⚠️ No entries found for  '{BILL_NO}' — exiting.")
+    print(f"No entries for '{BILL_NO}'")
     exit(0)
 
-## Fill down Budget Section (only within filtered rows)
 if "Budget Section" in df_filtered.columns:
     df_filtered["Budget Section"] = df_filtered["Budget Section"].replace("", pd.NA).ffill()
-
-# Group items by section (only for the selected bill)
-sections = []
-if "Budget Section" in df_filtered.columns:
     grouped = df_filtered.groupby("Budget Section", sort=False)
-    for section_name, items in grouped:
-        sections.append((section_name, items))
+    sections = [(name, items) for name, items in grouped]
 else:
-    print("⚠️ Cannot define sections because 'Budget Section' is missing in filtered data")
+    sections = []
 
-
-# === Step 2: Start Selenium and log in ===
+# === Selenium Setup ===
 options = webdriver.ChromeOptions()
 options.add_argument("--incognito")
 options.add_experimental_option("detach", True)
-
 driver = webdriver.Chrome(options=options)
 driver.get("https://gatech.campuslabs.com/engage/")
 
-# Handle login
+# Login
 discovery_bar = WebDriverWait(driver, 20).until(
     EC.presence_of_element_located((By.ID, "discovery-bar"))
 )
@@ -200,11 +157,9 @@ password_input = driver.find_element(By.ID, "password")
 password_input.send_keys(PASSWORD)
 login_button = driver.find_element(By.NAME, "submitbutton")
 login_button.click()
-
-print("Please complete Duo MFA if prompted...")
+print("Complete Duo MFA if prompted...")
 WebDriverWait(driver, 60).until(EC.url_contains("gatech.campuslabs.com/engage"))
 
-# === Step 3: Navigate to Bill ===
 driver.get(BILL_URL)
 budget_tab = WebDriverWait(driver, 20).until(
     EC.element_to_be_clickable((By.XPATH, "//a[contains(@analytics-event, 'Tab Budget')]"))
@@ -212,76 +167,83 @@ budget_tab = WebDriverWait(driver, 20).until(
 budget_tab.click()
 time.sleep(5)
 
-# === Step 4: Process each section and upload existing screenshots ===
+# === Process Sections ===
 for section_name, items in sections:
-    try:
-        print(f"\nProcessing section: {section_name}")
+    print(f"\nProcessing section: {section_name}")
+    clear_existing_line_items(driver, section_name)
 
-        section_link = WebDriverWait(driver, 15).until(
-            EC.element_to_be_clickable((
-                By.XPATH,
-                f"//h4[@class='groupTitle bdg-margin-vert']/a[contains(text(), '{section_name}')]"
-            ))
-        )
-        clear_existing_line_items(driver, section_name)
-        driver.execute_script("arguments[0].scrollIntoView(true);", section_link)
-        time.sleep(1)
+    # === Process Sections ===
+for section_name, items in sections:
+    print(f"\nProcessing section: {section_name}")
+    clear_existing_line_items(driver, section_name)
 
-        for _, item in items.iterrows():
-            print(f"  Processing item: {item['Item Name']}")
+    # === Process Sections ===
+for section_name, items in sections:
+    print(f"\nProcessing section: {section_name}")
+    clear_existing_line_items(driver, section_name)
 
-            # Click "Add Line Item"
-            add_item_button = WebDriverWait(driver, 15).until(
-                EC.element_to_be_clickable((
-                    By.XPATH,
-                    f"//h4[@class='groupTitle bdg-margin-vert']/a[contains(text(), '{section_name}')]/../../..//a[contains(@class,'add')]"
-                ))
-            )
-            driver.execute_script("arguments[0].scrollIntoView(true);", add_item_button)
-            time.sleep(0.5)
-            driver.execute_script("arguments[0].click();", add_item_button)
-            print("    Clicked 'Add Line Item'")
-
-            # Fill fields
-            name_field = WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "Name")))
-            name_field.clear()
-            name_field.send_keys(str(item["Item Name"]))
-
-            driver.find_element(By.ID, "Description").send_keys(str(item["Description"]))
-
-            quantity_field = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "Quantity")))
-            quantity_field.clear()
-            quantity_field.send_keys(str(safe_int(item["Quantity"])))
-
-            price_field = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "Price")))
-            price_field.clear()
-            price_field.send_keys(str(safe_float(item["Cost"])))
-
-            # Upload screenshot (if exists)
-            local_path = None
-            for ext in [".png", ".jpg"]:
-                candidate = os.path.join(DOWNLOAD_DIR, f"{item['Item Name']}{ext}")
-                if os.path.exists(candidate):
-                    local_path = candidate
-                    break
-
-            if local_path:
-                file_input = WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.ID, "fileUploadInput"))
+    for _, item in items.iterrows():
+        retries = 5
+        for attempt in range(retries):
+            try:
+                # Re-fetch section and Add button each time
+                section_anchor = WebDriverWait(driver, 15).until(
+                    EC.presence_of_element_located((
+                        By.XPATH,
+                        f"//h4[@class='groupTitle bdg-margin-vert']/a[contains(text(), '{section_name}')]"
+                    ))
                 )
-                driver.execute_script("arguments[0].style.display='block';", file_input)
-                file_input.send_keys(os.path.abspath(local_path))
-                print(f"    Uploaded file: {os.path.basename(local_path)}")
-            else:
-                print(f"    ⚠️ No file found for '{item['Item Name']}'")
+                section_container = section_anchor.find_element(By.XPATH, "./../../..")
+                add_item_button = section_container.find_element(By.XPATH, ".//a[contains(@class,'add')]")
 
-            success = click_save_button(driver)
-            if not success:
-                print(f"    ERROR saving item '{item['Item Name']}'")
+                # Scroll and click via JS
+                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", add_item_button)
+                driver.execute_script("arguments[0].click();", add_item_button)
 
-        print(f"✅ Finished section: {section_name}")
+                # Wait for form fields to appear
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.ID, "Name"))
+                )
 
-    except Exception as e:
-        print(f"⚠️ ERROR in section '{section_name}': {e}")
+                print(f"  ✅ Clicked 'Add Line Item' for {item['Item Name']}")
+                break
+            except (StaleElementReferenceException, ElementClickInterceptedException):
+                print(f"  ⚠️ Retry clicking Add Line Item ({attempt+1}/{retries})...")
+                time.sleep(0.5)
+        else:
+            print(f"  ❌ Failed to click Add Line Item for {item['Item Name']}")
+            continue
+
+        # Fill form safely after waiting for fields
+        name_field = driver.find_element(By.ID, "Name")
+        name_field.clear()
+        name_field.send_keys(str(item["Item Name"]))
+
+        driver.find_element(By.ID, "Description").send_keys(str(item.get("Description", "")))
+        quantity_field = driver.find_element(By.ID, "Quantity")
+        quantity_field.clear()
+        quantity_field.send_keys(str(safe_int(item.get("Quantity", 1))))
+        price_field = driver.find_element(By.ID, "Price")
+        price_field.clear()
+        price_field.send_keys(str(safe_float(item.get("Cost", 0.0))))
+
+        # Upload file if exists
+        local_path = None
+        for ext in [".png", ".jpg"]:
+            candidate = os.path.join(DOWNLOAD_DIR, f"{item['Item Name']}{ext}")
+            if os.path.exists(candidate):
+                local_path = candidate
+                break
+        if local_path:
+            file_input = driver.find_element(By.ID, "fileUploadInput")
+            driver.execute_script("arguments[0].style.display='block';", file_input)
+            file_input.send_keys(os.path.abspath(local_path))
+            print(f"    Uploaded file: {os.path.basename(local_path)}")
+        else:
+            print(f"    ⚠️ No file for {item['Item Name']}")
+
+        click_save_button(driver)
+
+    print(f"✅ Finished section: {section_name}")
 
 print(f"🎉 All items for Bill {BILL_NO} processed successfully.")
