@@ -95,22 +95,67 @@ for idx, row in df_filtered.iterrows():
         driver.get(url)
         time.sleep(DELAY)
 
-        # --- Amazon-style price (whole + fraction) ---
-        try:
-            whole_parts = driver.find_elements(By.CSS_SELECTOR, ".a-price-whole")
-            fraction_parts = driver.find_elements(By.CSS_SELECTOR, ".a-price-fraction")
-            if whole_parts and fraction_parts and len(whole_parts) == len(fraction_parts):
-                dollars = whole_parts[0].text.replace(",", "").strip()
-                cents = fraction_parts[0].text.strip()
-                if dollars.isdigit() and cents.isdigit():
-                    scraped_text = f"{dollars}.{cents}"
-                    found = True
-        except Exception:
-            pass
+        # === AMAZON-PRIORITY SELECTORS ===
+        amazon_price_selectors = [
+            # Modern Amazon price widget
+            "#corePriceDisplay_desktop_feature_div .a-offscreen",
+            "#apex_desktop .a-offscreen",
 
-        # --- Generic selectors fallback ---
+            # Standard price blocks
+            "#priceblock_ourprice",
+            "#priceblock_dealprice",
+            "#sns-base-price",
+            "#newBuyBoxPrice",
+
+            # Generic Amazon price classes
+            ".a-price .a-offscreen",
+            ".a-price-whole",
+            ".a-price-fraction",
+        ]
+
+        def first_nonempty_text(element):
+            txt = (element.text or "").strip()
+            if not txt:
+                txt = (element.get_attribute("innerText") or "").strip()
+            if not txt:
+                txt = (element.get_attribute("content") or "").strip()
+            return txt
+
+        # ---------- TRY AMAZON SELECTORS FIRST ----------
+        for sel in amazon_price_selectors:
+            try:
+                elems = driver.find_elements(By.CSS_SELECTOR, sel)
+            except Exception:
+                elems = []
+
+            for el in elems:
+                text = first_nonempty_text(el)
+                if not text:
+                    continue
+                if re.search(r"\d", text):
+                    scraped_text = text
+                    found = True
+                    break
+            if found:
+                break
+
+        # ---------- SPECIAL CASE: AMAZON WHOLE + FRACTION ----------
         if not found:
-            possible_selectors = [
+            try:
+                whole = driver.find_elements(By.CSS_SELECTOR, ".a-price-whole")
+                frac = driver.find_elements(By.CSS_SELECTOR, ".a-price-fraction")
+                if whole and frac:
+                    w = whole[0].text.replace(",", "").strip()
+                    f = frac[0].text.strip()
+                    if w.isdigit() and f.isdigit():
+                        scraped_text = f"{w}.{f}"
+                        found = True
+            except Exception:
+                pass
+
+        # ---------- GENERIC FALLBACK SELECTORS ----------
+        if not found:
+            generic_selectors = [
                 '[class*="price"]',
                 '[id*="price"]',
                 '[class*="cost"]',
@@ -121,25 +166,24 @@ for idx, row in df_filtered.iterrows():
                 '[data-testid*="price"]',
             ]
 
-            for sel in possible_selectors:
+            for sel in generic_selectors:
                 try:
                     elems = driver.find_elements(By.CSS_SELECTOR, sel)
                 except Exception:
                     elems = []
+
                 for el in elems:
-                    text = (el.text or el.get_attribute("innerText") or "").strip()
-                    if not text:
-                        text = (el.get_attribute("content") or "").strip()
+                    text = first_nonempty_text(el)
                     if not text:
                         continue
-                    if re.search(r'\d', text):  # contains digits
+                    if re.search(r"\d", text):
                         scraped_text = text
                         found = True
                         break
                 if found:
                     break
 
-        # --- Fallback to raw HTML ---
+        # ---------- RAW HTML REGEX LAST RESORT ----------
         if not scraped_text:
             html = driver.page_source
             m = re.search(r'[\$€£]?\s*\d[\d,]*\.?\d{0,2}', html)
