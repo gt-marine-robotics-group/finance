@@ -17,7 +17,7 @@ import getpass
 CSV_FILE = "Fall25_Bills_Budget.csv"
 DOWNLOAD_DIR = "downloads"
 USERNAME = "awu335"
-PASSWORD = "Georgia_palace5"
+PASSWORD = ""
 BILL_URL = "https://gatech.campuslabs.com/engage/actionCenter/organization/mrg/budgeting/requests#/edit/349468?tab=budget"
 BILL_NO = "Stinger Tug Spring 2026"
 
