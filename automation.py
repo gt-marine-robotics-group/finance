@@ -18,8 +18,8 @@ CSV_FILE = "Fall25_Bills_Budget.csv"
 DOWNLOAD_DIR = "downloads"
 USERNAME = "awu335"
 PASSWORD = "Georgia_palace5"
-BILL_URL = "https://gatech.campuslabs.com/engage/actionCenter/organization/mrg/budgeting/requests#/edit/344616"
-BILL_NO = "Marine Robotics Group Fall 2025 Bill No. 7"
+BILL_URL = "https://gatech.campuslabs.com/engage/actionCenter/organization/mrg/budgeting/requests#/edit/349468?tab=budget"
+BILL_NO = "Stinger Tug Spring 2026"
 
 # Prompt if empty
 if not USERNAME:
@@ -110,9 +110,11 @@ if "Cost" in df.columns:
         df["Cost"]
         .astype(str)
         .str.replace(r"[^0-9.\-]", "", regex=True)
-        .replace("", "0")
-        .astype(float)
+        .replace({"": None, ".": None, "..": None})
     )
+
+    df["Cost"] = pd.to_numeric(df["Cost"], errors="coerce").fillna(0.0)
+
 
 required_cols = {"Item Name", "Link", "Cost", "Bill Title"}
 missing = required_cols - set(df.columns)
