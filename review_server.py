@@ -70,6 +70,11 @@ class ReviewHandler(SimpleHTTPRequestHandler):
                 for name in updated:
                     print(f"   • {name}")
 
+                # Open the file in Excel so OneDrive syncs the changes
+                import subprocess
+                subprocess.run(["open", XLSX_PATH])
+                print(f"   📂 Opened in Excel for sync")
+
                 self._respond(200, {"updated": updated, "count": len(updated)})
 
             except Exception as e:
