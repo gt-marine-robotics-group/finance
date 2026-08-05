@@ -70,10 +70,13 @@ class ReviewHandler(SimpleHTTPRequestHandler):
                 for name in updated:
                     print(f"   • {name}")
 
+                # Touch the file to trigger OneDrive sync detection
+                os.utime(XLSX_PATH, None)
+
                 # Open the file in Excel so OneDrive syncs the changes
                 import subprocess
                 subprocess.run(["open", XLSX_PATH])
-                print(f"   📂 Opened in Excel for sync")
+                print(f"   📂 Opened in Excel — save (Cmd+S) and close to ensure sync")
 
                 self._respond(200, {"updated": updated, "count": len(updated)})
 

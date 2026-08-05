@@ -544,6 +544,17 @@ def generate_review_html(data, bill_title, output_path):
 
 # === MAIN ===
 if __name__ == "__main__":
+    # === CHECK FILE NOT LOCKED ===
+    if CSV_PATH.endswith(".xlsx"):
+        # Check for Excel lock file (indicates file is open)
+        lock_file = os.path.join(os.path.dirname(CSV_PATH), "~$" + os.path.basename(CSV_PATH))
+        if os.path.exists(lock_file):
+            print("⚠️  The spreadsheet appears to be open in Excel.")
+            print("   Close it first so the script can read/write properly.")
+            resp = input("   Continue anyway? [y/N]: ").strip().lower()
+            if resp != "y":
+                exit(0)
+
     # === LOAD SPREADSHEET ===
     if CSV_PATH.endswith(".xlsx"):
         df = pd.read_excel(CSV_PATH, sheet_name=SHEET_NAME)
