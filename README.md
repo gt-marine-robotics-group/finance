@@ -1,123 +1,145 @@
 # Bill Request Automation
 
-## Quick Start
+Automates submitting bill line items to CampusLabs Engage, including price verification via screenshots.
 
-1. Download the images for the bill you are submitting on SharePoint and save them in the `/downloads` folder
-2. Download the most recent bill `.csv` in UTF-8 encoding (or use `engage_tools.py download` to auto-pull from SharePoint)
-
-3. Run `automation_screenshots.py` to scrape prices and take screenshots.
-    - Opens each item link, extracts the price, and saves a screenshot
-    - Generates `review.html` — open it in your browser to quickly verify all prices match
-    - Updates the CSV with scraped prices → `FY27_Bills_Budget_Updated.csv`
-
-4. Run `automation.py` to submit items to CampusLabs.
-    - If it gets stuck when saving items, click save and it should continue.
-    - Includes deduplication: won't add an item that already exists in a section
-    - Verifies each save completed before moving to the next item
-    - Prints a final summary showing successes, skips, and failures
-
-5. Run `python engage_tools.py verify --bill "Your Bill Name" --csv FY27_Bills_Budget.csv` to confirm items saved.
-
-
-## Setup: SharePoint Auto-Download & API Verification
-
-### 1. Register an Azure App (for SharePoint access)
-
-1. Go to [Azure Portal](https://portal.azure.com) → sign in with `yourname@gatech.edu`
-2. Search for **"App registrations"** → **New registration**
-   - Name: `MRG Finance Automation`
-   - Supported account types: **"Accounts in this organizational directory only (Georgia Tech)"**
-   - Redirect URI: leave blank
-   - Click **Register**
-3. On the app's Overview page, copy:
-   - **Application (client) ID** → this is your `AZURE_CLIENT_ID`
-   - **Directory (tenant) ID** → this is your `AZURE_TENANT_ID`
-4. Go to **Authentication** → under "Advanced settings":
-   - Set **"Allow public client flows"** to **Yes** → Save
-5. Go to **API permissions** → **Add a permission** → **Microsoft Graph** → **Delegated permissions**:
-   - `Files.Read.All`
-   - `Sites.Read.All`
-   - Click **Add permissions**
-6. If you see "Admin consent required" and it's not granted:
-   - For delegated permissions with device code flow, admin consent is usually NOT required
-   - If it is, ask your GT admin or try without — it often works for read-only access to your own sites
-
-### 2. Get a CampusLabs Engage API Key
-
-1. Go to: https://gatech.campuslabs.com/engage/admin/apikeys
-   - You need **All Access** admin role on your org
-2. Click **Create API Key**
-   - Name: `MRG Automation`
-   - Description: `Bill verification script`
-3. Set restrictions:
-   - **IP restriction**: Add your machine's IP (or leave unrestricted for now)
-   - **Method & Endpoint**: Allow `GET` on `/v3.0/finance/request/funding`
-4. Copy the key (starts with `esk_live_`)
-
-### 3. Create your `.env` file
+## Prerequisites
 
 ```bash
-cp .env.example .env
-# Edit .env with your actual values
+cd /Users/aaronwu/mrg/finance
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-### 4. Verify everything works
+You also need Chrome installed (for Selenium).
+
+## Workflow
+
+### 1. Prepare the spreadsheet
+
+The scripts read directly from the synced SharePoint xlsx:
+```
+~/Library/CloudStorage/OneDrive-GeorgiaInstituteofTechnology/
+  Documents - Marine Robotics Group/OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx
+```
+
+Each item row needs these columns filled in:
+- **Bill Title** — exact name of the bill (must match across all items in a group)
+- **Item Name** — name for the line item
+- **Cost** — unit price
+- **Quantity** — how many
+- **Link** — URL to the product page (for screenshots)
+- **Budget Section** — which CampusLabs section to put it in (e.g. `B03 - General Inventoried Goods`)
+
+Optional:
+- **Description** — fills the description field on CampusLabs
+- **Bill No.** — the CampusLabs bill number (for reference)
+
+### 2. Run screenshots & price verification
 
 ```bash
-# Test Engage API connection
-python engage_tools.py verify --bill "Marine Robotics Group"
-
-# Test SharePoint connection (first time opens browser for auth)
-python engage_tools.py ls General
-
-# Download the spreadsheet
-python engage_tools.py download -o FY27_Bills_Budget.xlsx
-
-# Convert xlsx to csv
-python engage_tools.py convert FY27_Bills_Budget.xlsx
+source .venv/bin/activate
+python automation_screenshots.py
 ```
 
-### How to verify API permissions are set up correctly
+**What it does:**
+1. Shows available bill titles from the spreadsheet — pick one by number or name
+2. Shows all items that will be processed — confirm with `y`
+3. Opens each item's link in headless Chrome, scrapes the price, takes a screenshot
+4. Compares scraped price against spreadsheet:
+   - ✅ Match → marked OK
+   - ⚠️ Mismatch → keeps your spreadsheet price, flags for review
+   - ❌ Failed → couldn't find a price
+5. Generates `review.html` — interactive page with screenshots and editable price fields
+6. If mismatches found: starts a local server and opens `review.html` in your browser
+7. Edit prices in the browser → click **"Save to Spreadsheet"** → writes directly to the xlsx
+8. Press Enter in terminal when done
 
-**For the Engage API:**
+**Output:**
+- `screenshots/` folder with a .png per item
+- `review.html` — interactive review page
+- `FY27_Bills_Budget_Updated.csv` — CSV with final prices (backup)
+
+### 3. Download screenshot images for upload
+
+The screenshots in `screenshots/` are named to match "Item Name" exactly. Copy whichever ones you need into `downloads/` for the automation script to upload them:
+
 ```bash
-# Quick test — should return funding request data (or empty list if no requests yet)
-curl -s -H "X-Engage-Api-Key: YOUR_KEY_HERE" \
-  "https://engage-api.campuslabs.com/api/v3.0/finance/request/funding?take=1" | python3 -m json.tool
+# Copy all screenshots to downloads folder
+cp screenshots/*.png downloads/
 ```
-- ✅ If you get `{"totalItems": ..., "items": [...]}` → key works
-- ❌ `401` → key not provided correctly
-- ❌ `403` → key invalid, IP restricted, or endpoint not permitted
 
-**For SharePoint/Microsoft Graph:**
+Or just the ones you need for a specific bill.
+
+### 4. Submit items to CampusLabs
+
 ```bash
-# Run the tool — it will prompt you to sign in via browser on first run
-python engage_tools.py ls
+source .venv/bin/activate
+python automation.py
 ```
-- ✅ If you see a file listing → permissions work
-- ❌ "Insufficient privileges" → go to App registrations → API permissions, make sure `Files.Read.All` and `Sites.Read.All` are added
-- ❌ "AADSTS700016" → CLIENT_ID is wrong
-- ❌ "AADSTS90002" → TENANT_ID is wrong
 
-**Checking Azure Portal permissions visually:**
-1. Go to [portal.azure.com](https://portal.azure.com) → App registrations → your app
-2. Click **API permissions** — you should see:
-   | API | Permission | Type | Status |
-   |-----|-----------|------|--------|
-   | Microsoft Graph | Files.Read.All | Delegated | ✅ Granted |
-   | Microsoft Graph | Sites.Read.All | Delegated | ✅ Granted |
-3. If Status shows "Not granted", click **Grant admin consent** (if you have permission) or it will work anyway for delegated flows where the user consents at login time.
+**What it does:**
+1. Shows available bill titles — pick one
+2. Prompts for the bill URL (the CampusLabs edit page for the specific bill)
+3. Prompts for your GT username and password
+4. Shows pre-flight check: all items with their costs, quantities, and whether a file exists in `downloads/`
+5. Asks: **Clear existing items** (start fresh) or **Keep existing** (skip duplicates)?
+6. Logs into CampusLabs, navigates to the bill, and for each item:
+   - Checks if it already exists (deduplication)
+   - Fills in name, description, quantity, price
+   - Uploads the matching file from `downloads/` if found
+   - Clicks Save and verifies it actually saved
+   - Retries up to 3 times if something fails
+7. Prints a final summary of successes, skips, and failures
 
+**Options when running:**
+- **Option 1: Clear all** — deletes every existing line item in the section first, then re-adds everything. Use when you've changed prices and want a clean slate.
+- **Option 2: Keep existing** — only adds items not already in the section. Use if the script got interrupted and you want to resume.
+
+### 5. Re-running after changes
+
+If you update prices or add items in the spreadsheet:
+1. Re-run `automation_screenshots.py` to get new screenshots and verify prices
+2. Re-run `automation.py` and choose **Option 1 (Clear all)** to replace existing items with the updated data
+
+## File Structure
+
+```
+finance/
+├── automation.py              # Submits items to CampusLabs
+├── automation_screenshots.py  # Scrapes prices, takes screenshots, generates review page
+├── review_server.py           # Local server for review.html to save to xlsx
+├── engage_tools.py            # SharePoint download utility (requires Azure app setup)
+├── requirements.txt           # Python dependencies
+├── .env.example               # Template for Azure/API config
+├── .gitignore
+├── downloads/                 # Put item images here (named same as Item Name)
+├── screenshots/               # Generated screenshots from scraper
+└── review.html                # Generated interactive review page
+```
+
+## Troubleshooting
+
+**Script shows no bill titles:**
+- Check that `Bill Title` is filled in for each item row (not just a header row)
+
+**Screenshots don't show prices:**
+- Some sites block headless browsers. The screenshot is still useful as proof of the product page.
+- Prices from the spreadsheet are preserved regardless.
+
+**CampusLabs save button doesn't work:**
+- Manually click Save in the browser — the script will detect it and continue.
+
+**"No file for item":**
+- Put the image in `downloads/` named exactly like the Item Name column (e.g. `hose.png`)
+
+**Want to clear token cache (force re-auth):**
+```bash
+rm .token_cache.bin
+```
 
 ## Notes
-- Images must have the same exact name as what is in the "Item Name" column.
-- The `review.html` page has filter buttons to quickly find items that need manual review.
-- Token is cached in `.token_cache.bin` — delete it to force re-authentication.
-- `.env` and `.token_cache.bin` are in `.gitignore` so credentials won't be committed.
-
-
-## Dependencies
-
-```bash
-pip install msal requests pandas selenium openpyxl
-```
+- Images in `downloads/` must have the **same exact name** as the "Item Name" column (with .png/.jpg/.pdf extension)
+- The review.html page requires `review_server.py` to be running (handled automatically by the screenshot script) to save changes back to the spreadsheet
+- OneDrive sync propagates xlsx changes to SharePoint automatically
+- `.env` and `.token_cache.bin` are gitignored — credentials stay local

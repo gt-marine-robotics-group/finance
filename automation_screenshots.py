@@ -464,7 +464,7 @@ def generate_review_html(data, bill_title, output_path):
             input.value = val.toFixed(2);
             input.classList.add('edited');
             itemsData[idx].final_price = val;
-            showToast(`Set ${{itemsData[idx].item_name}} to $${val.toFixed(2)}`);
+            showToast(`Set ${{itemsData[idx].item_name}} to $${{val.toFixed(2)}}`);
         }}
 
         function acceptAllCsv() {{
@@ -559,7 +559,7 @@ if __name__ == "__main__":
 
     # Show available bills and prompt
     titles = df["Bill Title"].astype(str).str.strip().unique()
-    SKIP_TITLES = ("", "nan", "request", "liquid", "misc")
+    SKIP_TITLES = ("nan", "request", "liquid", "misc")
     titles = [t for t in titles if t and not any(t.lower().startswith(s) for s in SKIP_TITLES)]
     print("\nAvailable Bill Titles:")
     for i, t in enumerate(titles, 1):

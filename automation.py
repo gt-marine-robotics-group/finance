@@ -38,7 +38,7 @@ if not BILL_NO:
     _df_temp.fillna("", inplace=True)
     _df_temp.columns = _df_temp.columns.str.strip()
     _titles = _df_temp["Bill Title"].astype(str).str.strip().unique()
-    _skip = ("", "nan", "request", "liquid", "misc")
+    _skip = ("nan", "request", "liquid", "misc")
     _titles = [t for t in _titles if t and not any(t.lower().startswith(s) for s in _skip)]
     print("\nAvailable Bill Titles in CSV:")
     for i, t in enumerate(_titles, 1):
@@ -270,6 +270,17 @@ budget_tab = WebDriverWait(driver, 20).until(
 budget_tab.click()
 time.sleep(5)
 
+# === Ask about existing items ===
+print(f"\n⚠️  What to do with existing line items in each section?")
+print(f"  1. Clear all existing items first (start fresh)")
+print(f"  2. Keep existing items (only add new ones, skip duplicates)")
+clear_choice = input("\nChoice [1/2]: ").strip()
+CLEAR_EXISTING = clear_choice != "2"
+if CLEAR_EXISTING:
+    print("→ Will DELETE all existing items before adding.")
+else:
+    print("→ Will KEEP existing items and skip duplicates.")
+
 # === Process Sections (SINGLE PASS with tracking & verification) ===
 results = {"success": [], "failed": [], "skipped_duplicate": []}
 
@@ -278,7 +289,10 @@ for section_name, items in sections:
     print(f"Processing section: {section_name} ({len(items)} items)")
     print(f"{'='*60}")
 
-    clear_existing_line_items(driver, section_name)
+    if CLEAR_EXISTING:
+        print(f"  🗑️  Clearing existing items...")
+        clear_existing_line_items(driver, section_name)
+        print(f"  ✅ Section cleared")
 
     items_list = list(items.iterrows())
     for item_idx, (_, item) in enumerate(items_list):
