@@ -6,7 +6,7 @@
     <div class="dashboard-header">
         <h1>Dashboard</h1>
         <form method="POST" action="{{ url_for('force_pull') }}" style="display:inline">
-            <button type="submit" class="btn btn-sm btn-ghost">🔄 Sync</button>
+            <button type="submit" class="btn btn-sm btn-ghost">Sync</button>
         </form>
     </div>
 
@@ -22,13 +22,13 @@
         <details class="bill-dropdown" open>
             <summary class="bill-header-toggle">
                 <h2>
-                    📋 Backlog
+                    Backlog
                     <span class="badge">{{ backlog|length }}</span>
                 </h2>
                 <span class="bill-total-inline">Items not yet assigned to a bill</span>
             </summary>
             <div class="bill-dropdown-actions">
-                <a href="{{ url_for('create_bill') }}" class="btn btn-sm btn-primary">📦 Create Bill from Backlog</a>
+                <a href="{{ url_for('create_bill') }}" class="btn btn-sm btn-primary">Create Bill from Backlog</a>
             </div>
             <div class="item-grid">
                 {% for item in backlog %}
@@ -44,7 +44,7 @@
         <details class="bill-dropdown">
             <summary class="bill-header-toggle">
                 <h2>
-                    📦 {{ title }}
+                    {{ title }}
                     <span class="badge">{{ items|length }}</span>
                 </h2>
                 {% set ns = namespace(total=0) %}

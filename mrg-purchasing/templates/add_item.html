@@ -11,7 +11,7 @@
             <div class="input-with-button">
                 <input type="url" id="link" name="link" class="input"
                        placeholder="https://amazon.com/...">
-                <button type="button" id="fetch-btn" class="btn btn-sm btn-ghost" onclick="fetchLink()">🔍 Fetch</button>
+                <button type="button" id="fetch-btn" class="btn btn-sm btn-ghost" onclick="fetchLink()">Fetch</button>
             </div>
             <small id="fetch-status" class="text-muted"></small>
         </div>
@@ -118,7 +118,7 @@ function fetchLink() {
                 if (data.vendor && !document.getElementById('vendor').value) {
                     document.getElementById('vendor').value = data.vendor;
                 }
-                status.textContent = '✅ Auto-filled from page';
+                status.textContent = 'Auto-filled from page';
             }
         })
         .catch(e => { status.textContent = 'Error: ' + e; })
