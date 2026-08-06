@@ -14,13 +14,14 @@ from selenium.webdriver.common.action_chains import ActionChains
 import getpass
 
 # === CONFIG ===
-CSV_FILE = os.path.expanduser(
+DEFAULT_XLSX = os.path.expanduser(
     "~/Library/CloudStorage/OneDrive-GeorgiaInstituteofTechnology/"
     "Documents - Marine Robotics Group/OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx"
 )
-SHEET_NAME = "Bills"  # which sheet/tab to read
+CSV_FILE = os.environ.get("FINANCE_XLSX_PATH", DEFAULT_XLSX)
+SHEET_NAME = "Bills"
 SCREENSHOT_DIR = "screenshots"
-USERNAME = "awu335"
+USERNAME = os.environ.get("ENGAGE_USERNAME", "")
 PASSWORD = ""
 BILL_URL = ""  # Auto-generated from Bill No. in spreadsheet
 BILL_NO = ""   # Will prompt — shows available options

@@ -13,12 +13,13 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 
 # === CONFIG ===
-CSV_PATH = os.path.expanduser(
+DEFAULT_XLSX = os.path.expanduser(
     "~/Library/CloudStorage/OneDrive-GeorgiaInstituteofTechnology/"
     "Documents - Marine Robotics Group/OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx"
 )
+CSV_PATH = os.environ.get("FINANCE_XLSX_PATH", DEFAULT_XLSX)
 OUTPUT_CSV = "./FY27_Bills_Budget_Updated.csv"
-SHEET_NAME = "Bills"  # which sheet/tab to read from the xlsx
+SHEET_NAME = "Bills"
 SAVE_FOLDER = "./screenshots"
 REVIEW_HTML = "./review.html"
 DELAY = 5  # seconds to wait after page load

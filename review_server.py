@@ -13,10 +13,10 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import parse_qs
 import openpyxl
 
-XLSX_PATH = os.path.expanduser(
+XLSX_PATH = os.environ.get("FINANCE_XLSX_PATH", os.path.expanduser(
     "~/Library/CloudStorage/OneDrive-GeorgiaInstituteofTechnology/"
     "Documents - Marine Robotics Group/OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx"
-)
+))
 SHEET_NAME = "Bills"
 PORT = 8321
 
