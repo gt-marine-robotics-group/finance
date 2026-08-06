@@ -382,31 +382,47 @@ def delete_bill(bill_title):
     rows = resp.json().get("value", [])
 
     # Find rows matching this bill title
-    to_delete = []
+    to_clear = []
     for r in rows:
         vals = r["values"][0]
         row_bill = str(vals[2]) if vals[2] else ""
         if row_bill == bill_title:
-            to_delete.append(r["index"])
+            to_clear.append(r["index"])
 
-    if not to_delete:
+    if not to_clear:
         flash(f"No rows found for '{bill_title}'", "error")
         return redirect(url_for("dashboard"))
 
-    # Delete in reverse order
-    to_delete.sort(reverse=True)
-    deleted = 0
-    for idx in to_delete:
-        del_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/BillsT/rows/itemAt(index={idx})"
-        resp = _requests.delete(del_url, headers=headers, timeout=10)
-        if resp.status_code == 204:
-            deleted += 1
+    # Also find the "Request N" separator row immediately before this bill's items
+    first_item_idx = min(to_clear)
+    for r in rows:
+        vals = r["values"][0]
+        row_bill = str(vals[2]) if vals[2] else ""
+        item_name = str(vals[3]) if vals[3] else ""
+        # Separator: has "Request N" in Bill Title, no Item Name, and is right before our items
+        if r["index"] == first_item_idx - 1 and row_bill.startswith("Request") and not item_name:
+            to_clear.append(r["index"])
+            break
+
+    # Clear these rows (blank the non-formula cells) instead of deleting
+    # This preserves table structure and formulas
+    headers_ct = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+    cleared = 0
+    for idx in to_clear:
+        sheet_row = idx + 2  # table starts at row 2
+        url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Bills')/range(address='B{sheet_row}:J{sheet_row}')"
+        resp = _requests.patch(url, headers=headers_ct, json={"values": [[""] * 9]}, timeout=10)
+        url2 = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Bills')/range(address='L{sheet_row}:P{sheet_row}')"
+        resp2 = _requests.patch(url2, headers=headers_ct, json={"values": [[""] * 5]}, timeout=10)
+        if resp.status_code == 200 and resp2.status_code == 200:
+            cleared += 1
 
     # Reset caches
     xlsx_manager._cached_items = []
     xlsx_manager._cached_items_time = 0
+    xlsx_manager._last_pull_time = 0
 
-    flash(f"Deleted bill '{bill_title}' ({deleted} rows)", "success")
+    flash(f"Deleted bill '{bill_title}' ({cleared} rows cleared)", "success")
     return redirect(url_for("dashboard"))
 
 
@@ -465,8 +481,15 @@ def create_bill():
             if name:
                 _copy_screenshot_to_bill(name, "_queue", bill_title)
 
+        # Reset caches so dashboard shows fresh data
+        xlsx_manager._cached_items = []
+        xlsx_manager._cached_items_time = 0
+        xlsx_manager._cached_queue = []
+        xlsx_manager._cached_queue_time = 0
+        xlsx_manager._last_pull_time = 0
+
         flash(f"Created bill '{bill_title}' with {moved} item(s)", "success")
-        return redirect(url_for("bill_view", bill_title=bill_title))
+        return redirect(url_for("dashboard"))
 
     # GET — show queue items to select from
     backlog = xlsx_manager.get_backlog_items()
