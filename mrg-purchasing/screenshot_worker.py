@@ -145,6 +145,86 @@ def _scrape_price(driver) -> str:
     return ""
 
 
+def _autofill_queue_item(item_name: str, price: float | None, vendor: str):
+    """Update a queue item's price and vendor via Graph API after scraping."""
+    import configparser
+    import json as _json
+    import requests as _requests
+
+    rclone_conf = os.path.expanduser("~/.config/rclone/rclone.conf")
+    if not os.path.exists(rclone_conf):
+        return
+
+    config = configparser.ConfigParser()
+    config.read(rclone_conf)
+    if "onedrive" not in config:
+        return
+
+    try:
+        token = _json.loads(config["onedrive"]["token"])
+        drive_id = config["onedrive"]["drive_id"]
+        access_token = token["access_token"]
+    except (KeyError, _json.JSONDecodeError):
+        return
+
+    # Get file ID
+    file_id = os.environ.get("_GRAPH_FILE_ID", "")
+    if not file_id:
+        url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root:/OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx"
+        resp = _requests.get(url, headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
+        if resp.status_code == 200:
+            file_id = resp.json()["id"]
+            os.environ["_GRAPH_FILE_ID"] = file_id
+        else:
+            return
+
+    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+
+    # Find the row in TestTable by item name
+    rows_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/TestTable/rows"
+    resp = _requests.get(rows_url, headers=headers, timeout=10)
+    if resp.status_code != 200:
+        return
+
+    # Get columns to know which index is Cost and Vendor
+    cols_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/TestTable/columns"
+    cols_resp = _requests.get(cols_url, headers=headers, timeout=10)
+    if cols_resp.status_code != 200:
+        return
+
+    columns = [c["name"] for c in cols_resp.json()["value"]]
+    cost_idx = columns.index("Cost") if "Cost" in columns else None
+    vendor_idx = columns.index("Vendor") if "Vendor" in columns else None
+    name_idx = columns.index("Item Name") if "Item Name" in columns else None
+
+    if name_idx is None:
+        return
+
+    for row in resp.json().get("value", []):
+        vals = row["values"][0] if row.get("values") else []
+        if name_idx < len(vals) and str(vals[name_idx]).strip() == item_name.strip():
+            # Found it — update cost and vendor if empty
+            updated = list(vals)
+            changed = False
+
+            if price and cost_idx is not None and not str(vals[cost_idx]).strip():
+                updated[cost_idx] = price
+                changed = True
+
+            if vendor and vendor_idx is not None and not str(vals[vendor_idx]).strip():
+                updated[vendor_idx] = vendor
+                changed = True
+
+            if changed:
+                patch_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/TestTable/rows/itemAt(index={row['index']})"
+                patch_resp = _requests.patch(patch_url, headers=headers, json={"values": [updated]}, timeout=10)
+                if patch_resp.status_code == 200:
+                    print(f"[autofill] ✅ Updated {item_name}: price=${price}, vendor={vendor}")
+                else:
+                    print(f"[autofill] ⚠️ Update failed: {patch_resp.status_code}")
+            break
+
+
 def _upload_screenshot_to_sharepoint(bill_title: str, filepath: str):
     """Upload a screenshot to SharePoint via Graph API."""
     import configparser
@@ -268,6 +348,28 @@ def _process_job(job: dict):
         price_text = _scrape_price(driver)
         price = parse_price(price_text)
 
+        # Get page title for item name if needed
+        page_title = driver.title or ""
+
+        # Detect vendor from URL
+        from urllib.parse import urlparse
+        domain = urlparse(url).netloc.lower()
+        vendor = ""
+        if "amazon" in domain:
+            vendor = "Amazon"
+        elif "mcmaster" in domain:
+            vendor = "McMaster-Carr"
+        elif "digikey" in domain:
+            vendor = "DigiKey"
+        elif "mouser" in domain:
+            vendor = "Mouser"
+        elif "adafruit" in domain:
+            vendor = "Adafruit"
+        elif "sparkfun" in domain:
+            vendor = "SparkFun"
+        elif "pololu" in domain:
+            vendor = "Pololu"
+
         with _status_lock:
             _status[item_name] = "done"
 
@@ -275,6 +377,10 @@ def _process_job(job: dict):
             print(f"[screenshot] ✅ {item_name} - price: ${price:.2f}")
         else:
             print(f"[screenshot] ✅ {item_name} - no price found")
+
+        # Auto-update the queue item with scraped data if available
+        if price or vendor:
+            _autofill_queue_item(item_name, price, vendor)
 
         # Push to SharePoint via Graph API
         _upload_screenshot_to_sharepoint(bill_title, filepath)
