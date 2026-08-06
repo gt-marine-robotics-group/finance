@@ -527,7 +527,7 @@ def delete_queue_item(row_idx: int) -> bool:
         return True
 
 
-def move_to_bill(queue_items: list[dict], bill_title: str) -> int:
+def move_to_bill(queue_items: list[dict], bill_title: str, add_separator: bool = True) -> int:
     """
     Move items from the Queue (TestTable) to the Bills table (BillsT) via Graph API.
     - Inserts a separator row (e.g. "Request 4") before the items
@@ -555,22 +555,13 @@ def move_to_bill(queue_items: list[dict], bill_title: str) -> int:
                          "Budget Section", "Vendor", "Description", "Quantity", "Cost",
                          "Total Cost", "Link", "File URL", "Person Requesting", "Remaining Allocation", "Column1"]
 
-    # Get existing rows to find next Request number and next Bill Item ID
+    # Get existing rows to find next Request number
     url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/BillsT/rows"
     resp = _requests.get(url, headers=headers, timeout=15)
-    max_id = 0
     max_request_num = 0
     if resp.status_code == 200:
         for row in resp.json().get("value", []):
             vals = row["values"][0]
-            # Track max Bill Item ID
-            try:
-                val = int(float(str(vals[0])))
-                if val > max_id:
-                    max_id = val
-            except (ValueError, TypeError, IndexError):
-                pass
-            # Track max Request number
             bill_col = str(vals[2]) if vals[2] else ""
             if bill_col.startswith("Request"):
                 try:
@@ -580,47 +571,43 @@ def move_to_bill(queue_items: list[dict], bill_title: str) -> int:
                 except ValueError:
                     pass
 
-    next_id = max_id + 1
     next_request = max_request_num + 1
 
     # Find where to insert (after last row with data)
     insert_at = _get_last_data_index("BillsT") + 1
 
-    # Insert separator row first (e.g. "Request 4" with empty Item Name)
-    separator_row = [""] * len(bills_columns)
-    bill_title_idx = bills_columns.index("Bill Title") if "Bill Title" in bills_columns else 2
-    separator_row[bill_title_idx] = f"Request {next_request}"
-    graph_add_row("BillsT", separator_row, index=insert_at)
-    insert_at += 1
+    # Insert separator row for new bills only
+    if add_separator:
+        separator_row = [""] * len(bills_columns)
+        bill_title_idx = bills_columns.index("Bill Title") if "Bill Title" in bills_columns else 2
+        separator_row[bill_title_idx] = f"Request {next_request}"
+        graph_add_row("BillsT", separator_row, index=insert_at)
+        insert_at += 1
 
     moved = 0
     rows_to_delete = []
 
+    # Columns that have formulas in Excel — pass None to preserve them
+    FORMULA_COLUMNS = {"Bill Item ID", "Total Cost"}
+
     for item in queue_items:
         # Build row for BillsT
         item_data = dict(item)
-        item_data["Bill Item ID"] = next_id
         item_data["Bill Title"] = bill_title
         item_data["Status"] = "Bill Requested"
 
-        # Calculate Total Cost
-        try:
-            qty = float(item_data.get("Quantity", 1) or 1)
-            cost = float(str(item_data.get("Cost", 0)).replace("$", "").replace(",", "") or 0)
-            item_data["Total Cost"] = qty * cost
-        except (ValueError, TypeError):
-            item_data["Total Cost"] = 0
-
         row_values = []
         for col in bills_columns:
-            val = item_data.get(col, "")
-            row_values.append(val if val else "")
+            if col in FORMULA_COLUMNS:
+                row_values.append(None)  # Let Excel formula auto-fill
+            else:
+                val = item_data.get(col, "")
+                row_values.append(val if val else "")
 
         # Add to BillsT at correct position
         success = graph_add_row("BillsT", row_values, index=insert_at)
         if success:
             moved += 1
-            next_id += 1
             insert_at += 1
             # Track row index for deletion from TestTable
             if "_table_index" in item:

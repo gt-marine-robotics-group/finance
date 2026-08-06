@@ -415,7 +415,11 @@ def remove_from_bill(item_id):
 def create_bill():
     """Select items from the queue (Test sheet) and move them to the Bills sheet."""
     if request.method == "POST":
-        bill_title = request.form.get("bill_title", "").strip()
+        existing_bill = request.form.get("existing_bill", "").strip()
+        new_bill_title = request.form.get("bill_title", "").strip()
+        bill_title = existing_bill or new_bill_title
+        is_new_bill = not existing_bill
+
         selected_indices = request.form.getlist("item_ids")
 
         if not bill_title:
@@ -438,7 +442,7 @@ def create_bill():
             return redirect(url_for("create_bill"))
 
         # Move from Test sheet to Bills sheet
-        moved = xlsx_manager.move_to_bill(selected_items, bill_title)
+        moved = xlsx_manager.move_to_bill(selected_items, bill_title, add_separator=is_new_bill)
 
         # Copy screenshots from _queue/ to bill folder (local + SharePoint)
         for item in selected_items:
@@ -451,7 +455,8 @@ def create_bill():
 
     # GET — show queue items to select from
     backlog = xlsx_manager.get_backlog_items()
-    return render_template("create_bill.html", backlog=backlog)
+    bills = xlsx_manager.get_bills()
+    return render_template("create_bill.html", backlog=backlog, bills=bills)
 
 
 # --- Bill View ---
@@ -573,7 +578,8 @@ def copy_to_bill(item_id):
         except (ValueError, TypeError):
             item_data["Total Cost"] = 0
 
-        row_values = [item_data.get(col, "") or "" for col in bills_columns]
+        FORMULA_COLUMNS = {"Bill Item ID", "Total Cost"}
+        row_values = [None if col in FORMULA_COLUMNS else (item_data.get(col, "") or "") for col in bills_columns]
         success = xlsx_manager.graph_add_row("BillsT", row_values)
 
         if success:
