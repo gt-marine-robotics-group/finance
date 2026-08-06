@@ -1,6 +1,8 @@
 import os
 import time
 import pandas as pd
+from dotenv import load_dotenv
+load_dotenv()
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -133,7 +135,11 @@ def verify_item_exists(driver, section_name, item_name):
             By.XPATH, ".//a[@ng-click='editLineItem(lineItem)']"
         )
         for li in line_items:
-            if item_name.lower().strip() in li.text.lower().strip():
+            # Normalize whitespace for comparison
+            import re as _re
+            normalized_name = _re.sub(r'\s+', ' ', item_name.lower().strip())
+            normalized_li = _re.sub(r'\s+', ' ', li.text.lower().strip())
+            if normalized_name in normalized_li:
                 return True
     except Exception:
         pass
@@ -313,7 +319,7 @@ for section_name, items in sections:
 
     items_list = list(items.iterrows())
     for item_idx, (_, item) in enumerate(items_list):
-        item_name = str(item["Item Name"]).strip()
+        item_name = " ".join(str(item["Item Name"]).split())  # normalize whitespace
 
         # --- DEDUPLICATION CHECK: skip if already in section ---
         if verify_item_exists(driver, section_name, item_name):
