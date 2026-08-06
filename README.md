@@ -42,6 +42,19 @@ You should see `FY27_Bills_Budget.xlsx`.
 
 **Important:** Close the xlsx in Excel before running scripts. After the script modifies the file, it will open it in Excel automatically — just Cmd+S and close to trigger OneDrive sync.
 
+**Manual alternative (no OneDrive):**
+
+If you don't want to install OneDrive or are on a system where sync isn't available:
+1. Download `FY27_Bills_Budget.xlsx` manually from SharePoint (MRG Documents → OPS-1 Operations → FY27 Finances)
+2. Save it anywhere on your machine
+3. Copy `.env.example` to `.env` and set your path:
+   ```
+   FINANCE_XLSX_PATH=/path/to/your/FY27_Bills_Budget.xlsx
+   ```
+4. After the script edits the file, manually re-upload it to SharePoint
+
+Note: With the manual approach, changes won't auto-sync — you'll need to re-download before each run and re-upload after edits.
+
 ### 4. Chrome
 
 Install Chrome (required for Selenium). ChromeDriver is managed automatically.
