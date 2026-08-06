@@ -1,8 +1,6 @@
 __pycache__/
 *.pyc
 .env
-data.db
 screenshots/
 *.xlsx
-venv/
 .venv/

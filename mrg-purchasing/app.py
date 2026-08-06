@@ -660,11 +660,16 @@ def scrape_link():
 @app.route("/force-pull", methods=["POST"])
 @login_required
 def force_pull():
-    """Force a fresh pull from SharePoint, bypassing cache."""
+    """Force a fresh pull from SharePoint, bypassing all caches."""
     import xlsx_manager as xm
-    xm._last_pull_time = 0  # Reset cache
-    xm.sync_pull()
-    flash("Synced from SharePoint", "success")
+    xm._last_pull_time = 0  # Reset pull cache
+    xm._cached_items = []   # Reset items cache
+    xm._cached_items_time = 0
+    result = xm.sync_pull()
+    if result:
+        flash("Synced from SharePoint ✅", "success")
+    else:
+        flash("Sync failed — check rclone config", "error")
     return redirect(url_for("dashboard"))
 
 

@@ -1,188 +1,139 @@
-# Bill Request Automation
+# MRG Finance & Purchasing
 
-Automates submitting bill line items to CampusLabs Engage, including price verification via screenshots.
+Georgia Tech Marine Robotics Group — bill request automation and purchasing management.
 
-## Setup (First Time)
+## What's in this repo
 
-### 1. Clone the repo
+```
+finance/
+├── mrg-purchasing/          ← Web app (runs on SIM PC, accessible from phone)
+├── automation.py            ← Submits bills to CampusLabs Engage (run from laptop)
+├── automation_screenshots.py ← CLI screenshot tool (legacy, web app replaces this)
+├── automation_purchase.py   ← Purchase request form filler
+├── review_server.py         ← Local review page server (legacy)
+├── engage_tools.py          ← SharePoint download utility
+├── requirements.txt         ← Dependencies for automation scripts
+├── .env.example             ← Config template for automation scripts
+└── README.md                ← You are here
+```
+
+## Quick Start
+
+### For team members (adding items to buy)
+
+1. Open the web app on your phone: `http://<sim-pc-tailscale-ip>:5000`
+2. Password: `boats0519`
+3. Quick-add items from the dashboard, or use "+ Add Item" for the full form
+4. Paste a link and the app auto-fills price/vendor in background
+
+### For officers (organizing bills)
+
+1. Open the web app → dashboard
+2. Items in **Backlog** are waiting to be assigned
+3. Click **"Create Bill from Backlog"** → select items → name the bill
+4. The bill appears on SharePoint immediately with a "Request N" separator row
+5. When ready to submit to CampusLabs: run `automation.py` from a laptop with OneDrive
+
+### Running automation.py (bill submission to CampusLabs)
 
 ```bash
-git clone git@github.com:gt-marine-robotics-group/finance.git
 cd finance
-```
-
-### 2. Python environment
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-### 3. Sync the MRG SharePoint folder via OneDrive
-
-The scripts read directly from the synced SharePoint xlsx. You need the MRG "Documents" folder synced locally.
-
-**To set up OneDrive sync:**
-1. Go to https://gatech.sharepoint.com (sign in with your GT account)
-2. Find the **Marine Robotics Group** team site → **Documents**
-3. Navigate to: `OPS-1 Operations/FY27 Finances/`
-4. Click the **Sync** button (top toolbar) — this opens OneDrive and starts syncing
-5. The folder will appear at:
-   ```
-   ~/Library/CloudStorage/OneDrive-GeorgiaInstituteofTechnology/
-     Documents - Marine Robotics Group/OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx
-   ```
-
-**Verify it's synced:**
-```bash
-ls ~/Library/CloudStorage/OneDrive-GeorgiaInstituteofTechnology/Documents\ -\ Marine\ Robotics\ Group/OPS-1\ Operations/FY27\ Finances/
-```
-You should see `FY27_Bills_Budget.xlsx`.
-
-**Important:** Close the xlsx in Excel before running scripts. After the script modifies the file, it will open it in Excel automatically — just Cmd+S and close to trigger OneDrive sync.
-
-**Manual alternative (no OneDrive):**
-
-If you don't want to install OneDrive or are on a system where sync isn't available:
-1. Download `FY27_Bills_Budget.xlsx` manually from SharePoint (MRG Documents → OPS-1 Operations → FY27 Finances)
-2. Save it anywhere on your machine
-3. Copy `.env.example` to `.env` and set your path:
-   ```
-   FINANCE_XLSX_PATH=/path/to/your/FY27_Bills_Budget.xlsx
-   ```
-4. After the script edits the file, manually re-upload it to SharePoint
-
-Note: With the manual approach, changes won't auto-sync — you'll need to re-download before each run and re-upload after edits.
-
-### 4. Chrome
-
-Install Chrome (required for Selenium). ChromeDriver is managed automatically.
-
-## Workflow
-
-### 1. Prepare the spreadsheet
-
-Each item row in the "Bills" sheet needs:
-- **Bill Title** — exact name of the bill (must match across all items in a group)
-- **Item Name** — name for the line item
-- **Cost** — unit price
-- **Quantity** — how many
-- **Link** — URL to the product page (for screenshots)
-- **Budget Section** — which CampusLabs section to put it in (e.g. `B03 - General Inventoried Goods`)
-- **Bill No.** — the CampusLabs bill number (used to auto-generate the URL)
-
-Optional:
-- **Description** — fills the description field on CampusLabs
-
-### 2. Run screenshots & price verification
-
-```bash
-source .venv/bin/activate
-python automation_screenshots.py
-```
-
-**What it does:**
-1. Shows available bill titles — pick one by number or name
-2. Shows all items that will be processed — confirm with `y`
-3. Opens each item's link in headless Chrome, scrapes the price, takes a screenshot
-4. Compares scraped price against spreadsheet:
-   - ✅ Match → marked OK
-   - ⚠️ Mismatch → keeps your spreadsheet price, flags for review
-   - ❌ Failed → couldn't find a price
-5. Generates `review.html` — interactive page with screenshots and editable price fields
-6. If mismatches found: starts a local server and opens `review.html` in your browser
-7. Edit prices in the browser → click **"Save to Spreadsheet"** → writes directly to the xlsx and opens it in Excel
-8. Cmd+S in Excel, close it → OneDrive syncs
-9. Press Enter in terminal when done
-
-### 3. Submit items to CampusLabs bill
-
-```bash
 source .venv/bin/activate
 python automation.py
 ```
 
-**What it does:**
-1. Shows available bill titles with their Bill No. — pick one
-2. Auto-generates the CampusLabs URL from the Bill No.
-3. Prompts for your GT username and password
-4. Shows pre-flight check: all items with costs, quantities, and whether screenshots exist
-5. Asks: **Clear existing items** (start fresh) or **Keep existing** (skip duplicates)?
-6. Logs into CampusLabs, navigates to the bill, and for each item:
-   - Checks if it already exists (deduplication)
-   - Fills in name, description, quantity, price
-   - Uploads the screenshot if found
-   - Clicks Save and verifies it actually saved
-   - Retries up to 3 times if something fails
-7. Prints a final summary of successes, skips, and failures
+Requires: GT login + Duo MFA, OneDrive sync, Chrome installed.
 
-### 4. Submit purchase requests (reimbursements)
+## How it works
 
+```
+Team member's phone → Web app (SIM PC) → Graph API → SharePoint xlsx
+                                        → Screenshots (headless Chromium)
+
+Officer's laptop → automation.py → CampusLabs Engage (Selenium)
+                 ↑ reads xlsx via OneDrive sync
+                 ↑ reads screenshots via OneDrive sync
+```
+
+**Source of truth:** `FY27_Bills_Budget.xlsx` on SharePoint  
+**Queue/backlog:** "Test" sheet → TestTable  
+**Bills:** "Bills" sheet → BillsT  
+**Screenshots:** SharePoint `OPS-1 Operations/FY27 Finances/screenshots/<bill_title>/`
+
+## Can I manually edit the spreadsheet?
+
+**Yes!** The web app reads from SharePoint — it doesn't own the data.
+
+- **Add to backlog manually:** Add a row to the TestTable on the "Test" sheet. Web app picks it up on next refresh.
+- **Create a bill manually:** Add a "Request N" separator row (Bill Title = "Request N", empty Item Name), then add item rows below it with the Bill Title filled in.
+- **Edit items:** Edit any cell directly in Excel/SharePoint. Hit 🔄 Sync in the web app to see changes.
+
+The only thing that could conflict: if you and the web app write to the same row at the same exact second (unlikely with a small team).
+
+## Web App Setup (SIM PC)
+
+See [mrg-purchasing/README.md](mrg-purchasing/README.md) for full setup details.
+
+**TL;DR:**
 ```bash
+cd mrg-purchasing
+python3 -m venv .venv
 source .venv/bin/activate
-python automation_purchase.py
+pip install -r requirements.txt
+python app.py
 ```
 
-Pre-fills the CampusLabs purchase request form for each item:
-- Subject, description, amount
-- Auto-generates "Bill XXXXXX, Line X" reference
-- Uploads receipt/screenshot
-- Supports overflow items (shipping/tax)
-
-### 5. Re-running after changes
-
-If you update prices or add items in the spreadsheet:
-1. Re-run `automation_screenshots.py` to get new screenshots and verify prices
-2. Re-run `automation.py` and choose **Option 1 (Clear all)** to replace existing items with the updated data
-
-## File Structure
-
-```
-finance/
-├── automation.py              # Submits items to CampusLabs budget bill
-├── automation_screenshots.py  # Scrapes prices, takes screenshots, generates review page
-├── automation_purchase.py     # Fills out purchase request forms
-├── review_server.py           # Local server for review.html to save to xlsx
-├── engage_tools.py            # SharePoint download utility (optional, needs Azure app)
-├── requirements.txt           # Python dependencies
-├── .env.example               # Template for optional Azure config
-├── .gitignore
-└── README.md
+Runs as a systemd service for 24/7 availability:
+```bash
+sudo systemctl start mrg-purchasing   # start
+sudo systemctl restart mrg-purchasing # restart after code changes  
+sudo systemctl stop mrg-purchasing    # stop
+sudo journalctl -u mrg-purchasing -f  # view logs
 ```
 
-Generated at runtime (gitignored):
-```
-├── screenshots/               # Generated screenshots from scraper
-├── review.html                # Generated interactive review page
-└── *.csv                      # Backup CSVs
-```
+## Spreadsheet Structure
+
+### Bills sheet (BillsT table)
+
+| Column | Description |
+|--------|-------------|
+| Bill Item ID | Auto-incremented integer |
+| Bill No. | CampusLabs bill number |
+| Bill Title | Full bill name (groups items) |
+| Item Name | Product name |
+| Status | "Bill Requested", "bill approved", etc |
+| Budget Section | e.g. "B03 - General Inventoried Goods" |
+| Vendor | Amazon, DigiKey, etc |
+| Description | What it's for |
+| Quantity | How many |
+| Cost | Unit price |
+| Total Cost | Quantity × Cost |
+| Link | Product URL |
+| File URL | Screenshot URL |
+| Person Requesting | Who asked for it |
+
+**Separator rows:** `Bill Title = "Request N"` with empty Item Name. These mark bill group boundaries.
+
+### Test sheet (TestTable)
+
+Same structure minus Status, Total Cost, File URL, Person Requesting. This is the backlog/queue.
+
+## Screenshots
+
+Screenshots are stored at:
+- **Local (SIM PC):** `mrg-purchasing/screenshots/<bill_title>/<item_name>.png`
+- **SharePoint:** `OPS-1 Operations/FY27 Finances/screenshots/<bill_title>/<item_name>.png`
+- **Backlog items:** saved under `_queue/` until assigned to a bill
+
+When a bill is created from backlog, screenshots are copied to the bill's folder.
 
 ## Troubleshooting
 
-**Script shows no bill titles:**
-- Check that `Bill Title` is filled in for each item row (not just a header row)
-
-**"Spreadsheet appears to be open in Excel":**
-- Close Excel first so the script can read/write the xlsx properly
-
-**Screenshots don't show prices:**
-- Some sites block headless browsers. The screenshot is still useful as proof of the product page.
-- Prices from the spreadsheet are preserved regardless.
-
-**CampusLabs save button doesn't work:**
-- Manually click Save in the browser — the script will detect it and continue.
-
-**OneDrive not syncing after script edits:**
-- Open the xlsx in Excel → Cmd+S → close. This forces OneDrive to recognize the change.
-
-**Wrong prices showing in pre-flight:**
-- The review.html "Save to Spreadsheet" button writes to the xlsx. Make sure you saved and synced before running automation.py.
-
-## Notes
-
-- Screenshots are named to match "Item Name" exactly
-- The review.html page requires the background server (handled automatically) to save changes
-- OneDrive sync propagates xlsx changes to SharePoint automatically
-- Multiple people can sync — SharePoint handles merge conflicts and keeps version history
-- `.env` and `.token_cache.bin` are gitignored — credentials stay local
+| Problem | Solution |
+|---------|----------|
+| Web app shows stale data | Hit 🔄 Sync on dashboard |
+| Can't add items | Check if Graph API token expired — re-run `rclone config` |
+| Screenshots not working | Check `chromium-browser --version` on SIM PC |
+| automation.py can't find screenshots | They sync via OneDrive from SharePoint |
+| "File locked" in logs | Someone has the xlsx open — auto-retries later |
+| Service not running | `sudo systemctl status mrg-purchasing` |
