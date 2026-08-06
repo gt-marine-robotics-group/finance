@@ -4,13 +4,13 @@
 {% block content %}
 <div class="bill-page">
     <div class="bill-page-header">
-        <h1>📦 {{ bill_title }}</h1>
+        <h1>{{ bill_title }}</h1>
         <div class="bill-meta">
             <span class="bill-total">Total: <strong>${{ "%.2f"|format(total) }}</strong></span>
             <span class="bill-count">{{ items|length }} item{{ 's' if items|length != 1 }}</span>
         </div>
         <div class="bill-actions">
-            <a href="{{ url_for('export_csv', bill_title=bill_title) }}" class="btn btn-sm btn-primary">📄 Export CSV</a>
+            <a href="{{ url_for('export_csv', bill_title=bill_title) }}" class="btn btn-sm btn-primary">Export CSV</a>
             <a href="{{ url_for('dashboard') }}" class="btn btn-sm btn-ghost">← Back</a>
         </div>
     </div>
@@ -49,20 +49,20 @@
                 <td>{{ item.get('Vendor', '') }}</td>
                 <td class="hide-mobile">
                     {% if item.get('_has_screenshot') %}
-                    ✅
+                    Yes
                     {% else %}
-                    ❌
+                    No
                     {% endif %}
                 </td>
                 <td>
-                    <a href="{{ url_for('edit_item', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost">✏️</a>
-                    <a href="{{ url_for('copy_to_bill', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost" title="Copy to another bill">📋</a>
+                    <a href="{{ url_for('edit_item', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost"></a>
+                    <a href="{{ url_for('copy_to_bill', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost" title="Copy to another bill"></a>
                     <form method="POST" action="{{ url_for('remove_from_bill', item_id=item.get('Bill Item ID', '')) }}" style="display:inline">
-                        <button type="submit" class="btn btn-sm btn-ghost" title="Remove from bill">↩️</button>
+                        <button type="submit" class="btn btn-sm btn-ghost" title="Remove from bill"></button>
                     </form>
                     <form method="POST" action="{{ url_for('delete_item', item_id=item.get('Bill Item ID', '')) }}" style="display:inline"
                           onsubmit="return confirm('Delete this item permanently?')">
-                        <button type="submit" class="btn btn-sm btn-ghost" title="Delete item">🗑️</button>
+                        <button type="submit" class="btn btn-sm btn-ghost" title="Delete item"></button>
                     </form>
                 </td>
             </tr>
@@ -103,16 +103,16 @@
             </div>
             <div class="item-card-footer">
                 {% if item.get('Link') %}
-                <a href="{{ item.get('Link') }}" target="_blank" class="btn btn-sm btn-ghost">🔗</a>
+                <a href="{{ item.get('Link') }}" target="_blank" class="btn btn-sm btn-ghost">Link</a>
                 {% endif %}
-                <a href="{{ url_for('edit_item', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost">✏️ Edit</a>
-                <a href="{{ url_for('copy_to_bill', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost">📋 Copy</a>
+                <a href="{{ url_for('edit_item', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost">Edit</a>
+                <a href="{{ url_for('copy_to_bill', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost">Copy</a>
                 <form method="POST" action="{{ url_for('remove_from_bill', item_id=item.get('Bill Item ID', '')) }}" style="display:inline">
-                    <button type="submit" class="btn btn-sm btn-ghost">↩️ Remove</button>
+                    <button type="submit" class="btn btn-sm btn-ghost">Remove</button>
                 </form>
                 <form method="POST" action="{{ url_for('delete_item', item_id=item.get('Bill Item ID', '')) }}" style="display:inline"
                       onsubmit="return confirm('Delete this item permanently?')">
-                    <button type="submit" class="btn btn-sm btn-ghost">🗑️</button>
+                    <button type="submit" class="btn btn-sm btn-ghost"></button>
                 </form>
             </div>
         </div>
