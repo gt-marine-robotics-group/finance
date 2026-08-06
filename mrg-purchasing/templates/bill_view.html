@@ -56,6 +56,7 @@
                 </td>
                 <td>
                     <a href="{{ url_for('edit_item', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost">✏️</a>
+                    <a href="{{ url_for('copy_to_bill', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost" title="Copy to another bill">📋</a>
                     <form method="POST" action="{{ url_for('remove_from_bill', item_id=item.get('Bill Item ID', '')) }}" style="display:inline">
                         <button type="submit" class="btn btn-sm btn-ghost" title="Remove from bill">↩️</button>
                     </form>
@@ -105,6 +106,7 @@
                 <a href="{{ item.get('Link') }}" target="_blank" class="btn btn-sm btn-ghost">🔗</a>
                 {% endif %}
                 <a href="{{ url_for('edit_item', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost">✏️ Edit</a>
+                <a href="{{ url_for('copy_to_bill', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost">📋 Copy</a>
                 <form method="POST" action="{{ url_for('remove_from_bill', item_id=item.get('Bill Item ID', '')) }}" style="display:inline">
                     <button type="submit" class="btn btn-sm btn-ghost">↩️ Remove</button>
                 </form>

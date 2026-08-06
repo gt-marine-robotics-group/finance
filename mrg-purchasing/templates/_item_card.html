@@ -24,11 +24,12 @@
             {% endif %}
         </div>
 
-        {% if item.get('_has_screenshot') %}
+        {% if item.get('_screenshot_path') %}
         <div class="item-thumbnail">
-            {% set safe_name = item.get('Item Name', '')|replace(' ', ' ') %}
-            <img src="{{ url_for('serve_screenshot', filename=safe_name|replace(' ', ' ') + '.png') }}"
-                 alt="Screenshot" loading="lazy">
+            <a href="{{ url_for('serve_screenshot', filename=item.get('_screenshot_path')) }}" target="_blank">
+                <img src="{{ url_for('serve_screenshot', filename=item.get('_screenshot_path')) }}"
+                     alt="Screenshot" loading="lazy">
+            </a>
         </div>
         {% endif %}
     </div>
