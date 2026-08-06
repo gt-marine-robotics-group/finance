@@ -128,8 +128,10 @@ def _get_graph_token() -> tuple[str, str, str] | None:
     return access_token, drive_id, file_id
 
 
-def graph_add_row(sheet_table: str, row_values: list) -> bool:
-    """Add a row to a table via Graph API Excel workbook endpoint."""
+def graph_add_row(sheet_table: str, row_values: list, index: int | None = None) -> bool:
+    """Add a row to a table via Graph API Excel workbook endpoint.
+    If index is provided, inserts at that position. Otherwise appends to end.
+    """
     import requests as _requests
 
     creds = _get_graph_token()
@@ -140,22 +142,52 @@ def graph_add_row(sheet_table: str, row_values: list) -> bool:
     access_token, drive_id, file_id = creds
 
     url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/{sheet_table}/rows/add"
+    payload = {"values": [row_values]}
+    if index is not None:
+        payload["index"] = index
+
     resp = _requests.post(
         url,
         headers={
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json",
         },
-        json={"values": [row_values]},
+        json=payload,
         timeout=15,
     )
 
     if resp.status_code in (200, 201):
-        print(f"[graph] ✅ Row added to {sheet_table}")
+        print(f"[graph] ✅ Row added to {sheet_table}" + (f" at index {index}" if index is not None else ""))
         return True
     else:
         print(f"[graph] ❌ Failed to add row: {resp.status_code} {resp.text[:150]}")
         return False
+
+
+def _get_last_data_index(sheet_table: str) -> int:
+    """Find the index of the last non-empty row in a table."""
+    import requests as _requests
+
+    creds = _get_graph_token()
+    if not creds:
+        return -1
+
+    access_token, drive_id, file_id = creds
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    rows_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/{sheet_table}/rows"
+    resp = _requests.get(rows_url, headers=headers, timeout=15)
+
+    if resp.status_code != 200:
+        return -1
+
+    last_data_index = -1
+    for row in resp.json().get("value", []):
+        vals = row["values"][0] if row.get("values") else []
+        if any(str(v).strip() for v in vals if v):
+            last_data_index = row["index"]
+
+    return last_data_index
 
 
 def graph_get_table_columns(sheet_table: str) -> list[str]:
@@ -533,11 +565,15 @@ def move_to_bill(queue_items: list[dict], bill_title: str) -> int:
     next_id = max_id + 1
     next_request = max_request_num + 1
 
+    # Find where to insert (after last row with data)
+    insert_at = _get_last_data_index("BillsT") + 1
+
     # Insert separator row first (e.g. "Request 4" with empty Item Name)
     separator_row = [""] * len(bills_columns)
     bill_title_idx = bills_columns.index("Bill Title") if "Bill Title" in bills_columns else 2
     separator_row[bill_title_idx] = f"Request {next_request}"
-    graph_add_row("BillsT", separator_row)
+    graph_add_row("BillsT", separator_row, index=insert_at)
+    insert_at += 1
 
     moved = 0
     rows_to_delete = []
@@ -562,11 +598,12 @@ def move_to_bill(queue_items: list[dict], bill_title: str) -> int:
             val = item_data.get(col, "")
             row_values.append(val if val else "")
 
-        # Add to BillsT
-        success = graph_add_row("BillsT", row_values)
+        # Add to BillsT at correct position
+        success = graph_add_row("BillsT", row_values, index=insert_at)
         if success:
             moved += 1
             next_id += 1
+            insert_at += 1
             # Track row index for deletion from TestTable
             if "_table_index" in item:
                 rows_to_delete.append(item["_table_index"])

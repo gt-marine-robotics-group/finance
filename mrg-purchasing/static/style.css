@@ -111,6 +111,10 @@ body {
     background: var(--color-bg);
 }
 
+.btn-danger-text {
+    color: var(--color-danger);
+}
+
 .btn-sm {
     padding: 0.4rem 0.8rem;
     font-size: 0.8rem;
