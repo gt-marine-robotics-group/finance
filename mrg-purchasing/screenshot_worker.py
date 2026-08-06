@@ -9,7 +9,6 @@ After capture, pushes to SharePoint via rclone so OneDrive-synced laptops get th
 import os
 import re
 import time
-import subprocess
 import threading
 from queue import Queue, Empty
 from pathlib import Path
@@ -146,25 +145,49 @@ def _scrape_price(driver) -> str:
     return ""
 
 
-def _rclone_push_screenshot(bill_title: str, filepath: str):
-    """Push a single screenshot to SharePoint via rclone."""
-    safe_bill = _safe_dirname(bill_title) if bill_title else "_backlog"
-    remote_path = f"{RCLONE_SCREENSHOTS_REMOTE}/{safe_bill}/"
+def _upload_screenshot_to_sharepoint(bill_title: str, filepath: str):
+    """Upload a screenshot to SharePoint via Graph API."""
+    import configparser
+    import json as _json
+    import requests as _requests
+
+    rclone_conf = os.path.expanduser("~/.config/rclone/rclone.conf")
+    if not os.path.exists(rclone_conf):
+        return
+
+    config = configparser.ConfigParser()
+    config.read(rclone_conf)
+    if "onedrive" not in config:
+        return
+
     try:
-        result = subprocess.run(
-            ["rclone", "copy", filepath, remote_path],
-            capture_output=True,
-            text=True,
+        token = _json.loads(config["onedrive"]["token"])
+        drive_id = config["onedrive"]["drive_id"]
+        access_token = token["access_token"]
+    except (KeyError, _json.JSONDecodeError):
+        return
+
+    safe_bill = _safe_dirname(bill_title) if bill_title else "_backlog"
+    filename = os.path.basename(filepath)
+    remote_path = f"OPS-1 Operations/FY27 Finances/screenshots/{safe_bill}/{filename}"
+
+    url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root:/{remote_path}:/content"
+
+    with open(filepath, "rb") as f:
+        resp = _requests.put(
+            url,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "image/png",
+            },
+            data=f.read(),
             timeout=30,
         )
-        if result.returncode == 0:
-            print(f"[rclone] Pushed screenshot to {remote_path}")
-        else:
-            print(f"[rclone] Push failed: {result.stderr.strip()}")
-    except FileNotFoundError:
-        print("[rclone] rclone not found - skipping push")
-    except subprocess.TimeoutExpired:
-        print("[rclone] Push timeout")
+
+    if resp.status_code in (200, 201):
+        print(f"[screenshot] ☁️ Uploaded to SharePoint: {remote_path}")
+    else:
+        print(f"[screenshot] ⚠️ Upload failed: {resp.status_code}")
 
 
 def _cleanup_old_screenshots():
@@ -248,8 +271,8 @@ def _process_job(job: dict):
         else:
             print(f"[screenshot] ✅ {item_name} - no price found")
 
-        # Push to SharePoint via rclone
-        _rclone_push_screenshot(bill_title, filepath)
+        # Push to SharePoint via Graph API
+        _upload_screenshot_to_sharepoint(bill_title, filepath)
 
         # Cleanup if storage is getting full
         _cleanup_old_screenshots()
