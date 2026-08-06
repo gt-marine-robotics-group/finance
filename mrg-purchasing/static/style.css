@@ -281,6 +281,36 @@ select.input {
     margin-bottom: 0;
 }
 
+/* Quick-add bar */
+.quick-add {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.quick-add .input {
+    flex: 1;
+}
+
+.quick-add-link {
+    max-width: 40%;
+}
+
+@media (max-width: 639px) {
+    .quick-add {
+        flex-wrap: wrap;
+    }
+    .quick-add .input {
+        flex: 1 1 100%;
+    }
+    .quick-add-link {
+        max-width: 100%;
+    }
+    .quick-add .btn {
+        width: 100%;
+    }
+}
+
 .bill-section {
     margin-bottom: 1.5rem;
 }

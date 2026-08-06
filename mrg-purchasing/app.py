@@ -115,6 +115,39 @@ def dashboard():
 # --- Add Item ---
 
 
+@app.route("/quick-add", methods=["POST"])
+@login_required
+def quick_add():
+    """Quick add — just name and optional link. Goes to backlog."""
+    item_name = request.form.get("item_name", "").strip()
+    link = request.form.get("link", "").strip()
+
+    if not item_name:
+        flash("Item name required", "error")
+        return redirect(url_for("dashboard"))
+
+    item_data = {
+        "Item Name": item_name,
+        "Link": link,
+        "Cost": "",
+        "Quantity": "1",
+        "Vendor": "",
+        "Description": "",
+        "Budget Section": "",
+        "Bill Title": "",
+    }
+
+    success = xlsx_manager.add_item(item_data)
+    if success:
+        flash(f"Added: {item_name}", "success")
+        if link:
+            screenshot_worker.queue_screenshot(item_name, link, "_queue")
+    else:
+        flash("Failed to add", "error")
+
+    return redirect(url_for("dashboard"))
+
+
 @app.route("/add", methods=["GET", "POST"])
 @login_required
 def add_item():
