@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Login - MRG Purchasing{% endblock %}
+
+{% block content %}
+<div class="login-page">
+    <div class="login-card">
+        <h1>🚢 MRG Purchasing</h1>
+        <p class="login-subtitle">Marine Robotics Group</p>
+
+        <form method="POST" action="{{ url_for('login') }}">
+            <div class="form-group">
+                <input
+                    type="password"
+                    name="password"
+                    placeholder="Enter team password"
+                    autofocus
+                    required
+                    class="input"
+                >
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Log In</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

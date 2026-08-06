@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - MRG Purchasing{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <h1>Dashboard</h1>
+
+    {% if backlog %}
+    <section class="bill-section">
+        <div class="bill-header">
+            <h2>📋 Backlog <span class="badge">{{ backlog|length }}</span></h2>
+            <p class="bill-subtitle">Items not yet assigned to a bill</p>
+        </div>
+        <div class="item-grid">
+            {% for item in backlog %}
+            {% include "_item_card.html" %}
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% for title, items in bills.items() %}
+    <section class="bill-section">
+        <div class="bill-header">
+            <h2>
+                <a href="{{ url_for('bill_view', bill_title=title) }}">📦 {{ title }}</a>
+                <span class="badge">{{ items|length }}</span>
+            </h2>
+            {% set ns = namespace(total=0) %}
+            {% for item in items %}
+                {% set cost_str = item.get('Cost', '0')|string|replace('$','')|replace(',','') %}
+                {% set qty_str = item.get('Quantity', '1')|string %}
+                {% set ns.total = ns.total + (cost_str|float(0) * qty_str|float(1)) %}
+            {% endfor %}
+            <p class="bill-subtitle">Total: ${{ "%.2f"|format(ns.total) }}</p>
+        </div>
+        <div class="item-grid">
+            {% for item in items %}
+            {% include "_item_card.html" %}
+            {% endfor %}
+        </div>
+    </section>
+    {% endfor %}
+
+    {% if not backlog and not bills %}
+    <div class="empty-state">
+        <p>No items yet.</p>
+        <a href="{{ url_for('add_item') }}" class="btn btn-primary">+ Add First Item</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

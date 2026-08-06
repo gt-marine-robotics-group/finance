@@ -1,0 +1,47 @@
+{# _item_card.html - reusable item card partial #}
+<div class="item-card">
+    <div class="item-card-header">
+        <h3 class="item-name">{{ item.get('Item Name', 'Unnamed') }}</h3>
+        {% if item.get('Status') %}
+        <span class="status-badge status-{{ item.get('Status', '')|lower|replace(' ', '-') }}">
+            {{ item.get('Status', '') }}
+        </span>
+        {% endif %}
+    </div>
+
+    <div class="item-card-body">
+        <div class="item-details">
+            {% set cost_str = item.get('Cost', '')|string|replace('$','')|replace(',','') %}
+            {% if cost_str and cost_str != '0' %}
+            <span class="item-price">${{ "%.2f"|format(cost_str|float(0)) }}</span>
+            {% if item.get('Quantity') and item.get('Quantity')|string != '1' %}
+            <span class="item-qty">× {{ item.get('Quantity') }}</span>
+            {% endif %}
+            {% endif %}
+
+            {% if item.get('Vendor') %}
+            <span class="item-vendor">{{ item.get('Vendor') }}</span>
+            {% endif %}
+        </div>
+
+        {% if item.get('_has_screenshot') %}
+        <div class="item-thumbnail">
+            {% set safe_name = item.get('Item Name', '')|replace(' ', ' ') %}
+            <img src="{{ url_for('serve_screenshot', filename=safe_name|replace(' ', ' ') + '.png') }}"
+                 alt="Screenshot" loading="lazy">
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="item-card-footer">
+        {% if item.get('Link') %}
+        <a href="{{ item.get('Link') }}" target="_blank" rel="noopener" class="btn btn-sm btn-ghost">🔗 Link</a>
+        {% endif %}
+        <a href="{{ url_for('edit_item', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost">✏️ Edit</a>
+        {% if not item.get('_has_screenshot') and item.get('Link') %}
+        <form method="POST" action="{{ url_for('queue_screenshot', item_id=item.get('Bill Item ID', '')) }}" style="display:inline">
+            <button type="submit" class="btn btn-sm btn-ghost">📸 Screenshot</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
