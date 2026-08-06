@@ -1,0 +1,20 @@
+[Unit]
+Description=MRG Purchasing Web App
+After=network.target
+
+[Service]
+Type=simple
+User=awu335
+WorkingDirectory=/home/awu335/mrg/finance/mrg-purchasing
+ExecStart=/home/awu335/mrg/finance/mrg-purchasing/.venv/bin/python app.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+# Resource limits - keep it lightweight for shared sim PC
+CPUQuota=25%
+MemoryMax=512M
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

@@ -143,6 +143,34 @@ mrg-purchasing/
    - Export CSV or just confirm items look correct
    - On a laptop with OneDrive sync, run `automation.py` to submit the bill
 
+## Running as a Service (SIM PC)
+
+The app runs as a systemd service on the shared SIM PC so it's always available.
+
+**Resource usage:** Very lightweight — idles at ~30MB RAM, 0% CPU. Screenshots briefly use ~200-400MB (Chromium). Resource limits (`CPUQuota=25%`, `MemoryMax=512M`, `Nice=10`) ensure it never interferes with Gazebo sims.
+
+**Setup:**
+```bash
+sudo cp /tmp/mrg-purchasing.service /etc/systemd/system/
+# Or create it manually — see mrg-purchasing.service in this repo
+sudo systemctl daemon-reload
+sudo systemctl enable mrg-purchasing
+sudo systemctl start mrg-purchasing
+```
+
+**Commands:**
+```bash
+sudo systemctl status mrg-purchasing    # Check status
+sudo journalctl -u mrg-purchasing -f    # Follow logs
+sudo systemctl restart mrg-purchasing   # Restart after code changes
+sudo systemctl stop mrg-purchasing      # Stop temporarily
+```
+
+**If Gazebo is lagging:** The service has low priority and resource caps, so it shouldn't interfere. But you can always stop it temporarily:
+```bash
+sudo systemctl stop mrg-purchasing
+```
+
 ## Notes
 
 - The xlsx may have conditional formatting — openpyxl only modifies cell values, preserving formatting
