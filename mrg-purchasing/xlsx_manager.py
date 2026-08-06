@@ -215,7 +215,7 @@ def _patch_row_values(sheet_table: str, row_index: int, values: list, columns: l
 
     # Batch update using range PATCH for each cell
     for cell_addr, val in cells_to_update.items():
-        url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets/Bills/range(address=\"{cell_addr}\")"
+        url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Bills')/range(address='{cell_addr}')"
         resp = _requests.patch(url, headers=headers, json={"values": [[val]]}, timeout=10)
         if resp.status_code != 200:
             print(f"[graph] ⚠️ Failed to write {cell_addr}: {resp.status_code}")
