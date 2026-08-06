@@ -10,6 +10,13 @@
         </form>
     </div>
 
+    {# Quick-add bar #}
+    <form method="POST" action="{{ url_for('quick_add') }}" class="quick-add">
+        <input type="text" name="item_name" placeholder="Quick add item..." required class="input">
+        <input type="text" name="link" placeholder="Link (optional)" class="input quick-add-link">
+        <button type="submit" class="btn btn-primary">+</button>
+    </form>
+
     {% if backlog %}
     <section class="bill-section">
         <details class="bill-dropdown" open>
