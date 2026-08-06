@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Edit Queue Item - MRG Purchasing{% endblock %}
+
+{% block content %}
+<div class="form-page">
+    <h1>Edit Queue Item</h1>
+
+    <form method="POST" action="{{ url_for('edit_queue_item', table_index=table_index) }}" class="item-form">
+        <div class="form-group">
+            <label for="item_name">Item Name *</label>
+            <input type="text" id="item_name" name="item_name" required class="input"
+                   value="{{ item.get('Item Name', '') }}">
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="cost">Cost ($)</label>
+                {% set cost_val = item.get('Cost', '')|string|replace('$','')|replace(',','') %}
+                <input type="number" id="cost" name="cost" step="0.01" min="0" class="input"
+                       value="{{ cost_val }}">
+            </div>
+            <div class="form-group">
+                <label for="quantity">Quantity</label>
+                <input type="number" id="quantity" name="quantity" min="1" class="input"
+                       value="{{ item.get('Quantity', 1) }}">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="link">Link (URL)</label>
+            <input type="url" id="link" name="link" class="input"
+                   value="{{ item.get('Link', '') }}">
+        </div>
+
+        <div class="form-group">
+            <label for="vendor">Vendor</label>
+            <input type="text" id="vendor" name="vendor" class="input"
+                   value="{{ item.get('Vendor', '') }}">
+        </div>
+
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" rows="3" class="input">{{ item.get('Description', '') }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="budget_section">Budget Section</label>
+            {% set current_section = item.get('Budget Section', '') %}
+            <select id="budget_section" name="budget_section" class="input">
+                <option value="">-- Select --</option>
+                {% for section in ['B01 - Advertising/Promotion', 'B02 - Equipment Rental',
+                    'B03 - General Inventoried Goods', 'B04 - Food/Beverage', 'B05 - Lodging',
+                    'B06 - Decorations', 'B07 - Clothing/Awards', 'B08 - Printing/Copies',
+                    'B09 - Professional Services', 'B10 - Supplies/Materials',
+                    'B11 - Transportation', 'B12 - Conference Registration'] %}
+                <option value="{{ section }}" {{ 'selected' if section == current_section }}>{{ section }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        {# Hidden fields for columns the form doesn't show #}
+        <input type="hidden" name="bill_item_id" value="{{ item.get('Bill Item ID', '') }}">
+        <input type="hidden" name="bill_no" value="{{ item.get('Bill No.', '') }}">
+        <input type="hidden" name="bill_title" value="{{ item.get('Bill Title', '') }}">
+        <input type="hidden" name="column1" value="{{ item.get('Column1', '') }}">
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-block">Save Changes</button>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-ghost btn-block">Cancel</a>
+        </div>
+    </form>
+
+    <hr class="divider">
+
+    <form method="POST" action="{{ url_for('delete_queue_item_route', table_index=table_index) }}"
+          onsubmit="return confirm('Delete this item from the queue?')">
+        <button type="submit" class="btn btn-danger btn-block">🗑️ Delete from Queue</button>
+    </form>
+</div>
+{% endblock %}

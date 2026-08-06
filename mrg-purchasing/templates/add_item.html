@@ -26,8 +26,12 @@
 
         <div class="form-group">
             <label for="link">Link (URL)</label>
-            <input type="url" id="link" name="link" class="input"
-                   placeholder="https://amazon.com/...">
+            <div class="input-with-button">
+                <input type="url" id="link" name="link" class="input"
+                       placeholder="https://amazon.com/...">
+                <button type="button" id="fetch-btn" class="btn btn-sm btn-ghost" onclick="fetchLink()">🔍 Fetch</button>
+            </div>
+            <small id="fetch-status" class="text-muted"></small>
         </div>
 
         <div class="form-group">
@@ -85,4 +89,40 @@
         </div>
     </form>
 </div>
+
+<script>
+function fetchLink() {
+    const url = document.getElementById('link').value.trim();
+    if (!url) return;
+
+    const status = document.getElementById('fetch-status');
+    const btn = document.getElementById('fetch-btn');
+    status.textContent = 'Fetching...';
+    btn.disabled = true;
+
+    const formData = new FormData();
+    formData.append('url', url);
+
+    fetch('{{ url_for("scrape_link") }}', { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                status.textContent = 'Failed: ' + data.error;
+            } else {
+                if (data.title && !document.getElementById('item_name').value) {
+                    document.getElementById('item_name').value = data.title;
+                }
+                if (data.price && !document.getElementById('cost').value) {
+                    document.getElementById('cost').value = data.price;
+                }
+                if (data.vendor && !document.getElementById('vendor').value) {
+                    document.getElementById('vendor').value = data.vendor;
+                }
+                status.textContent = '✅ Auto-filled from page';
+            }
+        })
+        .catch(e => { status.textContent = 'Error: ' + e; })
+        .finally(() => { btn.disabled = false; });
+}
+</script>
 {% endblock %}
