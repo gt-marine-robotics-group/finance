@@ -57,7 +57,7 @@
         </div>
 
         <div class="form-actions">
-            <button type="submit" class="btn btn-primary btn-block">Create Bill</button>
+            <button type="submit" class="btn btn-primary btn-block" id="create-btn" onclick="this.disabled=true; this.textContent='Creating...'; this.form.submit();">Create Bill</button>
             <a href="{{ url_for('dashboard') }}" class="btn btn-ghost btn-block">Cancel</a>
         </div>
     </form>
