@@ -217,6 +217,85 @@ def edit_item(item_id):
 # --- Delete Item ---
 
 
+@app.route("/edit-queue/<int:table_index>", methods=["GET", "POST"])
+@login_required
+def edit_queue_item(table_index):
+    """Edit a queue item by its TestTable row index."""
+    import requests as _requests
+
+    creds = xlsx_manager._get_graph_token()
+    if not creds:
+        flash("Graph API unavailable", "error")
+        return redirect(url_for("dashboard"))
+
+    access_token, drive_id, file_id = creds
+    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+
+    if request.method == "POST":
+        # Get columns
+        columns = xlsx_manager.graph_get_table_columns("TestTable")
+        if not columns:
+            flash("Failed to get columns", "error")
+            return redirect(url_for("dashboard"))
+
+        # Build updated row values
+        row_values = []
+        for col in columns:
+            form_key = col.lower().replace(" ", "_").replace(".", "")
+            value = request.form.get(form_key, "")
+            row_values.append(value)
+
+        # Update via Graph API - PATCH the row range
+        url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/TestTable/rows/itemAt(index={table_index})"
+        resp = _requests.patch(url, headers=headers, json={"values": [row_values]}, timeout=10)
+
+        if resp.status_code == 200:
+            flash("Item updated", "success")
+        else:
+            flash(f"Update failed: {resp.status_code}", "error")
+
+        return redirect(url_for("dashboard"))
+
+    # GET - load item data
+    queue_items = xlsx_manager.read_queue_items()
+    item = None
+    for i in queue_items:
+        if i.get("_table_index") == table_index:
+            item = i
+            break
+
+    if not item:
+        flash("Item not found", "error")
+        return redirect(url_for("dashboard"))
+
+    return render_template("edit_queue_item.html", item=item, table_index=table_index)
+
+
+@app.route("/delete-queue/<int:table_index>", methods=["POST"])
+@login_required
+def delete_queue_item_route(table_index):
+    """Delete a queue item by its TestTable row index."""
+    import requests as _requests
+
+    creds = xlsx_manager._get_graph_token()
+    if not creds:
+        flash("Graph API unavailable", "error")
+        return redirect(url_for("dashboard"))
+
+    access_token, drive_id, file_id = creds
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/TestTable/rows/itemAt(index={table_index})"
+    resp = _requests.delete(url, headers=headers, timeout=10)
+
+    if resp.status_code == 204:
+        flash("Item deleted from queue", "success")
+    else:
+        flash(f"Delete failed: {resp.status_code}", "error")
+
+    return redirect(url_for("dashboard"))
+
+
 @app.route("/delete/<item_id>", methods=["POST"])
 @login_required
 def delete_item(item_id):
@@ -467,6 +546,75 @@ def queue_screenshot(item_id):
                 flash("Item has no URL", "error")
             break
     return redirect(request.referrer or url_for("dashboard"))
+
+
+# --- Link Scraper (auto-fill) ---
+
+
+@app.route("/scrape-link", methods=["POST"])
+@login_required
+def scrape_link():
+    """Scrape a URL for title and price to auto-fill the add item form."""
+    import json
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service
+    from selenium.webdriver.common.by import By
+
+    url = request.form.get("url", "").strip()
+    if not url:
+        return json.dumps({"error": "No URL"}), 400
+
+    chrome_options = Options()
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.binary_location = "/snap/chromium/current/usr/lib/chromium-browser/chrome"
+
+    try:
+        service = Service("/snap/chromium/current/usr/lib/chromium-browser/chromedriver")
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        driver.set_page_load_timeout(15)
+        driver.get(url)
+
+        import time
+        time.sleep(3)
+
+        title = driver.title or ""
+        price_text = screenshot_worker._scrape_price(driver)
+        price = screenshot_worker.parse_price(price_text)
+
+        # Try to detect vendor from domain
+        from urllib.parse import urlparse
+        domain = urlparse(url).netloc.lower()
+        vendor = ""
+        if "amazon" in domain:
+            vendor = "Amazon"
+        elif "mcmaster" in domain:
+            vendor = "McMaster-Carr"
+        elif "digikey" in domain:
+            vendor = "DigiKey"
+        elif "mouser" in domain:
+            vendor = "Mouser"
+        elif "adafruit" in domain:
+            vendor = "Adafruit"
+        elif "sparkfun" in domain:
+            vendor = "SparkFun"
+        elif "pololu" in domain:
+            vendor = "Pololu"
+
+        driver.quit()
+
+        return json.dumps({
+            "title": title,
+            "price": price,
+            "vendor": vendor,
+        })
+
+    except Exception as e:
+        return json.dumps({"error": str(e)}), 500
 
 
 # --- Start app ---
