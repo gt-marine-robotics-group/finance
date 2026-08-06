@@ -614,13 +614,11 @@ def move_to_bill(queue_items: list[dict], bill_title: str, add_separator: bool =
     # Columns with formulas — don't overwrite these
     FORMULA_COLUMNS = {"Bill Item ID", "Total Cost"}
 
-    # Write separator row for new bills
+    # Reserve the separator row slot if needed
+    separator_row_idx = None
     if add_separator:
-        sep_values = [""] * len(bills_columns)
-        bill_title_idx = bills_columns.index("Bill Title") if "Bill Title" in bills_columns else 2
-        sep_values[bill_title_idx] = f"Request {next_request}"
-        _patch_row_values("BillsT", insert_at, sep_values, bills_columns, FORMULA_COLUMNS, headers, drive_id, file_id)
-        insert_at += 1
+        separator_row_idx = insert_at
+        insert_at += 1  # Items start after the separator slot
 
     moved = 0
     rows_to_delete = []
@@ -642,6 +640,13 @@ def move_to_bill(queue_items: list[dict], bill_title: str, add_separator: bool =
             insert_at += 1
             if "_table_index" in item:
                 rows_to_delete.append(item["_table_index"])
+
+    # Write separator row ONLY if items were successfully added
+    if moved > 0 and separator_row_idx is not None:
+        sep_values = [""] * len(bills_columns)
+        bill_title_idx = bills_columns.index("Bill Title") if "Bill Title" in bills_columns else 2
+        sep_values[bill_title_idx] = f"Request {next_request}"
+        _patch_row_values("BillsT", separator_row_idx, sep_values, bills_columns, FORMULA_COLUMNS, headers, drive_id, file_id)
 
     # Delete from TestTable (in reverse order so indices don't shift)
     rows_to_delete.sort(reverse=True)
