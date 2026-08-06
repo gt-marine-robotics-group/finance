@@ -477,6 +477,7 @@ def delete_queue_item(row_idx: int) -> bool:
 def move_to_bill(queue_items: list[dict], bill_title: str) -> int:
     """
     Move items from the Queue (TestTable) to the Bills table (BillsT) via Graph API.
+    - Inserts a separator row (e.g. "Request 4") before the items
     - Adds each item as a new row on BillsT with the given Bill Title
     - Deletes them from TestTable
     - Returns number of items successfully moved.
@@ -501,19 +502,39 @@ def move_to_bill(queue_items: list[dict], bill_title: str) -> int:
                          "Budget Section", "Vendor", "Description", "Quantity", "Cost",
                          "Total Cost", "Link", "File URL", "Person Requesting", "Remaining Allocation", "Column1"]
 
-    # Get next Bill Item ID from BillsT
+    # Get existing rows to find next Request number and next Bill Item ID
     url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/BillsT/rows"
     resp = _requests.get(url, headers=headers, timeout=15)
     max_id = 0
+    max_request_num = 0
     if resp.status_code == 200:
         for row in resp.json().get("value", []):
+            vals = row["values"][0]
+            # Track max Bill Item ID
             try:
-                val = int(float(str(row["values"][0][0])))
+                val = int(float(str(vals[0])))
                 if val > max_id:
                     max_id = val
             except (ValueError, TypeError, IndexError):
                 pass
+            # Track max Request number
+            bill_col = str(vals[2]) if vals[2] else ""
+            if bill_col.startswith("Request"):
+                try:
+                    num = int(bill_col.replace("Request", "").strip())
+                    if num > max_request_num:
+                        max_request_num = num
+                except ValueError:
+                    pass
+
     next_id = max_id + 1
+    next_request = max_request_num + 1
+
+    # Insert separator row first (e.g. "Request 4" with empty Item Name)
+    separator_row = [""] * len(bills_columns)
+    bill_title_idx = bills_columns.index("Bill Title") if "Bill Title" in bills_columns else 2
+    separator_row[bill_title_idx] = f"Request {next_request}"
+    graph_add_row("BillsT", separator_row)
 
     moved = 0
     rows_to_delete = []
