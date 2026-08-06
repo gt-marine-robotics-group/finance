@@ -576,8 +576,12 @@ def scrape_link():
     try:
         service = Service("/snap/chromium/current/usr/lib/chromium-browser/chromedriver")
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.set_page_load_timeout(15)
-        driver.get(url)
+        driver.set_page_load_timeout(20)
+
+        try:
+            driver.get(url)
+        except Exception:
+            pass  # Page may partially load — still try to scrape
 
         import time
         time.sleep(3)

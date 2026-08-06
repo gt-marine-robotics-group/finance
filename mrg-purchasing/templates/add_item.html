@@ -7,6 +7,16 @@
 
     <form method="POST" action="{{ url_for('add_item') }}" class="item-form">
         <div class="form-group">
+            <label for="link">Link (URL)</label>
+            <div class="input-with-button">
+                <input type="url" id="link" name="link" class="input"
+                       placeholder="https://amazon.com/...">
+                <button type="button" id="fetch-btn" class="btn btn-sm btn-ghost" onclick="fetchLink()">🔍 Fetch</button>
+            </div>
+            <small id="fetch-status" class="text-muted"></small>
+        </div>
+
+        <div class="form-group">
             <label for="item_name">Item Name *</label>
             <input type="text" id="item_name" name="item_name" required class="input"
                    placeholder="e.g. Arduino Mega 2560">
@@ -22,16 +32,6 @@
                 <label for="quantity">Quantity</label>
                 <input type="number" id="quantity" name="quantity" value="1" min="1" class="input">
             </div>
-        </div>
-
-        <div class="form-group">
-            <label for="link">Link (URL)</label>
-            <div class="input-with-button">
-                <input type="url" id="link" name="link" class="input"
-                       placeholder="https://amazon.com/...">
-                <button type="button" id="fetch-btn" class="btn btn-sm btn-ghost" onclick="fetchLink()">🔍 Fetch</button>
-            </div>
-            <small id="fetch-status" class="text-muted"></small>
         </div>
 
         <div class="form-group">
