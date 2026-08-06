@@ -82,7 +82,7 @@ def sync_pull() -> bool:
 
     local_dir = str(Path(LOCAL_XLSX).parent)
     os.makedirs(local_dir, exist_ok=True)
-    result = _run_rclone(["copy", RCLONE_REMOTE, local_dir])
+    result = _run_rclone(["copy", "--checksum", RCLONE_REMOTE, local_dir])
     if result:
         _last_pull_time = now
     return result
