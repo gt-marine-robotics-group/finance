@@ -260,8 +260,19 @@ select.input {
     margin-bottom: 1.5rem;
 }
 
+.dashboard-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+}
+
+.dashboard-header h1 {
+    margin-bottom: 0;
+}
+
 .bill-section {
-    margin-bottom: 2rem;
+    margin-bottom: 1.5rem;
 }
 
 .bill-header {
@@ -288,6 +299,56 @@ select.input {
     font-size: 0.85rem;
     color: var(--color-text-muted);
     margin-top: 0.2rem;
+}
+
+/* Collapsible bill dropdown */
+.bill-dropdown {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.bill-header-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.9rem 1rem;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+
+.bill-header-toggle::-webkit-details-marker {
+    display: none;
+}
+
+.bill-header-toggle h2 {
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+}
+
+.bill-total-inline {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+}
+
+.bill-dropdown[open] .bill-header-toggle {
+    border-bottom: 1px solid var(--color-border);
+}
+
+.bill-dropdown-actions {
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg);
+}
+
+.bill-dropdown .item-grid {
+    padding: 0.75rem;
 }
 
 .badge {

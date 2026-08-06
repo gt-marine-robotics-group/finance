@@ -22,6 +22,15 @@ QUEUE_SHEET_NAME = os.environ.get("XLSX_QUEUE_SHEET_NAME", "Test")
 # File lock to prevent concurrent reads/writes
 _lock = threading.Lock()
 
+# Cache: only pull from SharePoint every N seconds
+_last_pull_time = 0
+PULL_INTERVAL = int(os.environ.get("PULL_INTERVAL_SECONDS", "300"))  # 5 minutes
+
+# Cached data
+_cached_items: list[dict] = []
+_cached_items_time = 0
+ITEMS_CACHE_TTL = 60  # seconds
+
 # Column mapping (xlsx columns in the Bills sheet)
 COLUMNS = [
     "Bill Item ID",
@@ -63,10 +72,20 @@ def _run_rclone(args: list[str]) -> bool:
 
 
 def sync_pull() -> bool:
-    """Pull latest xlsx from SharePoint."""
+    """Pull latest xlsx from SharePoint. Skips if pulled recently (within PULL_INTERVAL)."""
+    global _last_pull_time
+    import time as _time
+
+    now = _time.time()
+    if now - _last_pull_time < PULL_INTERVAL:
+        return True  # Use cached local copy
+
     local_dir = str(Path(LOCAL_XLSX).parent)
     os.makedirs(local_dir, exist_ok=True)
-    return _run_rclone(["copy", RCLONE_REMOTE, local_dir])
+    result = _run_rclone(["copy", RCLONE_REMOTE, local_dir])
+    if result:
+        _last_pull_time = now
+    return result
 
 
 def _get_graph_token() -> tuple[str, str, str] | None:

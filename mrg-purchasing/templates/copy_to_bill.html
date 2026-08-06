@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Copy to Bill - MRG Purchasing{% endblock %}
+
+{% block content %}
+<div class="form-page">
+    <h1>Copy to Bill</h1>
+    <p class="text-muted">Duplicate "{{ item.get('Item Name', '') }}" to another bill.</p>
+
+    <div class="item-card" style="margin-bottom: 1.5rem;">
+        <div class="item-card-header">
+            <h3 class="item-name">{{ item.get('Item Name', '') }}</h3>
+        </div>
+        <div class="item-card-body">
+            <div class="item-details">
+                {% set cost_str = item.get('Cost', '0')|string|replace('$','')|replace(',','') %}
+                {% if cost_str and cost_str != '0' %}
+                <span class="item-price">${{ "%.2f"|format(cost_str|float(0)) }}</span>
+                {% endif %}
+                {% if item.get('Vendor') %}
+                <span class="item-vendor">{{ item.get('Vendor') }}</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <form method="POST" action="{{ url_for('copy_to_bill', item_id=item.get('Bill Item ID', '')) }}" class="item-form">
+        <div class="form-group">
+            <label for="bill_title">Target Bill *</label>
+            <select id="bill_title" name="bill_title" required class="input">
+                <option value="">-- Select a bill --</option>
+                {% for bill in bills %}
+                {% if bill != item.get('Bill Title', '') %}
+                <option value="{{ bill }}">{{ bill }}</option>
+                {% endif %}
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="new_bill">Or create a new bill:</label>
+            <input type="text" id="new_bill" name="new_bill" class="input" placeholder="New bill title...">
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-block">Copy to Bill</button>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-ghost btn-block">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<script>
+    // If new bill is typed, use that instead of dropdown
+    document.querySelector('form').addEventListener('submit', function(e) {
+        const newBill = document.getElementById('new_bill').value.trim();
+        if (newBill) {
+            document.getElementById('bill_title').value = '';
+            // Create a hidden input with the new bill name
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'bill_title';
+            input.value = newBill;
+            this.appendChild(input);
+        }
+    });
+</script>
+{% endblock %}

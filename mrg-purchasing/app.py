@@ -75,7 +75,6 @@ def dashboard():
 
     # Group by bill title
     bills = {}
-    backlog = []
 
     for item in items:
         title = str(item.get("Bill Title", "")).strip()
@@ -83,15 +82,32 @@ def dashboard():
             if title not in bills:
                 bills[title] = []
             bills[title].append(item)
-        else:
-            backlog.append(item)
 
-    # Add screenshot status to each item
+    # Get queue items from Test sheet
+    backlog = xlsx_manager.get_backlog_items()
+
+    # Add screenshot status to bill items
     for item in items:
         name = str(item.get("Item Name", ""))
         bill = str(item.get("Bill Title", ""))
         item["_has_screenshot"] = screenshot_worker.has_screenshot(name, bill)
         item["_screenshot_status"] = screenshot_worker.get_status(name)
+        full_path = screenshot_worker.get_screenshot_path(name, bill)
+        if full_path:
+            item["_screenshot_path"] = os.path.relpath(full_path, screenshot_worker.SCREENSHOT_DIR)
+        else:
+            item["_screenshot_path"] = ""
+
+    # Add screenshot status to queue items
+    for item in backlog:
+        name = str(item.get("Item Name", ""))
+        item["_has_screenshot"] = screenshot_worker.has_screenshot(name, "_queue")
+        item["_screenshot_status"] = screenshot_worker.get_status(name)
+        full_path = screenshot_worker.get_screenshot_path(name, "_queue")
+        if full_path:
+            item["_screenshot_path"] = os.path.relpath(full_path, screenshot_worker.SCREENSHOT_DIR)
+        else:
+            item["_screenshot_path"] = ""
 
     return render_template("dashboard.html", bills=bills, backlog=backlog)
 
@@ -122,10 +138,10 @@ def add_item():
         success = xlsx_manager.add_item(item_data)
         if success:
             flash(f"Added to queue: {item_data['Item Name']}", "success")
-            # Queue screenshot if URL provided
+            # Queue screenshot if URL provided (save to _queue folder)
             if item_data["Link"]:
                 screenshot_worker.queue_screenshot(
-                    item_data["Item Name"], item_data["Link"], item_data.get("Bill Title", "")
+                    item_data["Item Name"], item_data["Link"], "_queue"
                 )
         else:
             flash("Failed to save item", "error")
@@ -260,6 +276,12 @@ def create_bill():
         # Move from Test sheet to Bills sheet
         moved = xlsx_manager.move_to_bill(selected_items, bill_title)
 
+        # Copy screenshots from _queue/ to bill folder (local + SharePoint)
+        for item in selected_items:
+            name = str(item.get("Item Name", ""))
+            if name:
+                _copy_screenshot_to_bill(name, "_queue", bill_title)
+
         flash(f"Created bill '{bill_title}' with {moved} item(s)", "success")
         return redirect(url_for("bill_view", bill_title=bill_title))
 
@@ -288,6 +310,11 @@ def bill_view(bill_title):
         # Add screenshot info
         name = str(item.get("Item Name", ""))
         item["_has_screenshot"] = screenshot_worker.has_screenshot(name, bill_title)
+        full_path = screenshot_worker.get_screenshot_path(name, bill_title)
+        if full_path:
+            item["_screenshot_path"] = os.path.relpath(full_path, screenshot_worker.SCREENSHOT_DIR)
+        else:
+            item["_screenshot_path"] = ""
 
     return render_template("bill_view.html", bill_title=bill_title, items=items, total=total)
 
@@ -313,6 +340,104 @@ def export_csv(bill_title):
     safe_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in bill_title)
     response.headers["Content-Disposition"] = f"attachment; filename={safe_title}.csv"
     return response
+
+
+# --- Screenshot Helpers ---
+
+
+def _copy_screenshot_to_bill(item_name: str, from_bill: str, to_bill: str):
+    """Copy a screenshot from one bill folder to another (local + SharePoint)."""
+    import shutil
+
+    src_path = screenshot_worker.get_screenshot_path(item_name, from_bill)
+    if not src_path:
+        return
+
+    # Copy locally
+    safe_bill = screenshot_worker._safe_dirname(to_bill)
+    safe_name = screenshot_worker._safe_filename(item_name)
+    dest_dir = os.path.join(screenshot_worker.SCREENSHOT_DIR, safe_bill)
+    os.makedirs(dest_dir, exist_ok=True)
+    dest_path = os.path.join(dest_dir, f"{safe_name}.png")
+    shutil.copy2(src_path, dest_path)
+
+    # Upload to SharePoint
+    screenshot_worker._upload_screenshot_to_sharepoint(to_bill, dest_path)
+
+
+# --- Copy Item to Bill ---
+
+
+@app.route("/copy-to-bill/<item_id>", methods=["GET", "POST"])
+@login_required
+def copy_to_bill(item_id):
+    """Duplicate an item from one bill to another, copying the screenshot too."""
+    if request.method == "POST":
+        target_bill = request.form.get("bill_title", "").strip()
+        if not target_bill:
+            flash("Select a target bill", "error")
+            return redirect(request.referrer or url_for("dashboard"))
+
+        # Find the source item
+        items = xlsx_manager.read_items()
+        source_item = None
+        for item in items:
+            if str(item.get("Bill Item ID", "")) == str(item_id):
+                source_item = item
+                break
+
+        if not source_item:
+            flash("Item not found", "error")
+            return redirect(url_for("dashboard"))
+
+        # Add to target bill via Graph API
+        bills_columns = xlsx_manager.graph_get_table_columns("BillsT")
+        if not bills_columns:
+            flash("Failed to get table columns", "error")
+            return redirect(url_for("dashboard"))
+
+        item_data = dict(source_item)
+        item_data["Bill Title"] = target_bill
+        item_data["Status"] = "Bill Requested"
+        item_data["Bill Item ID"] = ""  # Will be auto-assigned
+
+        # Calculate Total Cost
+        try:
+            qty = float(item_data.get("Quantity", 1) or 1)
+            cost = float(str(item_data.get("Cost", 0)).replace("$", "").replace(",", "") or 0)
+            item_data["Total Cost"] = qty * cost
+        except (ValueError, TypeError):
+            item_data["Total Cost"] = 0
+
+        row_values = [item_data.get(col, "") or "" for col in bills_columns]
+        success = xlsx_manager.graph_add_row("BillsT", row_values)
+
+        if success:
+            # Copy screenshot to new bill folder
+            name = str(source_item.get("Item Name", ""))
+            source_bill = str(source_item.get("Bill Title", ""))
+            if name:
+                _copy_screenshot_to_bill(name, source_bill, target_bill)
+            flash(f"Copied '{name}' to '{target_bill}'", "success")
+        else:
+            flash("Failed to copy item", "error")
+
+        return redirect(url_for("bill_view", bill_title=target_bill))
+
+    # GET — show bill selection
+    items = xlsx_manager.read_items()
+    source_item = None
+    for item in items:
+        if str(item.get("Bill Item ID", "")) == str(item_id):
+            source_item = item
+            break
+
+    if not source_item:
+        flash("Item not found", "error")
+        return redirect(url_for("dashboard"))
+
+    bills = xlsx_manager.get_bills()
+    return render_template("copy_to_bill.html", item=source_item, bills=bills)
 
 
 # --- Screenshot endpoints ---
@@ -345,6 +470,17 @@ def queue_screenshot(item_id):
 
 
 # --- Start app ---
+
+
+@app.route("/force-pull", methods=["POST"])
+@login_required
+def force_pull():
+    """Force a fresh pull from SharePoint, bypassing cache."""
+    import xlsx_manager as xm
+    xm._last_pull_time = 0  # Reset cache
+    xm.sync_pull()
+    flash("Synced from SharePoint", "success")
+    return redirect(url_for("dashboard"))
 
 
 if __name__ == "__main__":
