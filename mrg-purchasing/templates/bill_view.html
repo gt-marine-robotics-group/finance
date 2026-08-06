@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}{{ bill_title }} - MRG Purchasing{% endblock %}
+
+{% block content %}
+<div class="bill-page">
+    <div class="bill-page-header">
+        <h1>📦 {{ bill_title }}</h1>
+        <div class="bill-meta">
+            <span class="bill-total">Total: <strong>${{ "%.2f"|format(total) }}</strong></span>
+            <span class="bill-count">{{ items|length }} item{{ 's' if items|length != 1 }}</span>
+        </div>
+        <div class="bill-actions">
+            <a href="{{ url_for('export_csv', bill_title=bill_title) }}" class="btn btn-sm btn-primary">📄 Export CSV</a>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-sm btn-ghost">← Back</a>
+        </div>
+    </div>
+
+    {% if items %}
+    <table class="bill-table">
+        <thead>
+            <tr>
+                <th>Item</th>
+                <th>Cost</th>
+                <th>Qty</th>
+                <th>Subtotal</th>
+                <th>Vendor</th>
+                <th class="hide-mobile">Screenshot</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td class="item-name-cell">
+                    {{ item.get('Item Name', '') }}
+                    {% if item.get('Description') %}
+                    <small class="item-desc">{{ item.get('Description', '')[:60] }}</small>
+                    {% endif %}
+                </td>
+                <td>
+                    {% set cost_str = item.get('Cost', '0')|string|replace('$','')|replace(',','') %}
+                    ${{ "%.2f"|format(cost_str|float(0)) }}
+                </td>
+                <td>{{ item.get('Quantity', 1) }}</td>
+                <td>
+                    {% set qty = item.get('Quantity', 1)|float(1) %}
+                    ${{ "%.2f"|format(cost_str|float(0) * qty) }}
+                </td>
+                <td>{{ item.get('Vendor', '') }}</td>
+                <td class="hide-mobile">
+                    {% if item.get('_has_screenshot') %}
+                    ✅
+                    {% else %}
+                    ❌
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="{{ url_for('edit_item', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost">✏️</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="3"><strong>Total</strong></td>
+                <td><strong>${{ "%.2f"|format(total) }}</strong></td>
+                <td colspan="3"></td>
+            </tr>
+        </tfoot>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <p>No items in this bill yet.</p>
+    </div>
+    {% endif %}
+
+    {# Mobile-friendly card view (shown on small screens) #}
+    <div class="mobile-bill-cards">
+        {% for item in items %}
+        <div class="item-card">
+            <div class="item-card-header">
+                <h3 class="item-name">{{ item.get('Item Name', '') }}</h3>
+            </div>
+            <div class="item-card-body">
+                <div class="item-details">
+                    {% set cost_str = item.get('Cost', '0')|string|replace('$','')|replace(',','') %}
+                    <span class="item-price">${{ "%.2f"|format(cost_str|float(0)) }}</span>
+                    {% if item.get('Quantity') and item.get('Quantity')|string != '1' %}
+                    <span class="item-qty">× {{ item.get('Quantity') }}</span>
+                    {% endif %}
+                    {% if item.get('Vendor') %}
+                    <span class="item-vendor">{{ item.get('Vendor') }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="item-card-footer">
+                {% if item.get('Link') %}
+                <a href="{{ item.get('Link') }}" target="_blank" class="btn btn-sm btn-ghost">🔗</a>
+                {% endif %}
+                <a href="{{ url_for('edit_item', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost">✏️ Edit</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

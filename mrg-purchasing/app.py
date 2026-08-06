@@ -1,0 +1,289 @@
+"""
+app.py - MRG Purchasing web app.
+
+Mobile-friendly Flask app for managing purchase items and organizing them into bills.
+"""
+
+import os
+import csv
+import io
+from functools import wraps
+from flask import (
+    Flask,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    session,
+    flash,
+    send_from_directory,
+    Response,
+)
+from dotenv import load_dotenv
+
+load_dotenv()
+
+import xlsx_manager
+import screenshot_worker
+
+app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", "mrg-purchasing-dev-key-change-me")
+
+# Config
+LOGIN_PASSWORD = os.environ.get("LOGIN_PASSWORD", "boats0519")
+
+
+# --- Auth ---
+
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("logged_in"):
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+
+    return decorated
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        if password == LOGIN_PASSWORD:
+            session["logged_in"] = True
+            session.permanent = True
+            return redirect(url_for("dashboard"))
+        else:
+            flash("Wrong password", "error")
+    return render_template("login.html")
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+
+# --- Dashboard ---
+
+
+@app.route("/")
+@login_required
+def dashboard():
+    items = xlsx_manager.read_items()
+
+    # Group by bill title
+    bills = {}
+    backlog = []
+
+    for item in items:
+        title = str(item.get("Bill Title", "")).strip()
+        if title:
+            if title not in bills:
+                bills[title] = []
+            bills[title].append(item)
+        else:
+            backlog.append(item)
+
+    # Add screenshot status to each item
+    for item in items:
+        name = str(item.get("Item Name", ""))
+        bill = str(item.get("Bill Title", ""))
+        item["_has_screenshot"] = screenshot_worker.has_screenshot(name, bill)
+        item["_screenshot_status"] = screenshot_worker.get_status(name)
+
+    return render_template("dashboard.html", bills=bills, backlog=backlog)
+
+
+# --- Add Item ---
+
+
+@app.route("/add", methods=["GET", "POST"])
+@login_required
+def add_item():
+    if request.method == "POST":
+        item_data = {
+            "Item Name": request.form.get("item_name", "").strip(),
+            "Cost": request.form.get("cost", "").strip(),
+            "Quantity": request.form.get("quantity", "1").strip(),
+            "Link": request.form.get("link", "").strip(),
+            "Vendor": request.form.get("vendor", "").strip(),
+            "Description": request.form.get("description", "").strip(),
+            "Budget Section": request.form.get("budget_section", "").strip(),
+            "Bill Title": request.form.get("bill_title", "").strip(),
+            "Person Requesting": request.form.get("person_requesting", "").strip(),
+            "Status": "New",
+        }
+
+        if not item_data["Item Name"]:
+            flash("Item Name is required", "error")
+            return render_template("add_item.html", bills=xlsx_manager.get_bills())
+
+        # Save to xlsx
+        success = xlsx_manager.add_item(item_data)
+        if success:
+            flash(f"Added: {item_data['Item Name']}", "success")
+            # Queue screenshot if URL provided
+            if item_data["Link"]:
+                screenshot_worker.queue_screenshot(
+                    item_data["Item Name"], item_data["Link"], item_data["Bill Title"]
+                )
+        else:
+            flash("Failed to save item", "error")
+
+        return redirect(url_for("dashboard"))
+
+    return render_template("add_item.html", bills=xlsx_manager.get_bills())
+
+
+# --- Edit Item ---
+
+
+@app.route("/edit/<item_id>", methods=["GET", "POST"])
+@login_required
+def edit_item(item_id):
+    if request.method == "POST":
+        updates = {}
+        for field in ["Item Name", "Cost", "Quantity", "Link", "Vendor",
+                      "Description", "Budget Section", "Bill Title",
+                      "Person Requesting", "Status"]:
+            form_key = field.lower().replace(" ", "_").replace(".", "")
+            value = request.form.get(form_key)
+            if value is not None:
+                updates[field] = value.strip()
+
+        success = xlsx_manager.update_item(item_id, updates)
+        if success:
+            flash("Item updated", "success")
+            # Re-queue screenshot if link changed
+            if "Link" in updates and updates["Link"]:
+                name = updates.get("Item Name", "")
+                bill = updates.get("Bill Title", "")
+                if not name:
+                    # Get current name and bill
+                    items = xlsx_manager.read_items()
+                    for i in items:
+                        if str(i.get("Bill Item ID", "")) == str(item_id):
+                            name = str(i.get("Item Name", ""))
+                            if not bill:
+                                bill = str(i.get("Bill Title", ""))
+                            break
+                if name:
+                    screenshot_worker.queue_screenshot(name, updates["Link"], bill)
+        else:
+            flash("Failed to update item", "error")
+
+        return redirect(url_for("dashboard"))
+
+    # GET - load item data
+    items = xlsx_manager.read_items()
+    item = None
+    for i in items:
+        if str(i.get("Bill Item ID", "")) == str(item_id):
+            item = i
+            break
+
+    if not item:
+        flash("Item not found", "error")
+        return redirect(url_for("dashboard"))
+
+    return render_template("edit_item.html", item=item, bills=xlsx_manager.get_bills())
+
+
+# --- Delete Item ---
+
+
+@app.route("/delete/<item_id>", methods=["POST"])
+@login_required
+def delete_item(item_id):
+    success = xlsx_manager.delete_item(item_id)
+    if success:
+        flash("Item deleted", "success")
+    else:
+        flash("Failed to delete item", "error")
+    return redirect(url_for("dashboard"))
+
+
+# --- Bill View ---
+
+
+@app.route("/bill/<path:bill_title>")
+@login_required
+def bill_view(bill_title):
+    items = xlsx_manager.get_items_by_bill(bill_title)
+
+    # Calculate total
+    total = 0
+    for item in items:
+        try:
+            cost = float(str(item.get("Cost", 0)).replace("$", "").replace(",", "") or 0)
+            qty = float(item.get("Quantity", 1) or 1)
+            total += cost * qty
+        except (ValueError, TypeError):
+            pass
+        # Add screenshot info
+        name = str(item.get("Item Name", ""))
+        item["_has_screenshot"] = screenshot_worker.has_screenshot(name, bill_title)
+
+    return render_template("bill_view.html", bill_title=bill_title, items=items, total=total)
+
+
+# --- Export CSV ---
+
+
+@app.route("/bill/<path:bill_title>/export")
+@login_required
+def export_csv(bill_title):
+    items = xlsx_manager.get_items_by_bill(bill_title)
+
+    output = io.StringIO()
+    writer = csv.DictWriter(
+        output,
+        fieldnames=["Item Name", "Cost", "Quantity", "Total Cost", "Vendor", "Link", "Budget Section", "Description"],
+    )
+    writer.writeheader()
+    for item in items:
+        writer.writerow({k: item.get(k, "") for k in writer.fieldnames})
+
+    response = Response(output.getvalue(), mimetype="text/csv")
+    safe_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in bill_title)
+    response.headers["Content-Disposition"] = f"attachment; filename={safe_title}.csv"
+    return response
+
+
+# --- Screenshot endpoints ---
+
+
+@app.route("/screenshots/<path:filename>")
+@login_required
+def serve_screenshot(filename):
+    """Serve screenshot files. Path can be bill_title/item_name.png"""
+    return send_from_directory(screenshot_worker.SCREENSHOT_DIR, filename)
+
+
+@app.route("/screenshot/queue/<item_id>", methods=["POST"])
+@login_required
+def queue_screenshot(item_id):
+    """Manually trigger a screenshot for an item."""
+    items = xlsx_manager.read_items()
+    for item in items:
+        if str(item.get("Bill Item ID", "")) == str(item_id):
+            name = str(item.get("Item Name", ""))
+            url = str(item.get("Link", ""))
+            bill = str(item.get("Bill Title", ""))
+            if name and url:
+                screenshot_worker.queue_screenshot(name, url, bill)
+                flash(f"Screenshot queued for {name}", "success")
+            else:
+                flash("Item has no URL", "error")
+            break
+    return redirect(request.referrer or url_for("dashboard"))
+
+
+# --- Start app ---
+
+
+if __name__ == "__main__":
+    screenshot_worker.start_worker()
+    app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}MRG Purchasing{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    {% if session.get('logged_in') %}
+    <nav class="navbar">
+        <a href="{{ url_for('dashboard') }}" class="nav-brand">🚢 MRG Purchasing</a>
+        <div class="nav-links">
+            <a href="{{ url_for('add_item') }}" class="btn btn-sm btn-primary">+ Add Item</a>
+            <a href="{{ url_for('logout') }}" class="btn btn-sm btn-ghost">Logout</a>
+        </div>
+    </nav>
+    {% endif %}
+
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages">
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

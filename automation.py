@@ -164,6 +164,32 @@ def count_section_items(driver, section_name):
         return -1
 
 
+def _find_screenshot(item_name, bill_title=""):
+    """Find screenshot file for an item. Checks bill_title subdir first, then flat, then all subdirs."""
+    for ext in [".png", ".jpg", ".jpeg", ".pdf"]:
+        # Check bill_title subdirectory first (new structure)
+        if bill_title:
+            candidate = os.path.join(SCREENSHOT_DIR, bill_title, f"{item_name}{ext}")
+            if os.path.exists(candidate):
+                return candidate
+
+        # Check flat structure (legacy)
+        candidate = os.path.join(SCREENSHOT_DIR, f"{item_name}{ext}")
+        if os.path.exists(candidate):
+            return candidate
+
+    # Search all subdirectories
+    if os.path.isdir(SCREENSHOT_DIR):
+        for subdir in os.listdir(SCREENSHOT_DIR):
+            subdir_path = os.path.join(SCREENSHOT_DIR, subdir)
+            if os.path.isdir(subdir_path):
+                for ext in [".png", ".jpg", ".jpeg", ".pdf"]:
+                    candidate = os.path.join(subdir_path, f"{item_name}{ext}")
+                    if os.path.exists(candidate):
+                        return candidate
+    return None
+
+
 def clear_existing_line_items(driver, section_name):
     """Remove all existing line items from a section."""
     while True:
@@ -244,10 +270,7 @@ for section_name, items in sections:
         name = str(row.get("Item Name", "")).strip()
         cost = safe_float(row.get("Cost", 0))
         qty = safe_int(row.get("Quantity", 1))
-        has_file = "📎" if any(
-            os.path.exists(os.path.join(SCREENSHOT_DIR, f"{name}{ext}"))
-            for ext in [".png", ".jpg", ".jpeg", ".pdf"]
-        ) else "⚠️"
+        has_file = "📎" if _find_screenshot(name, BILL_NO) else "⚠️"
         print(f"    {has_file} {name:<40} ${cost:.2f} x{qty}")
 
 total_cost = sum(safe_float(row.get("Cost", 0)) * safe_int(row.get("Quantity", 1)) for _, row in df_filtered.iterrows())
@@ -379,12 +402,7 @@ for section_name, items in sections:
                 price_field.send_keys(str(safe_float(item.get("Cost", 0.0))))
 
                 # Upload file if exists
-                local_path = None
-                for ext in [".png", ".jpg", ".jpeg", ".pdf"]:
-                    candidate = os.path.join(SCREENSHOT_DIR, f"{item_name}{ext}")
-                    if os.path.exists(candidate):
-                        local_path = candidate
-                        break
+                local_path = _find_screenshot(item_name, BILL_NO)
                 if local_path:
                     file_input = driver.find_element(By.ID, "fileUploadInput")
                     driver.execute_script("arguments[0].style.display='block';", file_input)
