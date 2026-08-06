@@ -343,6 +343,58 @@ def delete_item(item_id):
 # --- Remove from Bill ---
 
 
+@app.route("/delete-bill/<path:bill_title>", methods=["POST"])
+@login_required
+def delete_bill(bill_title):
+    """Delete all items in a bill (and its separator row) from BillsT."""
+    import requests as _requests
+
+    creds = xlsx_manager._get_graph_token()
+    if not creds:
+        flash("Graph API unavailable", "error")
+        return redirect(url_for("dashboard"))
+
+    access_token, drive_id, file_id = creds
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    # Get all rows
+    rows_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/BillsT/rows"
+    resp = _requests.get(rows_url, headers=headers, timeout=15)
+    if resp.status_code != 200:
+        flash("Failed to read bills", "error")
+        return redirect(url_for("dashboard"))
+
+    rows = resp.json().get("value", [])
+
+    # Find rows matching this bill title
+    to_delete = []
+    for r in rows:
+        vals = r["values"][0]
+        row_bill = str(vals[2]) if vals[2] else ""
+        if row_bill == bill_title:
+            to_delete.append(r["index"])
+
+    if not to_delete:
+        flash(f"No rows found for '{bill_title}'", "error")
+        return redirect(url_for("dashboard"))
+
+    # Delete in reverse order
+    to_delete.sort(reverse=True)
+    deleted = 0
+    for idx in to_delete:
+        del_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/BillsT/rows/itemAt(index={idx})"
+        resp = _requests.delete(del_url, headers=headers, timeout=10)
+        if resp.status_code == 204:
+            deleted += 1
+
+    # Reset caches
+    xlsx_manager._cached_items = []
+    xlsx_manager._cached_items_time = 0
+
+    flash(f"Deleted bill '{bill_title}' ({deleted} rows)", "success")
+    return redirect(url_for("dashboard"))
+
+
 @app.route("/remove-from-bill/<item_id>", methods=["POST"])
 @login_required
 def remove_from_bill(item_id):
