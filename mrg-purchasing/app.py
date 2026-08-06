@@ -665,6 +665,8 @@ def force_pull():
     xm._last_pull_time = 0
     xm._cached_items = []
     xm._cached_items_time = 0
+    xm._cached_queue = []
+    xm._cached_queue_time = 0
     # Delete local file so rclone is forced to re-download
     if os.path.exists(xm.LOCAL_XLSX):
         os.remove(xm.LOCAL_XLSX)

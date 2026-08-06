@@ -29,6 +29,8 @@ PULL_INTERVAL = int(os.environ.get("PULL_INTERVAL_SECONDS", "300"))  # 5 minutes
 # Cached data
 _cached_items: list[dict] = []
 _cached_items_time = 0
+_cached_queue: list[dict] = []
+_cached_queue_time = 0
 ITEMS_CACHE_TTL = 60  # seconds
 
 # Column mapping (xlsx columns in the Bills sheet)
@@ -349,6 +351,10 @@ def add_item(item_data: dict) -> bool:
     # Push to SharePoint via Graph API
     success = graph_add_row("TestTable", row_values)
 
+    # Reset queue cache so dashboard shows the new item
+    global _cached_queue_time
+    _cached_queue_time = 0
+
     # Also write locally for immediate read-back
     with _lock:
         if os.path.exists(LOCAL_XLSX):
@@ -371,8 +377,25 @@ def add_item(item_data: dict) -> bool:
 def read_queue_items() -> list[dict]:
     """
     Read all items from the Queue (TestTable) via Graph API.
+    Cached for ITEMS_CACHE_TTL seconds.
     Falls back to local xlsx if Graph API unavailable.
     """
+    global _cached_queue, _cached_queue_time
+    import time as _time
+    import requests as _requests
+
+    now = _time.time()
+    if _cached_queue and (now - _cached_queue_time < ITEMS_CACHE_TTL):
+        return _cached_queue
+
+    result = _fetch_queue_items()
+    _cached_queue = result
+    _cached_queue_time = now
+    return result
+
+
+def _fetch_queue_items() -> list[dict]:
+    """Fetch queue items from Graph API or local xlsx."""
     import requests as _requests
 
     creds = _get_graph_token()
