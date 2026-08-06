@@ -247,9 +247,13 @@ def _process_job(job: dict):
     try:
         service = Service("/snap/chromium/current/usr/lib/chromium-browser/chromedriver")
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.set_page_load_timeout(30)
+        driver.set_page_load_timeout(20)
 
-        driver.get(url)
+        try:
+            driver.get(url)
+        except Exception:
+            pass  # Page may partially load — still take screenshot
+
         time.sleep(DELAY)
 
         # Save screenshot in bill_title subdirectory

@@ -127,7 +127,9 @@ def _get_graph_token() -> tuple[str, str, str] | None:
 
 
 def graph_add_row(sheet_table: str, row_values: list) -> bool:
-    """Add a row to a table via Graph API Excel workbook endpoint."""
+    """Add a row to a table via Graph API Excel workbook endpoint.
+    Inserts after the last non-empty row to avoid gaps.
+    """
     import requests as _requests
 
     creds = _get_graph_token()
@@ -136,20 +138,38 @@ def graph_add_row(sheet_table: str, row_values: list) -> bool:
         return False
 
     access_token, drive_id, file_id = creds
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
 
+    # Find the last non-empty row index
+    rows_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/{sheet_table}/rows"
+    rows_resp = _requests.get(rows_url, headers=headers, timeout=15)
+
+    insert_index = None
+    if rows_resp.status_code == 200:
+        rows = rows_resp.json().get("value", [])
+        # Find last row with data (check Item Name column, index 3 for BillsT, 3 for TestTable)
+        last_data_index = -1
+        for row in rows:
+            vals = row["values"][0] if row.get("values") else []
+            # Check if any cell has data
+            if any(str(v).strip() for v in vals if v):
+                last_data_index = row["index"]
+        if last_data_index >= 0:
+            insert_index = last_data_index + 1
+
+    # Insert at specific index or append
     url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/{sheet_table}/rows/add"
-    resp = _requests.post(
-        url,
-        headers={
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-        },
-        json={"values": [row_values]},
-        timeout=15,
-    )
+    payload = {"values": [row_values]}
+    if insert_index is not None:
+        payload["index"] = insert_index
+
+    resp = _requests.post(url, headers=headers, json=payload, timeout=15)
 
     if resp.status_code in (200, 201):
-        print(f"[graph] ✅ Row added to {sheet_table}")
+        print(f"[graph] ✅ Row added to {sheet_table} at index {insert_index}")
         return True
     else:
         print(f"[graph] ❌ Failed to add row: {resp.status_code} {resp.text[:150]}")
