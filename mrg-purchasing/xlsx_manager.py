@@ -228,7 +228,24 @@ SKIP_TITLE_PREFIXES = ("nan", "request", "liquid", "misc")
 
 def read_items() -> list[dict]:
     """
-    Read all items from the Bills sheet.
+    Read all items from the Bills sheet. Cached for 60s.
+    """
+    global _cached_items, _cached_items_time
+    import time as _time
+
+    now = _time.time()
+    if _cached_items and (now - _cached_items_time < ITEMS_CACHE_TTL):
+        return _cached_items
+
+    items = _read_items_from_xlsx()
+    _cached_items = items
+    _cached_items_time = now
+    return items
+
+
+def _read_items_from_xlsx() -> list[dict]:
+    """
+    Read all items from the Bills sheet (actual read).
     Pulls latest from SharePoint first.
     Auto-detects header row by scanning for 'Item Name' column.
     Skips non-bill items (Liquid, Misc, etc.) same as automation.py.
@@ -383,9 +400,10 @@ def add_item(item_data: dict) -> bool:
     # Push to SharePoint via Graph API
     success = graph_add_row("TestTable", row_values)
 
-    # Reset queue cache so dashboard shows the new item
-    global _cached_queue_time
-    _cached_queue_time = 0
+    # Add to cached queue so dashboard shows it immediately without re-fetching
+    global _cached_queue
+    if success:
+        _cached_queue.append(item_data)
 
     # Also write locally for immediate read-back
     with _lock:
