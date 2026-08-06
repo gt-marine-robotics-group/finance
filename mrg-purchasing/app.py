@@ -516,6 +516,52 @@ def export_csv(bill_title):
     return response
 
 
+# --- Bill Review ---
+
+
+@app.route("/review/<path:bill_title>")
+@login_required
+def review_bill(bill_title):
+    """Swipeable review page to quickly edit items and see screenshots."""
+    items = xlsx_manager.get_items_by_bill(bill_title)
+    for item in items:
+        name = str(item.get("Item Name", ""))
+        full_path = screenshot_worker.get_screenshot_path(name, bill_title)
+        if full_path:
+            item["_screenshot_path"] = os.path.relpath(full_path, screenshot_worker.SCREENSHOT_DIR)
+        else:
+            item["_screenshot_path"] = ""
+    return render_template("review_bill.html", bill_title=bill_title, items=items)
+
+
+@app.route("/review/<path:bill_title>/save", methods=["POST"])
+@login_required
+def review_save(bill_title):
+    """Save edits from the review page."""
+    item_id = request.form.get("item_id", "").strip()
+    if item_id:
+        updates = {}
+        cost = request.form.get("cost", "").strip()
+        quantity = request.form.get("quantity", "").strip()
+        vendor = request.form.get("vendor", "").strip()
+        budget_section = request.form.get("budget_section", "").strip()
+
+        if cost:
+            updates["Cost"] = cost
+        if quantity:
+            updates["Quantity"] = quantity
+        if vendor:
+            updates["Vendor"] = vendor
+        if budget_section:
+            updates["Budget Section"] = budget_section
+
+        if updates:
+            xlsx_manager.update_item(item_id, updates)
+
+    flash("Saved", "success")
+    return redirect(url_for("review_bill", bill_title=bill_title))
+
+
 # --- Screenshot Helpers ---
 
 
