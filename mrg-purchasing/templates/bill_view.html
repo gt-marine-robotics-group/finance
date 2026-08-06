@@ -56,6 +56,13 @@
                 </td>
                 <td>
                     <a href="{{ url_for('edit_item', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost">✏️</a>
+                    <form method="POST" action="{{ url_for('remove_from_bill', item_id=item.get('Bill Item ID', '')) }}" style="display:inline">
+                        <button type="submit" class="btn btn-sm btn-ghost" title="Remove from bill">↩️</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('delete_item', item_id=item.get('Bill Item ID', '')) }}" style="display:inline"
+                          onsubmit="return confirm('Delete this item permanently?')">
+                        <button type="submit" class="btn btn-sm btn-ghost" title="Delete item">🗑️</button>
+                    </form>
                 </td>
             </tr>
             {% endfor %}
@@ -98,6 +105,13 @@
                 <a href="{{ item.get('Link') }}" target="_blank" class="btn btn-sm btn-ghost">🔗</a>
                 {% endif %}
                 <a href="{{ url_for('edit_item', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost">✏️ Edit</a>
+                <form method="POST" action="{{ url_for('remove_from_bill', item_id=item.get('Bill Item ID', '')) }}" style="display:inline">
+                    <button type="submit" class="btn btn-sm btn-ghost">↩️ Remove</button>
+                </form>
+                <form method="POST" action="{{ url_for('delete_item', item_id=item.get('Bill Item ID', '')) }}" style="display:inline"
+                      onsubmit="return confirm('Delete this item permanently?')">
+                    <button type="submit" class="btn btn-sm btn-ghost">🗑️</button>
+                </form>
             </div>
         </div>
         {% endfor %}

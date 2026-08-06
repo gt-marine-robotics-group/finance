@@ -13,10 +13,11 @@ from openpyxl import load_workbook
 # Config from environment
 RCLONE_REMOTE = os.environ.get(
     "RCLONE_REMOTE",
-    "onedrive:Documents - Marine Robotics Group/OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx",
+    "onedrive:OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx",
 )
-LOCAL_XLSX = os.environ.get("LOCAL_XLSX_PATH", os.path.expanduser("~/mrg-finance/FY27_Bills_Budget.xlsx"))
+LOCAL_XLSX = os.environ.get("LOCAL_XLSX_PATH", os.path.expanduser("~/mrg/finance/FY27_Bills_Budget.xlsx"))
 SHEET_NAME = os.environ.get("XLSX_SHEET_NAME", "Bills")
+QUEUE_SHEET_NAME = os.environ.get("XLSX_QUEUE_SHEET_NAME", "Test")
 
 # File lock to prevent concurrent reads/writes
 _lock = threading.Lock()
@@ -47,7 +48,7 @@ def _run_rclone(args: list[str]) -> bool:
             ["rclone"] + args,
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=120,
         )
         if result.returncode != 0:
             print(f"[rclone] Error: {result.stderr.strip()}")
@@ -68,22 +69,116 @@ def sync_pull() -> bool:
     return _run_rclone(["copy", RCLONE_REMOTE, local_dir])
 
 
-def sync_push() -> bool:
-    """Push local xlsx back to SharePoint."""
-    remote_dir = str(Path(RCLONE_REMOTE).parent) if "/" in RCLONE_REMOTE else RCLONE_REMOTE
-    # For a file path remote, push the file to its parent directory
-    parts = RCLONE_REMOTE.rsplit("/", 1)
-    if len(parts) == 2:
-        remote_dir = parts[0] + "/"
+def _get_graph_token() -> tuple[str, str, str] | None:
+    """Read access token, drive_id, and file_id from rclone config / cache."""
+    import configparser
+    import json as _json
+
+    rclone_conf = os.path.expanduser("~/.config/rclone/rclone.conf")
+    if not os.path.exists(rclone_conf):
+        return None
+
+    config = configparser.ConfigParser()
+    config.read(rclone_conf)
+
+    if "onedrive" not in config:
+        return None
+
+    try:
+        token_str = config["onedrive"]["token"]
+        token = _json.loads(token_str)
+        drive_id = config["onedrive"]["drive_id"]
+        access_token = token["access_token"]
+    except (KeyError, _json.JSONDecodeError):
+        return None
+
+    # Get file ID (cache it after first lookup)
+    file_id = os.environ.get("_GRAPH_FILE_ID", "")
+    if not file_id:
+        import requests as _requests
+        url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root:/OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx"
+        resp = _requests.get(url, headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
+        if resp.status_code == 200:
+            file_id = resp.json()["id"]
+            os.environ["_GRAPH_FILE_ID"] = file_id
+        else:
+            return None
+
+    return access_token, drive_id, file_id
+
+
+def graph_add_row(sheet_table: str, row_values: list) -> bool:
+    """Add a row to a table via Graph API Excel workbook endpoint."""
+    import requests as _requests
+
+    creds = _get_graph_token()
+    if not creds:
+        print("[graph] No credentials - skipping")
+        return False
+
+    access_token, drive_id, file_id = creds
+
+    url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/{sheet_table}/rows/add"
+    resp = _requests.post(
+        url,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+        },
+        json={"values": [row_values]},
+        timeout=15,
+    )
+
+    if resp.status_code in (200, 201):
+        print(f"[graph] ✅ Row added to {sheet_table}")
+        return True
     else:
-        remote_dir = RCLONE_REMOTE
-    return _run_rclone(["copy", LOCAL_XLSX, remote_dir])
+        print(f"[graph] ❌ Failed to add row: {resp.status_code} {resp.text[:150]}")
+        return False
+
+
+def graph_get_table_columns(sheet_table: str) -> list[str]:
+    """Get column names for a table via Graph API."""
+    import requests as _requests
+
+    creds = _get_graph_token()
+    if not creds:
+        return []
+
+    access_token, drive_id, file_id = creds
+
+    url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/{sheet_table}/columns"
+    resp = _requests.get(
+        url,
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=10,
+    )
+
+    if resp.status_code == 200:
+        return [c["name"] for c in resp.json()["value"]]
+    return []
+
+
+def sync_push() -> bool:
+    """No-op — writes now go directly via Graph API."""
+    return True
+
+
+def _push_async():
+    """No-op — writes are immediate via Graph API."""
+    pass
+
+
+# Titles to skip (same as automation.py)
+SKIP_TITLE_PREFIXES = ("nan", "request", "liquid", "misc")
 
 
 def read_items() -> list[dict]:
     """
     Read all items from the Bills sheet.
     Pulls latest from SharePoint first.
+    Auto-detects header row by scanning for 'Item Name' column.
+    Skips non-bill items (Liquid, Misc, etc.) same as automation.py.
     Returns list of dicts with normalized keys.
     """
     with _lock:
@@ -95,17 +190,28 @@ def read_items() -> list[dict]:
         wb = load_workbook(LOCAL_XLSX, read_only=True, data_only=True)
         ws = wb[SHEET_NAME]
 
-        # Find header row (first row with data)
+        # Auto-detect header row by finding the row containing "Item Name"
+        header_row = None
         headers = []
-        for cell in ws[1]:
-            headers.append(str(cell.value).strip() if cell.value else "")
+        for row_idx, row in enumerate(ws.iter_rows(values_only=True), start=1):
+            row_values = [str(cell).strip() if cell else "" for cell in row]
+            if "Item Name" in row_values:
+                header_row = row_idx
+                headers = row_values
+                break
+
+        if header_row is None:
+            wb.close()
+            return []
 
         items = []
-        for row in ws.iter_rows(min_row=2, values_only=True):
+        for row in ws.iter_rows(min_row=header_row + 1, values_only=True):
             if not any(row):
                 continue
             item = {}
             for i, col in enumerate(headers):
+                if not col:
+                    continue
                 if i < len(row):
                     val = row[i]
                     # Normalize whitespace in strings
@@ -115,8 +221,20 @@ def read_items() -> list[dict]:
                 else:
                     item[col] = ""
             # Only include rows that have an Item Name
-            if item.get("Item Name"):
-                items.append(item)
+            if not item.get("Item Name"):
+                continue
+            # Skip non-bill items (same filter as automation.py)
+            bill_title = str(item.get("Bill Title", "")).strip().lower()
+            if any(bill_title.startswith(prefix) for prefix in SKIP_TITLE_PREFIXES):
+                continue
+            # Skip items with negative Bill Item IDs (metadata rows)
+            try:
+                item_id = float(str(item.get("Bill Item ID", 0)))
+                if item_id < 0:
+                    continue
+            except (ValueError, TypeError):
+                pass
+            items.append(item)
 
         wb.close()
         return items
@@ -140,12 +258,11 @@ def get_items_by_bill(bill_title: str) -> list[dict]:
 
 
 def get_backlog_items() -> list[dict]:
-    """Get items with no bill title assigned."""
-    items = read_items()
-    return [i for i in items if not str(i.get("Bill Title", "")).strip()]
+    """Get items from the queue (Test sheet)."""
+    return read_queue_items()
 
 
-def _find_row_by_item_id(ws, item_id: str, headers: list[str]) -> int | None:
+def _find_row_by_item_id(ws, item_id: str, headers: list[str], header_row: int) -> int | None:
     """Find the row number for a given Bill Item ID."""
     id_col = None
     for i, h in enumerate(headers):
@@ -155,20 +272,23 @@ def _find_row_by_item_id(ws, item_id: str, headers: list[str]) -> int | None:
     if id_col is None:
         return None
 
-    for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
-        if row_idx < 2:
-            continue
+    for row_idx, row in enumerate(ws.iter_rows(min_row=header_row + 1, values_only=True), start=header_row + 1):
         if id_col < len(row) and str(row[id_col]).strip() == str(item_id).strip():
             return row_idx
     return None
 
 
-def _get_headers(ws) -> list[str]:
-    """Get header row as list of strings."""
-    return [str(cell.value).strip() if cell.value else "" for cell in ws[1]]
+def _get_headers(ws) -> tuple[list[str], int]:
+    """Get header row as list of strings and the 1-indexed row number."""
+    for row_idx, row in enumerate(ws.iter_rows(values_only=True), start=1):
+        row_values = [str(cell).strip() if cell else "" for cell in row]
+        if "Item Name" in row_values:
+            return row_values, row_idx
+    # Fallback to row 1
+    return [str(cell.value).strip() if cell.value else "" for cell in ws[1]], 1
 
 
-def _get_next_item_id(ws, headers: list[str]) -> int:
+def _get_next_item_id(ws, headers: list[str], header_row: int) -> int:
     """Get the next available Bill Item ID."""
     id_col = None
     for i, h in enumerate(headers):
@@ -179,7 +299,7 @@ def _get_next_item_id(ws, headers: list[str]) -> int:
         return 1
 
     max_id = 0
-    for row in ws.iter_rows(min_row=2, values_only=True):
+    for row in ws.iter_rows(min_row=header_row + 1, values_only=True):
         if id_col < len(row) and row[id_col]:
             try:
                 val = int(float(str(row[id_col])))
@@ -191,22 +311,180 @@ def _get_next_item_id(ws, headers: list[str]) -> int:
 
 def add_item(item_data: dict) -> bool:
     """
-    Add a new item row to the xlsx.
-    Pulls before write, pushes after.
+    Add a new item to the QUEUE (TestTable on Test sheet) via Graph API.
+    Also writes locally for immediate display.
     """
+    # Get TestTable columns
+    columns = graph_get_table_columns("TestTable")
+    if not columns:
+        # Fallback: use known columns
+        columns = ["Bill Item ID", "Bill No.", "Bill Title", "Item Name",
+                   "Budget Section", "Quantity", "Cost", "Vendor", "Description", "Link", "Column1"]
+
+    # Build row values in column order
+    row_values = []
+    for col in columns:
+        val = item_data.get(col, "")
+        row_values.append(val if val else "")
+
+    # Push to SharePoint via Graph API
+    success = graph_add_row("TestTable", row_values)
+
+    # Also write locally for immediate read-back
+    with _lock:
+        if os.path.exists(LOCAL_XLSX):
+            try:
+                wb = load_workbook(LOCAL_XLSX)
+                ws = wb[QUEUE_SHEET_NAME]
+                headers, header_row = _get_headers(ws)
+                local_row = []
+                for h in headers:
+                    local_row.append(item_data.get(h, ""))
+                ws.append(local_row)
+                wb.save(LOCAL_XLSX)
+                wb.close()
+            except Exception as e:
+                print(f"[local] Write failed: {e}")
+
+    return success
+
+
+def read_queue_items() -> list[dict]:
+    """
+    Read all items from the Queue (TestTable) via Graph API.
+    Falls back to local xlsx if Graph API unavailable.
+    """
+    import requests as _requests
+
+    creds = _get_graph_token()
+    if creds:
+        access_token, drive_id, file_id = creds
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        # Get columns
+        cols_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/TestTable/columns"
+        cols_resp = _requests.get(cols_url, headers=headers, timeout=10)
+
+        # Get rows
+        rows_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/TestTable/rows"
+        rows_resp = _requests.get(rows_url, headers=headers, timeout=10)
+
+        if cols_resp.status_code == 200 and rows_resp.status_code == 200:
+            columns = [c["name"] for c in cols_resp.json()["value"]]
+            items = []
+            for row in rows_resp.json().get("value", []):
+                values = row["values"][0] if row.get("values") else []
+                item = {}
+                for i, col in enumerate(columns):
+                    if i < len(values):
+                        val = values[i]
+                        if isinstance(val, str):
+                            val = " ".join(val.split())
+                        item[col] = val if val else ""
+                    else:
+                        item[col] = ""
+                if item.get("Item Name"):
+                    item["_table_index"] = row["index"]
+                    items.append(item)
+            return items
+
+    # Fallback to local xlsx
     with _lock:
         sync_pull()
+        if not os.path.exists(LOCAL_XLSX):
+            return []
 
+        wb = load_workbook(LOCAL_XLSX, read_only=True, data_only=True)
+        ws = wb[QUEUE_SHEET_NAME]
+        headers_list, header_row = _get_headers(ws)
+
+        items = []
+        for row_idx, row in enumerate(ws.iter_rows(min_row=header_row + 1, values_only=True), start=header_row + 1):
+            if not any(row):
+                continue
+            item = {}
+            for i, col in enumerate(headers_list):
+                if not col:
+                    continue
+                if i < len(row):
+                    val = row[i]
+                    if isinstance(val, str):
+                        val = " ".join(val.split())
+                    item[col] = val if val is not None else ""
+                else:
+                    item[col] = ""
+            if item.get("Item Name"):
+                item["_table_index"] = row_idx - header_row - 1  # 0-indexed for Graph API
+                items.append(item)
+
+        wb.close()
+        return items
+
+
+def delete_queue_item(row_idx: int) -> bool:
+    """Delete an item from the queue (Test sheet) by row index."""
+    with _lock:
         if not os.path.exists(LOCAL_XLSX):
             return False
 
         wb = load_workbook(LOCAL_XLSX)
-        ws = wb[SHEET_NAME]
-        headers = _get_headers(ws)
+        ws = wb[QUEUE_SHEET_NAME]
+        ws.delete_rows(row_idx)
+        wb.save(LOCAL_XLSX)
+        wb.close()
+        return True
 
-        # Assign next ID
-        next_id = _get_next_item_id(ws, headers)
+
+def move_to_bill(queue_items: list[dict], bill_title: str) -> int:
+    """
+    Move items from the Queue (TestTable) to the Bills table (BillsT) via Graph API.
+    - Adds each item as a new row on BillsT with the given Bill Title
+    - Deletes them from TestTable
+    - Returns number of items successfully moved.
+    """
+    import requests as _requests
+
+    creds = _get_graph_token()
+    if not creds:
+        print("[graph] No credentials")
+        return 0
+
+    access_token, drive_id, file_id = creds
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
+
+    # Get BillsT columns
+    bills_columns = graph_get_table_columns("BillsT")
+    if not bills_columns:
+        bills_columns = ["Bill Item ID", "Bill No.", "Bill Title", "Item Name", "Status",
+                         "Budget Section", "Vendor", "Description", "Quantity", "Cost",
+                         "Total Cost", "Link", "File URL", "Person Requesting", "Remaining Allocation", "Column1"]
+
+    # Get next Bill Item ID from BillsT
+    url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/BillsT/rows"
+    resp = _requests.get(url, headers=headers, timeout=15)
+    max_id = 0
+    if resp.status_code == 200:
+        for row in resp.json().get("value", []):
+            try:
+                val = int(float(str(row["values"][0][0])))
+                if val > max_id:
+                    max_id = val
+            except (ValueError, TypeError, IndexError):
+                pass
+    next_id = max_id + 1
+
+    moved = 0
+    rows_to_delete = []
+
+    for item in queue_items:
+        # Build row for BillsT
+        item_data = dict(item)
         item_data["Bill Item ID"] = next_id
+        item_data["Bill Title"] = bill_title
+        item_data["Status"] = "Bill Requested"
 
         # Calculate Total Cost
         try:
@@ -216,17 +494,34 @@ def add_item(item_data: dict) -> bool:
         except (ValueError, TypeError):
             item_data["Total Cost"] = 0
 
-        # Build row
-        row_data = []
-        for h in headers:
-            row_data.append(item_data.get(h, ""))
+        row_values = []
+        for col in bills_columns:
+            val = item_data.get(col, "")
+            row_values.append(val if val else "")
 
-        ws.append(row_data)
-        wb.save(LOCAL_XLSX)
-        wb.close()
+        # Add to BillsT
+        success = graph_add_row("BillsT", row_values)
+        if success:
+            moved += 1
+            next_id += 1
+            # Track row index for deletion from TestTable
+            if "_table_index" in item:
+                rows_to_delete.append(item["_table_index"])
 
-        sync_push()
-        return True
+    # Delete from TestTable (in reverse order so indices don't shift)
+    rows_to_delete.sort(reverse=True)
+    for idx in rows_to_delete:
+        del_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/TestTable/rows/itemAt(index={idx})"
+        resp = _requests.delete(del_url, headers=headers, timeout=10)
+        if resp.status_code == 204:
+            print(f"[graph] Deleted queue row index {idx}")
+        else:
+            print(f"[graph] Failed to delete row {idx}: {resp.status_code}")
+
+    # Also sync local file
+    sync_pull()
+
+    return moved
 
 
 def update_item(item_id: str, updates: dict) -> bool:
@@ -242,9 +537,9 @@ def update_item(item_id: str, updates: dict) -> bool:
 
         wb = load_workbook(LOCAL_XLSX)
         ws = wb[SHEET_NAME]
-        headers = _get_headers(ws)
+        headers, header_row = _get_headers(ws)
 
-        row_idx = _find_row_by_item_id(ws, item_id, headers)
+        row_idx = _find_row_by_item_id(ws, item_id, headers, header_row)
         if row_idx is None:
             wb.close()
             return False
@@ -273,7 +568,7 @@ def update_item(item_id: str, updates: dict) -> bool:
         wb.save(LOCAL_XLSX)
         wb.close()
 
-        sync_push()
+        _push_async()
         return True
 
 
@@ -287,9 +582,9 @@ def delete_item(item_id: str) -> bool:
 
         wb = load_workbook(LOCAL_XLSX)
         ws = wb[SHEET_NAME]
-        headers = _get_headers(ws)
+        headers, header_row = _get_headers(ws)
 
-        row_idx = _find_row_by_item_id(ws, item_id, headers)
+        row_idx = _find_row_by_item_id(ws, item_id, headers, header_row)
         if row_idx is None:
             wb.close()
             return False
@@ -298,5 +593,5 @@ def delete_item(item_id: str) -> bool:
         wb.save(LOCAL_XLSX)
         wb.close()
 
-        sync_push()
+        _push_async()
         return True

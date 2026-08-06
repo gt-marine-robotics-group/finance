@@ -24,7 +24,7 @@ DELAY = 5  # seconds to wait after page load
 # rclone remote for screenshots on SharePoint
 RCLONE_SCREENSHOTS_REMOTE = os.environ.get(
     "RCLONE_SCREENSHOTS_REMOTE",
-    "onedrive:Documents - Marine Robotics Group/OPS-1 Operations/FY27 Finances/screenshots",
+    "onedrive:OPS-1 Operations/FY27 Finances/screenshots",
 )
 
 # Max total screenshot storage in MB (cleanup oldest when exceeded)

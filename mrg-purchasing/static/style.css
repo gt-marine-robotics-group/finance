@@ -480,6 +480,74 @@ select.input {
     margin-bottom: 1rem;
 }
 
+/* --- Create Bill: Checkbox Cards --- */
+
+.text-muted {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+}
+
+.select-all-row {
+    margin-bottom: 0.5rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.item-checklist {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.checkbox-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: border-color 0.15s;
+}
+
+.checkbox-card:has(input:checked) {
+    border-color: var(--color-primary);
+    background: #eff6ff;
+}
+
+.checkbox-card input[type="checkbox"] {
+    width: 1.2rem;
+    height: 1.2rem;
+    flex-shrink: 0;
+}
+
+.checkbox-card-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+}
+
+.checkbox-card-content .item-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.checkbox-card-content .item-meta {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
 /* --- Responsive --- */
 
 @media (min-width: 640px) {
