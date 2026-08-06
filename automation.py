@@ -19,34 +19,50 @@ CSV_FILE = os.path.expanduser(
     "Documents - Marine Robotics Group/OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx"
 )
 SHEET_NAME = "Bills"  # which sheet/tab to read
-DOWNLOAD_DIR = "downloads"
+SCREENSHOT_DIR = "screenshots"
 USERNAME = "awu335"
 PASSWORD = ""
-BILL_URL = ""  # Will prompt
-BILL_NO = ""   # Will prompt — shows available options from CSV
+BILL_URL = ""  # Auto-generated from Bill No. in spreadsheet
+BILL_NO = ""   # Will prompt — shows available options
 
 # Prompt if empty
 if not USERNAME:
     USERNAME = input("Enter your username: ")
 if not PASSWORD:
     PASSWORD = getpass.getpass("Enter your password: ")
-if not BILL_URL:
-    BILL_URL = input("Enter the URL of the specific bill to edit: ")
 if not BILL_NO:
-    # Show available bill titles from CSV
-    _df_temp = pd.read_csv(CSV_FILE)
+    # Show available bill titles from spreadsheet
+    if CSV_FILE.endswith(".xlsx"):
+        _df_temp = pd.read_excel(CSV_FILE, sheet_name=SHEET_NAME)
+    else:
+        _df_temp = pd.read_csv(CSV_FILE)
     _df_temp.fillna("", inplace=True)
     _df_temp.columns = _df_temp.columns.str.strip()
     _titles = _df_temp["Bill Title"].astype(str).str.strip().unique()
     _skip = ("nan", "request", "liquid", "misc")
     _titles = [t for t in _titles if t and not any(t.lower().startswith(s) for s in _skip)]
-    print("\nAvailable Bill Titles in CSV:")
+    print("\nAvailable Bill Titles:")
     for i, t in enumerate(_titles, 1):
-        count = (_df_temp["Bill Title"].astype(str).str.strip().str.lower() == t.lower()).sum()
-        print(f"  {i}. {t} ({count} items)")
+        # Find bill number for this title
+        _mask = _df_temp["Bill Title"].astype(str).str.strip().str.lower() == t.lower()
+        _bill_nos = _df_temp[_mask]["Bill No."].astype(str).str.replace(".0", "", regex=False).str.strip().unique()
+        _bill_no_str = _bill_nos[0] if len(_bill_nos) > 0 and _bill_nos[0] not in ("", "nan") else "?"
+        count = _mask.sum()
+        print(f"  {i}. {t} (Bill #{_bill_no_str}, {count} items)")
     BILL_NO = input("\nEnter Bill Title (or number): ").strip()
     if BILL_NO.isdigit() and 1 <= int(BILL_NO) <= len(_titles):
         BILL_NO = _titles[int(BILL_NO) - 1]
+
+    # Auto-generate BILL_URL from Bill No. in spreadsheet
+    _mask = _df_temp["Bill Title"].astype(str).str.strip().str.lower() == BILL_NO.lower()
+    _bill_nos = _df_temp[_mask]["Bill No."].astype(str).str.replace(".0", "", regex=False).str.strip().unique()
+    _bill_num = _bill_nos[0] if len(_bill_nos) > 0 and _bill_nos[0] not in ("", "nan") else ""
+    if _bill_num:
+        BILL_URL = f"https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/budgeting/requests#/edit/{_bill_num}"
+        print(f"\n  → Bill URL: {BILL_URL}")
+    else:
+        BILL_URL = input("Could not find Bill No. Enter URL manually: ").strip()
+
     del _df_temp, _titles
 
 # === Utility functions ===
@@ -222,14 +238,14 @@ for section_name, items in sections:
         cost = safe_float(row.get("Cost", 0))
         qty = safe_int(row.get("Quantity", 1))
         has_file = "📎" if any(
-            os.path.exists(os.path.join(DOWNLOAD_DIR, f"{name}{ext}"))
+            os.path.exists(os.path.join(SCREENSHOT_DIR, f"{name}{ext}"))
             for ext in [".png", ".jpg", ".jpeg", ".pdf"]
         ) else "⚠️"
         print(f"    {has_file} {name:<40} ${cost:.2f} x{qty}")
 
 total_cost = sum(safe_float(row.get("Cost", 0)) * safe_int(row.get("Quantity", 1)) for _, row in df_filtered.iterrows())
 print(f"\n  💰 Total: ${total_cost:.2f}")
-print(f"  📎 = file found, ⚠️ = no file in {DOWNLOAD_DIR}/")
+print(f"  📎 = file found, ⚠️ = no file in {SCREENSHOT_DIR}/")
 
 confirm = input(f"\nProceed? [Y/n]: ").strip().lower()
 if confirm == "n":
@@ -358,7 +374,7 @@ for section_name, items in sections:
                 # Upload file if exists
                 local_path = None
                 for ext in [".png", ".jpg", ".jpeg", ".pdf"]:
-                    candidate = os.path.join(DOWNLOAD_DIR, f"{item_name}{ext}")
+                    candidate = os.path.join(SCREENSHOT_DIR, f"{item_name}{ext}")
                     if os.path.exists(candidate):
                         local_path = candidate
                         break
