@@ -1,6 +1,9 @@
 .env
 .token_cache.bin
 .venv/
+.DS_Store
 screenshots/
+review.html
 __pycache__/
 *.pyc
+*.csv
