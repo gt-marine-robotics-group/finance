@@ -662,12 +662,15 @@ def scrape_link():
 def force_pull():
     """Force a fresh pull from SharePoint, bypassing all caches."""
     import xlsx_manager as xm
-    xm._last_pull_time = 0  # Reset pull cache
-    xm._cached_items = []   # Reset items cache
+    xm._last_pull_time = 0
+    xm._cached_items = []
     xm._cached_items_time = 0
+    # Delete local file so rclone is forced to re-download
+    if os.path.exists(xm.LOCAL_XLSX):
+        os.remove(xm.LOCAL_XLSX)
     result = xm.sync_pull()
     if result:
-        flash("Synced from SharePoint ✅", "success")
+        flash("Synced from SharePoint", "success")
     else:
         flash("Sync failed — check rclone config", "error")
     return redirect(url_for("dashboard"))
