@@ -119,6 +119,8 @@ def dashboard():
 @login_required
 def quick_add():
     """Quick add — just name and optional link. Goes to backlog."""
+    import threading
+
     item_name = request.form.get("item_name", "").strip()
     link = request.form.get("link", "").strip()
 
@@ -137,13 +139,16 @@ def quick_add():
         "Bill Title": "",
     }
 
-    success = xlsx_manager.add_item(item_data)
-    if success:
-        flash(f"Added: {item_name}", "success")
-        if link:
-            screenshot_worker.queue_screenshot(item_name, link, "_queue")
-    else:
-        flash("Failed to add", "error")
+    def _do_quick_add(data, name, url):
+        """Background: write to SharePoint + queue screenshot."""
+        xlsx_manager.add_item(data)
+        if url:
+            import time
+            time.sleep(2)  # Small delay so page loads first
+            screenshot_worker.queue_screenshot(name, url, "_queue")
+
+    threading.Thread(target=_do_quick_add, args=(item_data, item_name, link), daemon=True).start()
+    flash(f"Adding: {item_name}", "success")
 
     return redirect(url_for("dashboard"))
 
@@ -579,7 +584,7 @@ def copy_to_bill(item_id):
             item_data["Total Cost"] = 0
 
         FORMULA_COLUMNS = {"Bill Item ID", "Total Cost"}
-        row_values = [None if col in FORMULA_COLUMNS else (item_data.get(col, "") or "") for col in bills_columns]
+        row_values = ["" if col in FORMULA_COLUMNS else (item_data.get(col, "") or "") for col in bills_columns]
         success = xlsx_manager.graph_add_row("BillsT", row_values)
 
         if success:

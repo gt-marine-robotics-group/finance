@@ -190,6 +190,43 @@ def _get_last_data_index(sheet_table: str) -> int:
     return last_data_index
 
 
+def _patch_row_values(sheet_table: str, row_index: int, values: list, columns: list, skip_columns: set, headers: dict, drive_id: str, file_id: str) -> bool:
+    """
+    PATCH an existing row, writing only non-formula columns.
+    Preserves formulas in skip_columns by reading current values and keeping them.
+    """
+    import requests as _requests
+
+    # Read the current row to preserve formula-calculated values
+    get_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/{sheet_table}/rows/itemAt(index={row_index})"
+    resp = _requests.get(get_url, headers=headers, timeout=10)
+    if resp.status_code != 200:
+        print(f"[graph] ❌ Failed to read row {row_index}: {resp.status_code}")
+        return False
+
+    current_values = resp.json().get("values", [[]])[0]
+
+    # Build new row: keep formula columns unchanged, update the rest
+    new_values = []
+    for i, col in enumerate(columns):
+        if col in skip_columns:
+            # Keep whatever's there (formula result or blank)
+            new_values.append(current_values[i] if i < len(current_values) else "")
+        else:
+            new_values.append(values[i] if i < len(values) else "")
+
+    # PATCH the row
+    patch_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/{sheet_table}/rows/itemAt(index={row_index})"
+    resp2 = _requests.patch(patch_url, headers={**headers, "Content-Type": "application/json"}, json={"values": [new_values]}, timeout=10)
+
+    if resp2.status_code == 200:
+        print(f"[graph] ✅ Patched row {row_index} in {sheet_table}")
+        return True
+    else:
+        print(f"[graph] ❌ Patch failed row {row_index}: {resp2.status_code} {resp2.text[:100]}")
+        return False
+
+
 def graph_get_table_columns(sheet_table: str) -> list[str]:
     """Get column names for a table via Graph API."""
     import requests as _requests
@@ -573,43 +610,38 @@ def move_to_bill(queue_items: list[dict], bill_title: str, add_separator: bool =
 
     next_request = max_request_num + 1
 
-    # Find where to insert (after last row with data)
+    # Find the first empty row to write to (formulas already exist there)
     insert_at = _get_last_data_index("BillsT") + 1
 
-    # Insert separator row for new bills only
+    # Columns with formulas — don't overwrite these
+    FORMULA_COLUMNS = {"Bill Item ID", "Total Cost"}
+
+    # Write separator row for new bills
     if add_separator:
-        separator_row = [""] * len(bills_columns)
+        sep_values = [""] * len(bills_columns)
         bill_title_idx = bills_columns.index("Bill Title") if "Bill Title" in bills_columns else 2
-        separator_row[bill_title_idx] = f"Request {next_request}"
-        graph_add_row("BillsT", separator_row, index=insert_at)
+        sep_values[bill_title_idx] = f"Request {next_request}"
+        _patch_row_values("BillsT", insert_at, sep_values, bills_columns, FORMULA_COLUMNS, headers, drive_id, file_id)
         insert_at += 1
 
     moved = 0
     rows_to_delete = []
 
-    # Columns that have formulas in Excel — pass None to preserve them
-    FORMULA_COLUMNS = {"Bill Item ID", "Total Cost"}
-
     for item in queue_items:
-        # Build row for BillsT
         item_data = dict(item)
         item_data["Bill Title"] = bill_title
         item_data["Status"] = "Bill Requested"
 
         row_values = []
         for col in bills_columns:
-            if col in FORMULA_COLUMNS:
-                row_values.append(None)  # Let Excel formula auto-fill
-            else:
-                val = item_data.get(col, "")
-                row_values.append(val if val else "")
+            val = item_data.get(col, "")
+            row_values.append(val if val else "")
 
-        # Add to BillsT at correct position
-        success = graph_add_row("BillsT", row_values, index=insert_at)
+        # PATCH existing empty row — preserves formulas in Bill Item ID and Total Cost
+        success = _patch_row_values("BillsT", insert_at, row_values, bills_columns, FORMULA_COLUMNS, headers, drive_id, file_id)
         if success:
             moved += 1
             insert_at += 1
-            # Track row index for deletion from TestTable
             if "_table_index" in item:
                 rows_to_delete.append(item["_table_index"])
 
