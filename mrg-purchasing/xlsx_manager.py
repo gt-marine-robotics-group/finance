@@ -435,10 +435,11 @@ def add_item(item_data: dict) -> bool:
     # Push to SharePoint via Graph API
     success = graph_add_row("TestTable", row_values)
 
-    # Add to cached queue so dashboard shows it immediately without re-fetching
-    global _cached_queue
+    # Invalidate queue cache so next read gets fresh data with correct _table_index
+    global _cached_queue, _cached_queue_time
     if success:
-        _cached_queue.append(item_data)
+        _cached_queue = []
+        _cached_queue_time = 0
 
     # Also write locally for immediate read-back
     with _lock:

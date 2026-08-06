@@ -139,16 +139,22 @@ def quick_add():
         "Bill Title": "",
     }
 
-    def _do_quick_add(data, name, url):
-        """Background: write to SharePoint + queue screenshot."""
-        xlsx_manager.add_item(data)
+    def _do_background(name, url):
+        """Background: queue screenshot only."""
         if url:
             import time
-            time.sleep(2)  # Small delay so page loads first
+            time.sleep(2)
             screenshot_worker.queue_screenshot(name, url, "_queue")
 
-    threading.Thread(target=_do_quick_add, args=(item_data, item_name, link), daemon=True).start()
-    flash(f"Adding: {item_name}", "success")
+    # Write to SharePoint synchronously so the item shows up immediately
+    success = xlsx_manager.add_item(item_data)
+    if success:
+        flash(f"Added: {item_name}", "success")
+        # Queue screenshot in background
+        if link:
+            threading.Thread(target=_do_background, args=(item_name, link), daemon=True).start()
+    else:
+        flash("Failed to add", "error")
 
     return redirect(url_for("dashboard"))
 
