@@ -15,8 +15,14 @@
     <form method="POST" action="{{ url_for('create_bill') }}" class="item-form">
         <div class="form-group">
             <label for="bill_title">Bill Title *</label>
-            <input type="text" id="bill_title" name="bill_title" required class="input"
-                   placeholder="e.g. RoboSub Electronics Spring 2027">
+            <select id="existing_bill" name="existing_bill" class="input">
+                <option value="">-- Create new bill --</option>
+                {% for bill in bills %}
+                <option value="{{ bill }}">{{ bill }}</option>
+                {% endfor %}
+            </select>
+            <input type="text" id="bill_title" name="bill_title" class="input" style="margin-top: 0.5rem;"
+                   placeholder="New bill title (if not selecting above)">
         </div>
 
         <div class="form-group">
