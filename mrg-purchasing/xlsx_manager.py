@@ -192,39 +192,37 @@ def _get_last_data_index(sheet_table: str) -> int:
 
 def _patch_row_values(sheet_table: str, row_index: int, values: list, columns: list, skip_columns: set, headers: dict, drive_id: str, file_id: str) -> bool:
     """
-    PATCH an existing row, writing only non-formula columns.
-    Preserves formulas in skip_columns by reading current values and keeping them.
+    Write values to specific cells in an existing row, SKIPPING formula columns entirely.
+    Uses cell-level updates so formulas in other columns are never touched.
     """
     import requests as _requests
 
-    # Read the current row to preserve formula-calculated values
-    get_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/{sheet_table}/rows/itemAt(index={row_index})"
-    resp = _requests.get(get_url, headers=headers, timeout=10)
-    if resp.status_code != 200:
-        print(f"[graph] ❌ Failed to read row {row_index}: {resp.status_code}")
-        return False
+    # Table data starts at sheet row 2 (row 1 = header)
+    sheet_row = row_index + 2
 
-    current_values = resp.json().get("values", [[]])[0]
+    # Map column names to Excel column letters
+    col_letters = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T']
 
-    # Build new row: keep formula columns unchanged, update the rest
-    new_values = []
+    # Build updates for non-formula columns only
+    cells_to_update = {}
     for i, col in enumerate(columns):
         if col in skip_columns:
-            # Keep whatever's there (formula result or blank)
-            new_values.append(current_values[i] if i < len(current_values) else "")
-        else:
-            new_values.append(values[i] if i < len(values) else "")
+            continue  # Don't touch formula columns at all
+        if i < len(values) and i < len(col_letters):
+            val = values[i]
+            if val or val == 0:  # Write value (including 0)
+                cells_to_update[f"{col_letters[i]}{sheet_row}"] = val
 
-    # PATCH the row
-    patch_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/{sheet_table}/rows/itemAt(index={row_index})"
-    resp2 = _requests.patch(patch_url, headers={**headers, "Content-Type": "application/json"}, json={"values": [new_values]}, timeout=10)
+    # Batch update using range PATCH for each cell
+    for cell_addr, val in cells_to_update.items():
+        url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets/Bills/range(address=\"{cell_addr}\")"
+        resp = _requests.patch(url, headers=headers, json={"values": [[val]]}, timeout=10)
+        if resp.status_code != 200:
+            print(f"[graph] ⚠️ Failed to write {cell_addr}: {resp.status_code}")
+            return False
 
-    if resp2.status_code == 200:
-        print(f"[graph] ✅ Patched row {row_index} in {sheet_table}")
-        return True
-    else:
-        print(f"[graph] ❌ Patch failed row {row_index}: {resp2.status_code} {resp2.text[:100]}")
-        return False
+    print(f"[graph] ✅ Wrote {len(cells_to_update)} cells to row {sheet_row}")
+    return True
 
 
 def graph_get_table_columns(sheet_table: str) -> list[str]:
