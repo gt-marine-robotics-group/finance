@@ -112,22 +112,20 @@ def add_item():
             "Description": request.form.get("description", "").strip(),
             "Budget Section": request.form.get("budget_section", "").strip(),
             "Bill Title": request.form.get("bill_title", "").strip(),
-            "Person Requesting": request.form.get("person_requesting", "").strip(),
-            "Status": "New",
         }
 
         if not item_data["Item Name"]:
             flash("Item Name is required", "error")
             return render_template("add_item.html", bills=xlsx_manager.get_bills())
 
-        # Save to xlsx
+        # Save to queue (Test sheet)
         success = xlsx_manager.add_item(item_data)
         if success:
-            flash(f"Added: {item_data['Item Name']}", "success")
+            flash(f"Added to queue: {item_data['Item Name']}", "success")
             # Queue screenshot if URL provided
             if item_data["Link"]:
                 screenshot_worker.queue_screenshot(
-                    item_data["Item Name"], item_data["Link"], item_data["Bill Title"]
+                    item_data["Item Name"], item_data["Link"], item_data.get("Bill Title", "")
                 )
         else:
             flash("Failed to save item", "error")
@@ -152,6 +150,15 @@ def edit_item(item_id):
             value = request.form.get(form_key)
             if value is not None:
                 updates[field] = value.strip()
+
+        # Auto-set status when moving to/from a bill
+        if "Bill Title" in updates:
+            # If status wasn't explicitly changed by the user, auto-set it
+            current_status = request.form.get("status", "").strip()
+            if updates["Bill Title"] and current_status in ("", "New"):
+                updates["Status"] = "Bill Requested"
+            elif not updates["Bill Title"] and current_status == "Bill Requested":
+                updates["Status"] = "New"
 
         success = xlsx_manager.update_item(item_id, updates)
         if success:
@@ -202,7 +209,63 @@ def delete_item(item_id):
         flash("Item deleted", "success")
     else:
         flash("Failed to delete item", "error")
-    return redirect(url_for("dashboard"))
+    return redirect(request.referrer or url_for("dashboard"))
+
+
+# --- Remove from Bill ---
+
+
+@app.route("/remove-from-bill/<item_id>", methods=["POST"])
+@login_required
+def remove_from_bill(item_id):
+    """Move item back to backlog (clear Bill Title, set status to New)."""
+    success = xlsx_manager.update_item(item_id, {"Bill Title": "", "Status": "New"})
+    if success:
+        flash("Item moved to backlog", "success")
+    else:
+        flash("Failed to remove item from bill", "error")
+    return redirect(request.referrer or url_for("dashboard"))
+
+
+# --- Create Bill ---
+
+
+@app.route("/create-bill", methods=["GET", "POST"])
+@login_required
+def create_bill():
+    """Select items from the queue (Test sheet) and move them to the Bills sheet."""
+    if request.method == "POST":
+        bill_title = request.form.get("bill_title", "").strip()
+        selected_indices = request.form.getlist("item_ids")
+
+        if not bill_title:
+            flash("Bill title is required", "error")
+            return redirect(url_for("create_bill"))
+
+        if not selected_indices:
+            flash("Select at least one item", "error")
+            return redirect(url_for("create_bill"))
+
+        # Get queue items and filter to selected ones
+        queue_items = xlsx_manager.read_queue_items()
+        selected_items = [
+            item for item in queue_items
+            if str(item.get("_table_index", "")) in selected_indices
+        ]
+
+        if not selected_items:
+            flash("No matching items found", "error")
+            return redirect(url_for("create_bill"))
+
+        # Move from Test sheet to Bills sheet
+        moved = xlsx_manager.move_to_bill(selected_items, bill_title)
+
+        flash(f"Created bill '{bill_title}' with {moved} item(s)", "success")
+        return redirect(url_for("bill_view", bill_title=bill_title))
+
+    # GET — show queue items to select from
+    backlog = xlsx_manager.get_backlog_items()
+    return render_template("create_bill.html", backlog=backlog)
 
 
 # --- Bill View ---

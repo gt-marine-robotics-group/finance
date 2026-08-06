@@ -8,8 +8,9 @@
     {% if backlog %}
     <section class="bill-section">
         <div class="bill-header">
-            <h2>📋 Backlog <span class="badge">{{ backlog|length }}</span></h2>
+            <h2>📋 Queue <span class="badge">{{ backlog|length }}</span></h2>
             <p class="bill-subtitle">Items not yet assigned to a bill</p>
+            <a href="{{ url_for('create_bill') }}" class="btn btn-sm btn-primary" style="margin-top: 0.5rem;">📦 Create Bill from Queue</a>
         </div>
         <div class="item-grid">
             {% for item in backlog %}
