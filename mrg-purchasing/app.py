@@ -283,11 +283,13 @@ def edit_queue_item(table_index):
             value = request.form.get(form_key, "")
             row_values.append(value)
 
-        # Update via Graph API - PATCH the row range
+        # Update via Graph API - PATCH the row
         url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/TestTable/rows/itemAt(index={table_index})"
         resp = _requests.patch(url, headers=headers, json={"values": [row_values]}, timeout=10)
 
         if resp.status_code == 200:
+            flash("Item updated", "success")
+            xlsx_manager._cached_queue_time = 0  # Reset cache
             flash("Item updated", "success")
         else:
             flash(f"Update failed: {resp.status_code}", "error")
@@ -328,6 +330,8 @@ def delete_queue_item_route(table_index):
 
     if resp.status_code == 204:
         flash("Item deleted from queue", "success")
+        xlsx_manager._cached_queue = []
+        xlsx_manager._cached_queue_time = 0
     else:
         flash(f"Delete failed: {resp.status_code}", "error")
 
