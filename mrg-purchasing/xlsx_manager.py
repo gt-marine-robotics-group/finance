@@ -31,7 +31,7 @@ _cached_items: list[dict] = []
 _cached_items_time = 0
 _cached_queue: list[dict] = []
 _cached_queue_time = 0
-ITEMS_CACHE_TTL = 60  # seconds
+ITEMS_CACHE_TTL = 300  # 5 minutes — hit Sync to force refresh
 
 # Column mapping (xlsx columns in the Bills sheet)
 COLUMNS = [
