@@ -717,11 +717,8 @@ def _generate_amazon_cart(items: list[dict]) -> str:
 @app.route("/create-order/check-prices", methods=["POST"])
 @login_required
 def check_prices():
-    """Re-scrape current prices for selected items and return comparison."""
+    """Re-scrape current prices for selected items, streaming results."""
     import json as _json
-    from selenium import webdriver
-    from selenium.webdriver.chrome.options import Options
-    from selenium.webdriver.chrome.service import Service
 
     selected_ids = request.form.getlist("item_ids")
     if not selected_ids:
@@ -733,64 +730,69 @@ def check_prices():
     if not selected:
         return _json.dumps({"error": "No matching items"}), 400
 
-    # Set up headless browser once for all items
-    chrome_options = Options()
-    chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.binary_location = "/snap/chromium/current/usr/lib/chromium-browser/chrome"
+    def generate():
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.chrome.service import Service
+        import time
 
-    results = []
-    driver = None
-    try:
-        service = Service("/snap/chromium/current/usr/lib/chromium-browser/chromedriver")
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.set_page_load_timeout(20)
+        chrome_options = Options()
+        chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.binary_location = "/snap/chromium/current/usr/lib/chromium-browser/chrome"
 
-        for item in selected:
-            link = str(item.get("Link", ""))
-            allocated = 0
-            try:
-                allocated = float(str(item.get("Cost", 0)).replace("$", "").replace(",", "") or 0)
-            except (ValueError, TypeError):
-                pass
+        driver = None
+        try:
+            service = Service("/snap/chromium/current/usr/lib/chromium-browser/chromedriver")
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+            driver.set_page_load_timeout(20)
 
-            current_price = None
-            if link and link.startswith("http"):
+            for item in selected:
+                link = str(item.get("Link", ""))
+                allocated = 0
                 try:
-                    driver.get(link)
+                    allocated = float(str(item.get("Cost", 0)).replace("$", "").replace(",", "") or 0)
+                except (ValueError, TypeError):
+                    pass
+
+                current_price = None
+                if link and link.startswith("http"):
+                    try:
+                        driver.get(link)
+                    except Exception:
+                        pass
+                    time.sleep(3)
+                    price_text = screenshot_worker._scrape_price(driver)
+                    current_price = screenshot_worker.parse_price(price_text)
+
+                delta = None
+                if current_price is not None and allocated > 0:
+                    delta = round(current_price - allocated, 2)
+
+                result = {
+                    "name": item.get("Item Name", ""),
+                    "bill_item_id": str(item.get("Bill Item ID", "")),
+                    "allocated": allocated,
+                    "current": current_price,
+                    "delta": delta,
+                    "warning": delta is not None and delta > 0,
+                }
+                yield f"data: {_json.dumps(result)}\n\n"
+
+        except Exception as e:
+            yield f"data: {_json.dumps({'error': str(e)})}\n\n"
+        finally:
+            if driver:
+                try:
+                    driver.quit()
                 except Exception:
                     pass
-                import time
-                time.sleep(3)
-                price_text = screenshot_worker._scrape_price(driver)
-                current_price = screenshot_worker.parse_price(price_text)
+            yield "data: {\"done\": true}\n\n"
 
-            delta = None
-            if current_price is not None and allocated > 0:
-                delta = round(current_price - allocated, 2)
-
-            results.append({
-                "name": item.get("Item Name", ""),
-                "bill_item_id": str(item.get("Bill Item ID", "")),
-                "allocated": allocated,
-                "current": current_price,
-                "delta": delta,
-                "warning": delta is not None and delta > 0,
-            })
-
-    except Exception as e:
-        return _json.dumps({"error": str(e)}), 500
-    finally:
-        if driver:
-            try:
-                driver.quit()
-            except Exception:
-                pass
-
-    return _json.dumps({"results": results})
+    return Response(generate(), mimetype="text/event-stream")
 
 
 # --- Bill Review ---

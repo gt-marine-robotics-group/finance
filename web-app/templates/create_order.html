@@ -97,30 +97,67 @@ function checkPrices(btn) {
 
     const resultsDiv = form.querySelector('.price-results');
     resultsDiv.style.display = 'block';
-    resultsDiv.innerHTML = '<p class="text-muted">Scraping prices... (~5s per item)</p>';
+    resultsDiv.innerHTML = '<table class="price-table"><tr><th>Item</th><th>Allocated</th><th>Current</th><th>Delta</th></tr></table><p class="text-muted" id="price-progress">Checking 0/' + checkboxes.length + '...</p>';
 
+    const table = resultsDiv.querySelector('table');
+    const progress = resultsDiv.querySelector('#price-progress');
+    let count = 0;
+
+    // Use fetch with streaming
     const formData = new FormData();
     checkboxes.forEach(cb => formData.append('item_ids', cb.value));
 
     fetch('{{ url_for("check_prices") }}', { method: 'POST', body: formData })
-        .then(r => r.json())
-        .then(data => {
-            if (data.error) {
-                resultsDiv.innerHTML = '<p style="color:red;">' + data.error + '</p>';
-            } else {
-                let html = '<table class="price-table"><tr><th>Item</th><th>Allocated</th><th>Current</th><th>Delta</th></tr>';
-                data.results.forEach(r => {
-                    const cls = r.warning ? 'price-warn' : 'price-ok';
-                    const currentStr = r.current !== null ? '$' + r.current.toFixed(2) : '—';
-                    const deltaStr = r.delta !== null ? (r.delta > 0 ? '+' : '') + '$' + r.delta.toFixed(2) : '—';
-                    html += `<tr class="${cls}"><td>${r.name}</td><td>$${r.allocated.toFixed(2)}</td><td>${currentStr}</td><td>${deltaStr}</td></tr>`;
+        .then(response => {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            function read() {
+                reader.read().then(({done, value}) => {
+                    if (done) {
+                        progress.remove();
+                        btn.disabled = false;
+                        btn.textContent = 'Check Prices';
+                        return;
+                    }
+                    buffer += decoder.decode(value, {stream: true});
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+
+                    lines.forEach(line => {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const r = JSON.parse(line.slice(6));
+                                if (r.done) {
+                                    progress.remove();
+                                    btn.disabled = false;
+                                    btn.textContent = 'Check Prices';
+                                    return;
+                                }
+                                if (r.error) {
+                                    progress.textContent = 'Error: ' + r.error;
+                                    return;
+                                }
+                                count++;
+                                progress.textContent = 'Checking ' + count + '/' + checkboxes.length + '...';
+                                const cls = r.warning ? 'price-warn' : 'price-ok';
+                                const currentStr = r.current !== null ? '$' + r.current.toFixed(2) : '—';
+                                const deltaStr = r.delta !== null ? (r.delta > 0 ? '+' : '') + '$' + r.delta.toFixed(2) : '—';
+                                table.innerHTML += `<tr class="${cls}"><td>${r.name}</td><td>$${r.allocated.toFixed(2)}</td><td>${currentStr}</td><td>${deltaStr}</td></tr>`;
+                            } catch(e) {}
+                        }
+                    });
+                    read();
                 });
-                html += '</table>';
-                resultsDiv.innerHTML = html;
             }
+            read();
         })
-        .catch(e => { resultsDiv.innerHTML = '<p style="color:red;">Error: ' + e + '</p>'; })
-        .finally(() => { btn.disabled = false; btn.textContent = 'Check Prices'; });
+        .catch(e => {
+            resultsDiv.innerHTML = '<p style="color:red;">Error: ' + e + '</p>';
+            btn.disabled = false;
+            btn.textContent = 'Check Prices';
+        });
 }
 </script>
 {% endblock %}
