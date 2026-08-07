@@ -61,6 +61,11 @@
                         onclick="this.disabled=true; this.textContent='Creating order...'; this.form.submit();">
                     Create {{ vendor }} Order
                 </button>
+                <button type="button" class="btn btn-ghost btn-block check-prices-btn"
+                        onclick="checkPrices(this)">
+                    Check Prices
+                </button>
+                <div class="price-results" style="display:none; margin-top:0.75rem;"></div>
             </div>
         </details>
     </form>
@@ -78,5 +83,44 @@ document.querySelectorAll('.select-all-vendor').forEach(cb => {
         });
     });
 });
+
+function checkPrices(btn) {
+    const form = btn.closest('form');
+    const checkboxes = form.querySelectorAll('input[name="item_ids"]:checked');
+    if (checkboxes.length === 0) {
+        alert('Select items first');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Checking prices...';
+
+    const resultsDiv = form.querySelector('.price-results');
+    resultsDiv.style.display = 'block';
+    resultsDiv.innerHTML = '<p class="text-muted">Scraping prices... (~5s per item)</p>';
+
+    const formData = new FormData();
+    checkboxes.forEach(cb => formData.append('item_ids', cb.value));
+
+    fetch('{{ url_for("check_prices") }}', { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                resultsDiv.innerHTML = '<p style="color:red;">' + data.error + '</p>';
+            } else {
+                let html = '<table class="price-table"><tr><th>Item</th><th>Allocated</th><th>Current</th><th>Delta</th></tr>';
+                data.results.forEach(r => {
+                    const cls = r.warning ? 'price-warn' : 'price-ok';
+                    const currentStr = r.current !== null ? '$' + r.current.toFixed(2) : '—';
+                    const deltaStr = r.delta !== null ? (r.delta > 0 ? '+' : '') + '$' + r.delta.toFixed(2) : '—';
+                    html += `<tr class="${cls}"><td>${r.name}</td><td>$${r.allocated.toFixed(2)}</td><td>${currentStr}</td><td>${deltaStr}</td></tr>`;
+                });
+                html += '</table>';
+                resultsDiv.innerHTML = html;
+            }
+        })
+        .catch(e => { resultsDiv.innerHTML = '<p style="color:red;">Error: ' + e + '</p>'; })
+        .finally(() => { btn.disabled = false; btn.textContent = 'Check Prices'; });
+}
 </script>
 {% endblock %}
