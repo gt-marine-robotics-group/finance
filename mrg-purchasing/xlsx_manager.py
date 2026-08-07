@@ -286,8 +286,9 @@ def _read_items_from_xlsx() -> list[dict]:
     Skips non-bill items (Liquid, Misc, etc.) same as automation.py.
     Returns list of dicts with normalized keys.
     """
-    with _lock:
-        sync_pull()
+    try:
+        with _lock:
+            sync_pull()
 
         if not os.path.exists(LOCAL_XLSX):
             return []
@@ -343,6 +344,9 @@ def _read_items_from_xlsx() -> list[dict]:
 
         wb.close()
         return items
+    except Exception as e:
+        print(f"[read_items] Error: {e}")
+        return []
 
 
 def get_bills() -> list[str]:
@@ -714,25 +718,56 @@ def update_item(item_id: str, updates: dict) -> bool:
 
 
 def delete_item(item_id: str) -> bool:
-    """Delete an item row by Bill Item ID."""
-    with _lock:
-        sync_pull()
+    """Clear an item row by Bill Item ID via Graph API (preserves table structure)."""
+    import requests as _requests
 
-        if not os.path.exists(LOCAL_XLSX):
-            return False
+    creds = _get_graph_token()
+    if not creds:
+        return False
 
-        wb = load_workbook(LOCAL_XLSX)
-        ws = wb[SHEET_NAME]
-        headers, header_row = _get_headers(ws)
+    access_token, drive_id, file_id = creds
+    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
 
-        row_idx = _find_row_by_item_id(ws, item_id, headers, header_row)
-        if row_idx is None:
-            wb.close()
-            return False
+    # Find the row with this Bill Item ID
+    rows_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/BillsT/rows"
+    resp = _requests.get(rows_url, headers=headers, timeout=15)
+    if resp.status_code != 200:
+        return False
 
-        ws.delete_rows(row_idx)
-        wb.save(LOCAL_XLSX)
-        wb.close()
+    target_idx = None
+    for row in resp.json().get("value", []):
+        vals = row["values"][0]
+        row_id = str(vals[0]).strip() if vals[0] else ""
+        if row_id and row_id == str(item_id).strip():
+            target_idx = row["index"]
+            break
 
-        _push_async()
+    if target_idx is None:
+        # Fallback: try matching by index directly (item_id might be the table index)
+        try:
+            idx = int(item_id)
+            if 0 <= idx < len(resp.json().get("value", [])):
+                target_idx = idx
+        except (ValueError, TypeError):
+            pass
+
+    if target_idx is None:
+        print(f"[graph] ⚠️ Could not find item with ID {item_id}")
+        return False
+
+    # Clear the row (columns B through J and L through P, skip A and K which have formulas)
+    sheet_row = target_idx + 2
+    url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Bills')/range(address='B{sheet_row}:J{sheet_row}')"
+    resp = _requests.patch(url, headers=headers, json={"values": [[""] * 9]}, timeout=10)
+    url2 = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Bills')/range(address='L{sheet_row}:P{sheet_row}')"
+    resp2 = _requests.patch(url2, headers=headers, json={"values": [[""] * 5]}, timeout=10)
+
+    if resp.status_code == 200 and resp2.status_code == 200:
+        # Reset cache
+        global _cached_items, _cached_items_time
+        _cached_items = []
+        _cached_items_time = 0
+        print(f"[graph] ✅ Cleared row {sheet_row} (item ID {item_id})")
         return True
+
+    return False
