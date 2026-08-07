@@ -819,3 +819,17 @@ select.input {
 .review-nav .btn {
     flex: 1;
 }
+
+/* --- Order Page --- */
+
+.order-vendor-form {
+    margin-bottom: 1.5rem;
+}
+
+.order-items-list {
+    padding: 0.5rem;
+}
+
+.order-items-list .checkbox-card {
+    margin-bottom: 0.4rem;
+}

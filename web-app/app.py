@@ -557,6 +557,163 @@ def export_csv(bill_title):
     return response
 
 
+# --- Create Order ---
+
+
+@app.route("/create-order", methods=["GET"])
+@login_required
+def create_order():
+    """Show approved items grouped by vendor for order creation."""
+    items = xlsx_manager.read_items()
+
+    # Filter to items that are approved/ready to purchase
+    orderable_statuses = {"bill approved", "pending purchase"}
+    orderable = [i for i in items if str(i.get("Status", "")).strip().lower() in orderable_statuses]
+
+    # Group by vendor
+    vendors = {}
+    for item in orderable:
+        vendor = str(item.get("Vendor", "")).strip() or "Unknown"
+        if vendor not in vendors:
+            vendors[vendor] = []
+        vendors[vendor].append(item)
+
+    return render_template("create_order.html", vendors=vendors)
+
+
+@app.route("/create-order/submit", methods=["POST"])
+@login_required
+def submit_order():
+    """Write selected items to the OrderT table."""
+    import requests as _requests
+    from datetime import datetime
+
+    selected_ids = request.form.getlist("item_ids")
+    vendor = request.form.get("vendor", "").strip()
+    purchaser = session.get("user_name", "")
+
+    if not selected_ids:
+        flash("Select at least one item", "error")
+        return redirect(url_for("create_order"))
+
+    # Generate Order ID: YYMMDD_vendor_name
+    date_str = datetime.now().strftime("%y%m%d")
+    safe_vendor = vendor.lower().replace(" ", "").replace("-", "")[:10]
+    safe_name = purchaser.lower().replace(" ", "")[:10] if purchaser else "unknown"
+    order_id = f"{date_str}_{safe_vendor}_{safe_name}"
+
+    # Get the items data
+    items = xlsx_manager.read_items()
+    selected_items = [i for i in items if str(i.get("Bill Item ID", "")) in selected_ids]
+
+    if not selected_items:
+        flash("No matching items found", "error")
+        return redirect(url_for("create_order"))
+
+    # Write to OrderT
+    creds = xlsx_manager._get_graph_token()
+    if not creds:
+        flash("Graph API unavailable", "error")
+        return redirect(url_for("create_order"))
+
+    access_token, drive_id, file_id = creds
+    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+
+    # Get OrderT columns
+    order_columns = xlsx_manager.graph_get_table_columns("OrderT")
+    if not order_columns:
+        flash("Could not read OrderT columns", "error")
+        return redirect(url_for("create_order"))
+
+    # Find first empty row in OrderT
+    rows_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/OrderT/rows"
+    resp = _requests.get(rows_url, headers=headers, timeout=15)
+    first_empty = 0
+    if resp.status_code == 200:
+        for row in resp.json().get("value", []):
+            vals = row["values"][0]
+            if any(str(v).strip() for v in vals if v):
+                first_empty = row["index"] + 1
+
+    # Write each item - only fill Order ID and Bill Item ID (formulas handle the rest)
+    wrote = 0
+    order_id_col = order_columns.index("Order ID (YYMMDD_vendor_gburdell3)") if "Order ID (YYMMDD_vendor_gburdell3)" in order_columns else 0
+    bill_item_id_col = order_columns.index("Bill Item ID") if "Bill Item ID" in order_columns else 1
+    purchaser_col = order_columns.index("Purchaser") if "Purchaser" in order_columns else None
+    status_col = order_columns.index("Status") if "Status" in order_columns else None
+
+    for item in selected_items:
+        sheet_row = first_empty + 3  # OrderT header is row 2, data starts row 3
+        item_id = str(item.get("Bill Item ID", ""))
+
+        # Write Order ID
+        url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{chr(65 + order_id_col)}{sheet_row}')"
+        _requests.patch(url, headers=headers, json={"values": [[order_id]]}, timeout=10)
+
+        # Write Bill Item ID
+        url2 = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{chr(65 + bill_item_id_col)}{sheet_row}')"
+        _requests.patch(url2, headers=headers, json={"values": [[int(float(item_id)) if item_id else ""]]}, timeout=10)
+
+        # Write Purchaser
+        if purchaser_col is not None:
+            url3 = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{chr(65 + purchaser_col)}{sheet_row}')"
+            _requests.patch(url3, headers=headers, json={"values": [[purchaser]]}, timeout=10)
+
+        # Write Status
+        if status_col is not None:
+            url4 = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{chr(65 + status_col)}{sheet_row}')"
+            _requests.patch(url4, headers=headers, json={"values": [["pending purchase"]]}, timeout=10)
+
+        wrote += 1
+        first_empty += 1
+
+    # Update status on BillsT items to "pending purchase"
+    for item in selected_items:
+        item_id = str(item.get("Bill Item ID", ""))
+        if item_id:
+            xlsx_manager.update_item(item_id, {"Status": "pending purchase"})
+
+    # Generate Amazon cart link if applicable
+    amazon_link = _generate_amazon_cart(selected_items)
+
+    xlsx_manager._cached_items = []
+    xlsx_manager._cached_items_time = 0
+
+    flash(f"Order '{order_id}' created with {wrote} item(s)", "success")
+
+    if amazon_link:
+        flash(f'<a href="{amazon_link}" target="_blank">Open Amazon Cart</a>', "success")
+
+    return redirect(url_for("create_order"))
+
+
+def _generate_amazon_cart(items: list[dict]) -> str:
+    """Generate an Amazon add-to-cart URL from items with Amazon links."""
+    import re
+
+    amazon_items = []
+    for item in items:
+        link = str(item.get("Link", ""))
+        if "amazon" not in link.lower():
+            continue
+        # Extract ASIN from URL
+        asin_match = re.search(r'/(?:dp|gp/product)/([A-Z0-9]{10})', link)
+        if asin_match:
+            asin = asin_match.group(1)
+            qty = int(float(str(item.get("Quantity", 1)) or 1))
+            amazon_items.append((asin, qty))
+
+    if not amazon_items:
+        return ""
+
+    # Build cart URL
+    params = []
+    for i, (asin, qty) in enumerate(amazon_items, 1):
+        params.append(f"ASIN.{i}={asin}&Quantity.{i}={qty}")
+
+    return "https://www.amazon.com/gp/aws/cart/add.html?" + "&".join(params)
+
+
 # --- Bill Review ---
 
 
