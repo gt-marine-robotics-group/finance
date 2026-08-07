@@ -44,7 +44,98 @@ python automation.py
 
 Requires: GT login + Duo MFA, OneDrive sync, Chrome installed.
 
-## How it works
+## CLI Scripts vs Web App
+
+### Web App (`mrg-purchasing/`) — runs on SIM PC
+
+**Purpose:** Day-to-day item management for the whole team.
+
+| Feature | How |
+|---------|-----|
+| Add items to backlog | Quick-add bar or full form |
+| Organize items into bills | "Create Bill from Backlog" |
+| Take screenshots | Automatic on add (background) |
+| Edit items | Tap Edit on any item |
+| Track status | Status badges on each item |
+| View bills | Collapsible sections on dashboard |
+
+**Who uses it:** Everyone on the team (from phone/laptop)  
+**Where it runs:** SIM PC (always on, accessible via Tailscale)  
+**Writes to:** SharePoint xlsx via Graph API (instant, no file lock issues)
+
+---
+
+### CLI Scripts — run from officer's laptop
+
+**Purpose:** Interact with CampusLabs Engage (requires GT login + Duo MFA + browser).
+
+| Script | Purpose |
+|--------|---------|
+| `automation.py` | Submit a bill request to CampusLabs Engage |
+| `automation_purchase.py` | Fill out purchase request forms on Engage |
+| `automation_screenshots.py` | (Legacy) Take screenshots — web app does this now |
+
+**Who uses it:** Officers only  
+**Where it runs:** Any laptop with OneDrive sync + Chrome  
+**Reads from:** Local OneDrive-synced xlsx + screenshots folder
+
+### How they connect
+
+```
+Web app adds items → SharePoint xlsx ← OneDrive syncs to laptop
+Web app takes screenshots → SharePoint ← OneDrive syncs to laptop
+                                        ↓
+                            automation.py reads xlsx + screenshots
+                            → submits bill to CampusLabs Engage
+                                        ↓
+                            automation_purchase.py
+                            → creates purchase requests on Engage
+```
+
+The web app and CLI scripts never conflict because:
+- Web app writes via Graph API (cell-level, no file lock)
+- CLI scripts only READ the xlsx (via OneDrive sync)
+- Screenshots sync via OneDrive from SharePoint
+
+---
+
+## Purchase Request Flow
+
+### Creating a purchase request from a bill
+
+1. **Bill must be approved** on CampusLabs first (status: "bill approved")
+2. Open the bill on the web app → verify items, prices, screenshots
+3. On your laptop, run `automation_purchase.py` to fill the Engage purchase form
+4. Purchase request groups items by **vendor** (one request per vendor)
+
+### Tracking: Allocated vs Actual Cost
+
+The **Ordering sheet** (OrderT) tracks what was actually purchased:
+
+1. Type Bill Item IDs into column B → item details auto-populate from BillsT
+2. **Allocation** (column G) = original price × qty from the bill
+3. **Total Cost** (column H) = what you actually paid (manual entry)
+4. **Cost Overrun** (column I) = Total Cost - Allocation (auto-calculated)
+
+### Before ordering, check if prices changed
+
+- Web app scrapes current prices when items are added
+- Re-check before ordering: open the product link, compare to Allocation
+- If price increased significantly, flag it before proceeding
+
+### Statuses
+
+| Status | Meaning |
+|--------|---------|
+| bill requested | Bill submitted to CampusLabs, waiting for approval |
+| bill submitted | Bill form completed |
+| bill approved | Approved by SGA — ready to purchase |
+| pending purchase | Approved but not yet ordered |
+| purchased - SOFO | Bought with SOFO card |
+| purchased - cash | Bought with personal funds |
+| purchased - awaiting reimbursement | Bought, waiting for reimbursement |
+| arrived | Item received |
+| review requested | Needs review before proceeding |
 
 ```
 Team member's phone → Web app (SIM PC) → Graph API → SharePoint xlsx
