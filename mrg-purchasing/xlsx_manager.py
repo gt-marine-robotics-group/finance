@@ -567,7 +567,7 @@ def delete_queue_item(row_idx: int) -> bool:
         return True
 
 
-def move_to_bill(queue_items: list[dict], bill_title: str, add_separator: bool = True) -> int:
+def move_to_bill(queue_items: list[dict], bill_title: str, add_separator: bool = True, person: str = "") -> int:
     """
     Move items from the Queue (TestTable) to the Bills table (BillsT) via Graph API.
     - Inserts a separator row (e.g. "Request 4") before the items
@@ -632,6 +632,8 @@ def move_to_bill(queue_items: list[dict], bill_title: str, add_separator: bool =
         item_data = dict(item)
         item_data["Bill Title"] = bill_title
         item_data["Status"] = "Bill Requested"
+        if person:
+            item_data["Person Requesting"] = person
 
         row_values = []
         for col in bills_columns:
