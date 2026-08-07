@@ -81,7 +81,7 @@
             {% set current_status = item.get('Status', '') %}
             <select id="status" name="status" class="input">
                 <option value="">-- None --</option>
-                {% for status in ['New', 'Queued', 'Submitted', 'Approved', 'Ordered', 'Received'] %}
+                {% for status in ['bill requested', 'bill submitted', 'bill approved', 'purchased - SOFO', 'purchased - cash', 'purchased - awaiting reimbursement', 'arrived', 'pending purchase', 'review requested'] %}
                 <option value="{{ status }}" {{ 'selected' if status == current_status }}>{{ status }}</option>
                 {% endfor %}
             </select>

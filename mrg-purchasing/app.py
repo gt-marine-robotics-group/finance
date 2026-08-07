@@ -224,8 +224,8 @@ def edit_item(item_id):
             # If status wasn't explicitly changed by the user, auto-set it
             current_status = request.form.get("status", "").strip()
             if updates["Bill Title"] and current_status in ("", "New"):
-                updates["Status"] = "Bill Requested"
-            elif not updates["Bill Title"] and current_status == "Bill Requested":
+                updates["Status"] = "bill requested"
+            elif not updates["Bill Title"] and current_status == "bill requested":
                 updates["Status"] = "New"
 
         success = xlsx_manager.update_item(item_id, updates)
@@ -659,7 +659,7 @@ def copy_to_bill(item_id):
 
         item_data = dict(source_item)
         item_data["Bill Title"] = target_bill
-        item_data["Status"] = "Bill Requested"
+        item_data["Status"] = "bill requested"
         item_data["Bill Item ID"] = ""  # Will be auto-assigned
 
         # Calculate Total Cost
