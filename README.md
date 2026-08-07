@@ -6,7 +6,7 @@ Georgia Tech Marine Robotics Group — bill request automation and purchasing ma
 
 ```
 finance/
-├── mrg-purchasing/          ← Web app (runs on SIM PC, accessible from phone)
+├── web-app/                 ← Web app (runs on SIM PC, accessible from phone)
 ├── automation.py            ← Submits bills to CampusLabs Engage (run from laptop)
 ├── automation_screenshots.py ← CLI screenshot tool (legacy, web app replaces this)
 ├── automation_purchase.py   ← Purchase request form filler
@@ -46,7 +46,7 @@ Requires: GT login + Duo MFA, OneDrive sync, Chrome installed.
 
 ## CLI Scripts vs Web App
 
-### Web App (`mrg-purchasing/`) — runs on SIM PC
+### Web App (`web-app/`) — runs on SIM PC
 
 **Purpose:** Day-to-day item management for the whole team.
 
@@ -163,11 +163,11 @@ The only thing that could conflict: if you and the web app write to the same row
 
 ## Web App Setup (SIM PC)
 
-See [mrg-purchasing/README.md](mrg-purchasing/README.md) for full setup details.
+See [web-app/README.md](web-app/README.md) for full setup details.
 
 **TL;DR:**
 ```bash
-cd mrg-purchasing
+cd web-app
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -176,10 +176,10 @@ python app.py
 
 Runs as a systemd service for 24/7 availability:
 ```bash
-sudo systemctl start mrg-purchasing   # start
-sudo systemctl restart mrg-purchasing # restart after code changes  
-sudo systemctl stop mrg-purchasing    # stop
-sudo journalctl -u mrg-purchasing -f  # view logs
+sudo systemctl start mrg-web-app   # start
+sudo systemctl restart mrg-web-app # restart after code changes  
+sudo systemctl stop mrg-web-app    # stop
+sudo journalctl -u mrg-web-app -f  # view logs
 ```
 
 ## Spreadsheet Structure
@@ -212,7 +212,7 @@ Same structure minus Status, Total Cost, File URL, Person Requesting. This is th
 ## Screenshots
 
 Screenshots are stored at:
-- **Local (SIM PC):** `mrg-purchasing/screenshots/<bill_title>/<item_name>.png`
+- **Local (SIM PC):** `web-app/screenshots/<bill_title>/<item_name>.png`
 - **SharePoint:** `OPS-1 Operations/FY27 Finances/screenshots/<bill_title>/<item_name>.png`
 - **Backlog items:** saved under `_queue/` until assigned to a bill
 
@@ -227,4 +227,4 @@ When a bill is created from backlog, screenshots are copied to the bill's folder
 | Screenshots not working | Check `chromium-browser --version` on SIM PC |
 | automation.py can't find screenshots | They sync via OneDrive from SharePoint |
 | "File locked" in logs | Someone has the xlsx open — auto-retries later |
-| Service not running | `sudo systemctl status mrg-purchasing` |
+| Service not running | `sudo systemctl status mrg-web-app` |
