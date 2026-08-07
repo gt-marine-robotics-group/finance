@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Create Order - MRG Purchasing{% endblock %}
+
+{% block content %}
+<div class="form-page" style="max-width: 800px;">
+    <h1>Create Order</h1>
+    <p class="text-muted">Select approved items to order. One order per vendor.</p>
+
+    {% if not vendors %}
+    <div class="empty-state">
+        <p>No items with status "bill approved" or "pending purchase".</p>
+        <p class="text-muted">Bills must be approved on CampusLabs before ordering.</p>
+    </div>
+    {% else %}
+
+    {% for vendor, items in vendors.items() %}
+    <form method="POST" action="{{ url_for('submit_order') }}" class="order-vendor-form">
+        <input type="hidden" name="vendor" value="{{ vendor }}">
+
+        <details class="bill-dropdown" open>
+            <summary class="bill-header-toggle">
+                <h2>{{ vendor }} <span class="badge">{{ items|length }}</span></h2>
+                {% set ns = namespace(total=0) %}
+                {% for item in items %}
+                    {% set cost_str = item.get('Cost', '0')|string|replace('$','')|replace(',','') %}
+                    {% set qty_str = item.get('Quantity', '1')|string %}
+                    {% set ns.total = ns.total + (cost_str|float(0) * qty_str|float(1)) %}
+                {% endfor %}
+                <span class="bill-total-inline">${{ "%.2f"|format(ns.total) }}</span>
+            </summary>
+
+            <div class="order-items-list">
+                <div class="select-all-row" style="padding: 0.5rem 1rem;">
+                    <label class="checkbox-label">
+                        <input type="checkbox" class="select-all-vendor"> <strong>Select All</strong>
+                    </label>
+                </div>
+
+                {% for item in items %}
+                {% set cost_str = item.get('Cost', '0')|string|replace('$','')|replace(',','') %}
+                {% set qty = item.get('Quantity', '1')|string %}
+                <label class="checkbox-card">
+                    <input type="checkbox" name="item_ids" value="{{ item.get('Bill Item ID', '') }}">
+                    <div class="checkbox-card-content">
+                        <span class="item-name">{{ item.get('Item Name', 'Unnamed') }}</span>
+                        <span class="item-meta">
+                            ${{ "%.2f"|format(cost_str|float(0)) }}
+                            {% if qty != '1' %} x {{ qty }}{% endif %}
+                            · {{ item.get('Bill Title', '')[:30] }}
+                        </span>
+                        {% if item.get('Link') %}
+                        <a href="{{ item.get('Link') }}" target="_blank" class="review-link" style="font-size:0.7rem;">{{ item.get('Link', '')[:40] }}...</a>
+                        {% endif %}
+                    </div>
+                </label>
+                {% endfor %}
+            </div>
+
+            <div class="bill-dropdown-actions" style="padding: 1rem;">
+                <button type="submit" class="btn btn-primary btn-block"
+                        onclick="this.disabled=true; this.textContent='Creating order...'; this.form.submit();">
+                    Create {{ vendor }} Order
+                </button>
+            </div>
+        </details>
+    </form>
+    {% endfor %}
+
+    {% endif %}
+</div>
+
+<script>
+document.querySelectorAll('.select-all-vendor').forEach(cb => {
+    cb.addEventListener('change', function() {
+        const form = this.closest('form');
+        form.querySelectorAll('input[name="item_ids"]').forEach(item => {
+            item.checked = this.checked;
+        });
+    });
+});
+</script>
+{% endblock %}
