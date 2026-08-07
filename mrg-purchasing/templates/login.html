@@ -10,10 +10,19 @@
         <form method="POST" action="{{ url_for('login') }}">
             <div class="form-group">
                 <input
+                    type="text"
+                    name="name"
+                    placeholder="Your name"
+                    required
+                    autofocus
+                    class="input"
+                >
+            </div>
+            <div class="form-group">
+                <input
                     type="password"
                     name="password"
-                    placeholder="Enter team password"
-                    autofocus
+                    placeholder="Team password"
                     required
                     class="input"
                 >

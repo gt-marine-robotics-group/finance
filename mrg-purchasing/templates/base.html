@@ -12,6 +12,7 @@
     <nav class="navbar">
         <a href="{{ url_for('dashboard') }}" class="nav-brand">MRG Purchasing</a>
         <div class="nav-links">
+            <span class="nav-user">{{ session.get('user_name', '') }}</span>
             <a href="{{ url_for('add_item') }}" class="btn btn-sm btn-primary">+ Add Item</a>
             <a href="{{ url_for('logout') }}" class="btn btn-sm btn-ghost">Logout</a>
         </div>

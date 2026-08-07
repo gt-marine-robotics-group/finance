@@ -50,8 +50,10 @@ def login_required(f):
 def login():
     if request.method == "POST":
         password = request.form.get("password", "")
+        name = request.form.get("name", "").strip()
         if password == LOGIN_PASSWORD:
             session["logged_in"] = True
+            session["user_name"] = name
             session.permanent = True
             return redirect(url_for("dashboard"))
         else:
@@ -137,6 +139,7 @@ def quick_add():
         "Description": "",
         "Budget Section": "",
         "Bill Title": "",
+        "Person Requesting": session.get("user_name", ""),
     }
 
     def _do_background(name, url):
@@ -473,7 +476,7 @@ def create_bill():
             return redirect(url_for("create_bill"))
 
         # Move from Test sheet to Bills sheet
-        moved = xlsx_manager.move_to_bill(selected_items, bill_title, add_separator=is_new_bill)
+        moved = xlsx_manager.move_to_bill(selected_items, bill_title, add_separator=is_new_bill, person=session.get("user_name", ""))
 
         # Copy screenshots from _queue/ to bill folder (local + SharePoint)
         for item in selected_items:
