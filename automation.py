@@ -28,6 +28,33 @@ PASSWORD = ""
 BILL_URL = ""  # Auto-generated from Bill No. in spreadsheet
 BILL_NO = ""   # Will prompt — shows available options
 
+# --- Fresh sync from SharePoint ---
+import sys
+if "--fresh" in sys.argv or "-f" in sys.argv:
+    print("Downloading fresh xlsx from SharePoint...")
+    import subprocess
+    result = subprocess.run(
+        ["rclone", "copy", "--checksum",
+         "onedrive:OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx",
+         os.path.dirname(CSV_FILE)],
+        capture_output=True, text=True, timeout=30
+    )
+    if result.returncode == 0:
+        print("✅ Fresh copy downloaded")
+    else:
+        print(f"⚠️ rclone failed: {result.stderr.strip()}")
+        print("Continuing with local copy...")
+    # Also sync screenshots
+    result2 = subprocess.run(
+        ["rclone", "copy", "--checksum",
+         "onedrive:OPS-1 Operations/FY27 Finances/screenshots",
+         SCREENSHOT_DIR],
+        capture_output=True, text=True, timeout=60
+    )
+    if result2.returncode == 0:
+        print("✅ Screenshots synced")
+    sys.argv.remove("--fresh") if "--fresh" in sys.argv else sys.argv.remove("-f")
+
 # Prompt if empty
 if not USERNAME:
     USERNAME = input("Enter your username: ")
