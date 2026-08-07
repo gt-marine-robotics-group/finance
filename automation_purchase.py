@@ -25,6 +25,23 @@ PURCHASE_URL = "https://gatech.campuslabs.com/engage/actionCenter/organization/M
 USERNAME = "awu335"
 PASSWORD = ""
 
+# --- Fresh sync from SharePoint ---
+import sys
+if "--fresh" in sys.argv or "-f" in sys.argv:
+    print("Downloading fresh xlsx from SharePoint...")
+    import subprocess
+    result = subprocess.run(
+        ["rclone", "copy", "--checksum",
+         "onedrive:OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx",
+         os.path.dirname(XLSX_PATH)],
+        capture_output=True, text=True, timeout=30
+    )
+    if result.returncode == 0:
+        print("✅ Fresh copy downloaded")
+    else:
+        print(f"⚠️ rclone failed: {result.stderr.strip()}")
+        print("Continuing with local copy...")
+
 # Prompt
 if not PASSWORD:
     PASSWORD = getpass.getpass("Enter your password: ")
