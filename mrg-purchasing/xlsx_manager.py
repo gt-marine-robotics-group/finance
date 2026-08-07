@@ -631,7 +631,7 @@ def move_to_bill(queue_items: list[dict], bill_title: str, add_separator: bool =
     for item in queue_items:
         item_data = dict(item)
         item_data["Bill Title"] = bill_title
-        item_data["Status"] = "Bill Requested"
+        item_data["Status"] = "bill requested"
         if person:
             item_data["Person Requesting"] = person
 

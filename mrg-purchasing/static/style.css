@@ -453,6 +453,15 @@ select.input {
 .status-approved { background: #dcfce7; color: #166534; }
 .status-ordered { background: #f3e8ff; color: #6b21a8; }
 .status-received { background: #d1fae5; color: #065f46; }
+.status-bill-requested { background: #dbeafe; color: #1e40af; }
+.status-bill-submitted { background: #e0e7ff; color: #3730a3; }
+.status-bill-approved { background: #dcfce7; color: #166534; }
+.status-purchased---sofo { background: #f3e8ff; color: #6b21a8; }
+.status-purchased---cash { background: #f3e8ff; color: #6b21a8; }
+.status-purchased---awaiting-reimbursement { background: #fef3c7; color: #92400e; }
+.status-arrived { background: #d1fae5; color: #065f46; }
+.status-pending-purchase { background: #fef3c7; color: #92400e; }
+.status-review-requested { background: #fce7f3; color: #9d174d; }
 
 .item-card-body {
     display: flex;
