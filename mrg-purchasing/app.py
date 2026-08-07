@@ -125,6 +125,8 @@ def quick_add():
 
     item_name = request.form.get("item_name", "").strip()
     link = request.form.get("link", "").strip()
+    if link and not link.startswith("http"):
+        link = "https://" + link
 
     if not item_name:
         flash("Item name required", "error")
@@ -176,6 +178,9 @@ def add_item():
             "Budget Section": request.form.get("budget_section", "").strip(),
             "Bill Title": request.form.get("bill_title", "").strip(),
         }
+
+        if item_data["Link"] and not item_data["Link"].startswith("http"):
+            item_data["Link"] = "https://" + item_data["Link"]
 
         if not item_data["Item Name"]:
             flash("Item Name is required", "error")
