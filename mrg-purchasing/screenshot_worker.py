@@ -87,14 +87,57 @@ def _scrape_price(driver) -> str:
             txt = (element.get_attribute("content") or "").strip()
         return txt
 
-    # Amazon-priority selectors
+    # Strategy 1: Page source regex for unit price (most reliable for Amazon)
+    try:
+        page_source = driver.page_source
+        # Amazon JS-embedded prices (per-unit, not total)
+        for pattern in [
+            r'"priceAmount"\s*:\s*"?([\d.]+)"?',
+            r'"price"\s*:\s*\{\s*"value"\s*:\s*"?([\d.]+)"?',
+            r'"buyingPrice"\s*:\s*"?([\d.]+)"?',
+        ]:
+            match = re.search(pattern, page_source)
+            if match:
+                return f"${match.group(1)}"
+    except Exception:
+        pass
+
+    # Strategy 2: JSON-LD schema price
+    try:
+        from selenium.webdriver.common.by import By as _By
+        scripts = driver.find_elements(_By.CSS_SELECTOR, 'script[type="application/ld+json"]')
+        for script in scripts:
+            try:
+                import json
+                data = json.loads(script.get_attribute("innerHTML"))
+                if isinstance(data, list):
+                    data = data[0] if data else {}
+                offers = data.get("offers", {})
+                if isinstance(offers, dict) and "price" in offers:
+                    return f"${offers['price']}"
+                if isinstance(offers, list):
+                    for offer in offers:
+                        if isinstance(offer, dict) and "price" in offer:
+                            return f"${offer['price']}"
+                if "price" in data:
+                    return f"${data['price']}"
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    # Strategy 3: Amazon-priority CSS selectors
     amazon_selectors = [
         "#corePriceDisplay_desktop_feature_div .a-offscreen",
         "#apex_desktop .a-offscreen",
+        "#corePrice_desktop .a-offscreen",
         "#priceblock_ourprice",
         "#priceblock_dealprice",
         "#sns-base-price",
         "#newBuyBoxPrice",
+        "#price_inside_buybox",
+        "#buyNewSection .a-price .a-offscreen",
+        "span.a-price .a-offscreen",
         ".a-price .a-offscreen",
     ]
 
