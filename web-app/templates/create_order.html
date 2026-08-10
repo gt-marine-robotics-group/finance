@@ -6,6 +6,11 @@
     <h1>Create Order</h1>
     <p class="text-muted">Select approved items to order. One order per vendor.</p>
 
+    <div class="toggle-group" style="margin-bottom: 1rem;">
+        <a href="{{ url_for('create_order', group='vendor') }}" class="btn btn-sm {{ 'btn-primary' if group_by == 'vendor' else 'btn-ghost' }}">By Vendor</a>
+        <a href="{{ url_for('create_order', group='bill') }}" class="btn btn-sm {{ 'btn-primary' if group_by == 'bill' else 'btn-ghost' }}">By Bill</a>
+    </div>
+
     {% if not vendors %}
     <div class="empty-state">
         <p>No items with status "bill approved" or "pending purchase".</p>

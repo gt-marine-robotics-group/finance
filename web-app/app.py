@@ -563,22 +563,26 @@ def export_csv(bill_title):
 @app.route("/create-order", methods=["GET"])
 @login_required
 def create_order():
-    """Show approved items grouped by vendor for order creation."""
+    """Show approved items grouped by vendor or bill for order creation."""
     items = xlsx_manager.read_items()
+    group_by = request.args.get("group", "vendor")  # vendor or bill
 
     # Filter to items that are approved/ready to purchase
     orderable_statuses = {"bill approved", "pending purchase"}
     orderable = [i for i in items if str(i.get("Status", "")).strip().lower() in orderable_statuses]
 
-    # Group by vendor
-    vendors = {}
+    # Group by selected mode
+    groups = {}
     for item in orderable:
-        vendor = str(item.get("Vendor", "")).strip() or "Unknown"
-        if vendor not in vendors:
-            vendors[vendor] = []
-        vendors[vendor].append(item)
+        if group_by == "bill":
+            key = str(item.get("Bill Title", "")).strip() or "Unknown"
+        else:
+            key = str(item.get("Vendor", "")).strip() or "Unknown"
+        if key not in groups:
+            groups[key] = []
+        groups[key].append(item)
 
-    return render_template("create_order.html", vendors=vendors)
+    return render_template("create_order.html", vendors=groups, group_by=group_by)
 
 
 @app.route("/create-order/submit", methods=["POST"])
