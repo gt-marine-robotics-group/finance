@@ -683,13 +683,14 @@ def create_order():
     orderable_statuses = {"bill approved", "pending purchase"}
     orderable = [i for i in items if str(i.get("Status", "")).strip().lower() in orderable_statuses]
 
-    # Group by selected mode
+    # Group by selected mode (case-insensitive for vendor)
     groups = {}
     for item in orderable:
         if group_by == "bill":
             key = str(item.get("Bill Title", "")).strip() or "Unknown"
         else:
-            key = str(item.get("Vendor", "")).strip() or "Unknown"
+            raw_vendor = str(item.get("Vendor", "")).strip() or "Unknown"
+            key = raw_vendor.title()  # Normalize: "amazon" -> "Amazon", "AMAZON" -> "Amazon"
         if key not in groups:
             groups[key] = []
         groups[key].append(item)
@@ -719,10 +720,10 @@ def submit_order():
         flash("No matching items found", "error")
         return redirect(url_for("create_order"))
 
-    # Group by vendor
+    # Group by vendor (case-insensitive)
     vendor_groups = {}
     for item in selected_items:
-        vendor = str(item.get("Vendor", "")).strip() or "Unknown"
+        vendor = str(item.get("Vendor", "")).strip().title() or "Unknown"
         if vendor not in vendor_groups:
             vendor_groups[vendor] = []
         vendor_groups[vendor].append(item)
