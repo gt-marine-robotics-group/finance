@@ -593,7 +593,7 @@ def view_orders():
         orders[oid]["items"].append(row)
 
         # Derive vendor from order_id or from item data
-        vendor = str(row.get("Vendor", "")).strip()
+        vendor = str(row.get("Vendor", "")).strip().title()
         if vendor and not orders[oid]["vendor"]:
             orders[oid]["vendor"] = vendor
 
