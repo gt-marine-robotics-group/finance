@@ -678,10 +678,15 @@ def create_order():
     """Show approved items grouped by vendor or bill for order creation."""
     items = xlsx_manager.read_items()
     group_by = request.args.get("group", "vendor")  # vendor or bill
+    filter_vendor = request.args.get("filter_vendor", "").strip()
 
     # Filter to items that are approved/ready to purchase
     orderable_statuses = {"bill approved", "pending purchase"}
     orderable = [i for i in items if str(i.get("Status", "")).strip().lower() in orderable_statuses]
+
+    # Filter by vendor if specified
+    if filter_vendor:
+        orderable = [i for i in orderable if str(i.get("Vendor", "")).strip().lower() == filter_vendor.lower()]
 
     # Group by selected mode (case-insensitive for vendor)
     groups = {}
@@ -753,7 +758,7 @@ def submit_order():
             # Only check Order ID (col 0) and Bill Item ID (col 1)
             if (vals[0] and str(vals[0]).strip()) or (vals[1] and str(vals[1]).strip()):
                 last_data_idx = row["index"]
-    first_empty = last_data_idx + 2  # +1 for next row, +1 to skip a row for separation
+    first_empty = last_data_idx + 1  # next row after last data (separator logic handles the skip)
 
     order_id_col = order_columns.index("Order ID (YYMMDD_vendor_gburdell3)") if "Order ID (YYMMDD_vendor_gburdell3)" in order_columns else 0
     bill_item_id_col = order_columns.index("Bill Item ID") if "Bill Item ID" in order_columns else 1
@@ -797,6 +802,7 @@ def submit_order():
         # Write "Order N" separator if this is a new order
         if order_id not in existing_order_ids:
             max_order_num += 1
+            first_empty += 1  # Skip one blank row for visual separation
             sep_row = first_empty + 3
             sep_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{chr(65 + order_id_col)}{sep_row}')"
             _requests.patch(sep_url, headers=headers, json={"values": [[f"Order {max_order_num}"]]}, timeout=10)
