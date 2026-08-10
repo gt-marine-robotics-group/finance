@@ -719,6 +719,162 @@ def update_item(item_id: str, updates: dict) -> bool:
         return True
 
 
+def graph_get_order_rows() -> list[dict]:
+    """Read all rows from OrderT via Graph API. Returns list of dicts keyed by column name."""
+    import requests as _requests
+
+    creds = _get_graph_token()
+    if not creds:
+        return []
+
+    access_token, drive_id, file_id = creds
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    # Get columns
+    cols_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/OrderT/columns"
+    cols_resp = _requests.get(cols_url, headers=headers, timeout=10)
+
+    # Get rows
+    rows_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/OrderT/rows"
+    rows_resp = _requests.get(rows_url, headers=headers, timeout=15)
+
+    if cols_resp.status_code != 200 or rows_resp.status_code != 200:
+        return []
+
+    columns = [c["name"] for c in cols_resp.json()["value"]]
+    items = []
+    for row in rows_resp.json().get("value", []):
+        values = row["values"][0] if row.get("values") else []
+        item = {}
+        for i, col in enumerate(columns):
+            if i < len(values):
+                val = values[i]
+                if isinstance(val, str):
+                    val = " ".join(val.split())
+                item[col] = val if val else ""
+            else:
+                item[col] = ""
+        item["_table_index"] = row["index"]
+        # Only include rows that have an Order ID or Bill Item ID
+        order_id = str(item.get("Order ID (YYMMDD_vendor_gburdell3)", "") or item.get("Order ID", "")).strip()
+        bill_item_id = str(item.get("Bill Item ID", "")).strip()
+        if order_id or bill_item_id:
+            items.append(item)
+    return items
+
+
+def graph_update_order_status(order_id_col_name: str, order_id: str, status: str, columns: list[str]) -> bool:
+    """Update the Status column for all rows matching an Order ID in OrderT."""
+    import requests as _requests
+
+    creds = _get_graph_token()
+    if not creds:
+        return False
+
+    access_token, drive_id, file_id = creds
+    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+
+    # Get rows
+    rows_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/OrderT/rows"
+    resp = _requests.get(rows_url, headers=headers, timeout=15)
+    if resp.status_code != 200:
+        return False
+
+    # Find order ID column index and status column index
+    order_col_idx = None
+    status_col_idx = None
+    for i, col in enumerate(columns):
+        if "Order ID" in col:
+            order_col_idx = i
+        if col == "Status":
+            status_col_idx = i
+
+    if order_col_idx is None or status_col_idx is None:
+        return False
+
+    # Find matching rows and update status
+    updated = 0
+    for row in resp.json().get("value", []):
+        vals = row["values"][0]
+        row_order_id = str(vals[order_col_idx]).strip() if order_col_idx < len(vals) and vals[order_col_idx] else ""
+        if row_order_id == order_id:
+            # Update status cell: OrderT header is row 2, data starts row 3
+            sheet_row = row["index"] + 3  # +3 because row 1=TOTALS, row 2=header, index is 0-based
+            col_letter = chr(65 + status_col_idx)
+            url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{col_letter}{sheet_row}')"
+            r = _requests.patch(url, headers=headers, json={"values": [[status]]}, timeout=10)
+            if r.status_code == 200:
+                updated += 1
+
+    return updated > 0
+
+
+def graph_apply_spacer_formatting() -> bool:
+    """
+    Apply pink conditional formatting to spacer rows on the Ordering sheet via Graph API.
+    Spacer rows have an Order ID in column A but no Bill Item ID in column B.
+    Formula: =AND($A3<>"",$B3="")
+    
+    Note: The Graph API ConditionalFormat endpoint is available but has limitations.
+    This function creates a custom conditional format on the OrderT data range.
+    """
+    import requests as _requests
+
+    creds = _get_graph_token()
+    if not creds:
+        print("[graph] No credentials for formatting")
+        return False
+
+    access_token, drive_id, file_id = creds
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
+
+    # Get the used range on the Ordering sheet to know the extent
+    range_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/usedRange"
+    resp = _requests.get(range_url, headers=headers, timeout=10)
+    if resp.status_code != 200:
+        print(f"[graph] Failed to get used range: {resp.status_code}")
+        return False
+
+    used_range = resp.json().get("address", "Ordering!A1:R100")
+    # Extract the row count from the used range
+    # Format is like "Ordering!A1:R50"
+    import re
+    match = re.search(r':([A-Z]+)(\d+)', used_range)
+    last_col = match.group(1) if match else "R"
+    last_row = int(match.group(2)) if match else 100
+
+    # Apply conditional formatting to rows 3 through last_row (data starts row 3)
+    # The range should cover the full data area
+    format_range = f"A3:{last_col}{last_row}"
+
+    # Create conditional format via Graph API
+    cf_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{format_range}')/conditionalFormats/add"
+
+    payload = {
+        "type": "custom",
+        "rule": {
+            "formula": '=AND($A3<>"",$B3="")',
+            "format": {
+                "fill": {
+                    "color": "#FFB6C1"  # Light pink
+                }
+            }
+        }
+    }
+
+    resp = _requests.post(cf_url, headers=headers, json=payload, timeout=15)
+
+    if resp.status_code in (200, 201):
+        print(f"[graph] ✅ Applied pink conditional formatting to spacer rows on Ordering!{format_range}")
+        return True
+    else:
+        print(f"[graph] ❌ Failed to apply conditional formatting: {resp.status_code} {resp.text[:200]}")
+        return False
+
+
 def delete_item(item_id: str) -> bool:
     """Clear an item row by Bill Item ID via Graph API (preserves table structure)."""
     import requests as _requests
