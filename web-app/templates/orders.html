@@ -20,9 +20,12 @@
     </div>
     {% else %}
 
+    <input type="text" id="order-search" class="input" placeholder="Search items..." style="margin-bottom: 1rem;"
+           oninput="filterOrders(this.value)">
+
     {% for order_id, order in orders.items() %}
     {% if not order_id.startswith('ungrouped_') %}
-    <details class="bill-dropdown" style="margin-bottom: 1rem;" {% if loop.index <= 3 %}open{% endif %}>
+    <details class="bill-dropdown order-card" style="margin-bottom: 1rem;" {% if loop.index <= 3 %}open{% endif %}>
         <summary class="bill-header-toggle">
             <div>
                 <h2 style="margin: 0;">
@@ -109,4 +112,14 @@
 
     {% endif %}
 </div>
+
+<script>
+function filterOrders(query) {
+    query = query.toLowerCase();
+    document.querySelectorAll('.order-card').forEach(card => {
+        const text = card.textContent.toLowerCase();
+        card.style.display = text.includes(query) ? '' : 'none';
+    });
+}
+</script>
 {% endblock %}
