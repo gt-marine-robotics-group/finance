@@ -1233,6 +1233,9 @@ def force_pull():
         os.remove(xm.LOCAL_XLSX)
     result = xm.sync_pull()
     if result:
+        # Touch the file to update modification time for status display
+        if os.path.exists(xm.LOCAL_XLSX):
+            os.utime(xm.LOCAL_XLSX, None)
         flash("Synced from SharePoint", "success")
     else:
         flash("Sync failed — check rclone config", "error")
