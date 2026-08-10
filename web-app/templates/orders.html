@@ -91,7 +91,7 @@
             </table>
 
             <div class="order-card-actions">
-                <a href="{{ url_for('create_order') }}" class="btn btn-sm btn-ghost">+ Add Items</a>
+                <a href="{{ url_for('create_order', group='vendor', filter_vendor=order.vendor) }}" class="btn btn-sm btn-ghost">+ Add Items</a>
                 <form method="POST" action="{{ url_for('mark_order_purchased') }}" style="display: inline;">
                     <input type="hidden" name="order_id" value="{{ order_id }}">
                     <select name="purchasing_method" class="input" style="display: inline-block; width: auto; font-size: 0.8rem; padding: 0.3rem 0.5rem;">
