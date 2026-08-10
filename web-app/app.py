@@ -765,12 +765,42 @@ def submit_order():
     total_wrote = 0
     order_ids = []
 
+    # Check existing Order IDs to determine if this is a new order
+    existing_order_ids = set()
+    if resp.status_code == 200:
+        for row in resp.json().get("value", []):
+            vals = row["values"][0]
+            if vals[0] and str(vals[0]).strip():
+                existing_order_ids.add(str(vals[0]).strip())
+
+    # Find max "Order N" number for separator
+    max_order_num = 0
+    if resp.status_code == 200:
+        for row in resp.json().get("value", []):
+            vals = row["values"][0]
+            oid = str(vals[0]).strip() if vals[0] else ""
+            if oid.startswith("Order") and not vals[1]:
+                try:
+                    num = int(oid.replace("Order", "").strip())
+                    if num > max_order_num:
+                        max_order_num = num
+                except ValueError:
+                    pass
+
     for vendor, vendor_items in vendor_groups.items():
         safe_vendor = vendor.lower().replace(" ", "").replace("-", "")[:10]
         # Use GT ID format (first letter + last name + number) from session name
         gt_id = session.get("user_name", "unknown").lower().replace(" ", "")
         order_id = f"{date_str}_{safe_vendor}_{gt_id}"
         order_ids.append(order_id)
+
+        # Write "Order N" separator if this is a new order
+        if order_id not in existing_order_ids:
+            max_order_num += 1
+            sep_row = first_empty + 3
+            sep_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{chr(65 + order_id_col)}{sep_row}')"
+            _requests.patch(sep_url, headers=headers, json={"values": [[f"Order {max_order_num}"]]}, timeout=10)
+            first_empty += 1
 
         for item in vendor_items:
             sheet_row = first_empty + 3  # OrderT header is row 2, data starts row 3
