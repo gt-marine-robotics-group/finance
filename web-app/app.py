@@ -1270,12 +1270,16 @@ def system_status():
     if os.path.exists(xlsx_manager.LOCAL_XLSX):
         import time
         age = time.time() - os.path.getmtime(xlsx_manager.LOCAL_XLSX)
-        if age < 600:
-            status["sync"] = "fresh"
+        if age < 60:
+            status["sync_age"] = "Synced just now"
+        elif age < 3600:
+            status["sync_age"] = f"Synced {int(age/60)}m ago"
         else:
-            status["sync"] = f"stale ({int(age/60)}m ago)"
+            status["sync_age"] = f"Synced {int(age/3600)}h ago"
+        status["sync"] = status["sync_age"]
     else:
         status["sync"] = "no local file"
+        status["sync_age"] = "No sync"
 
     return _json.dumps(status)
 

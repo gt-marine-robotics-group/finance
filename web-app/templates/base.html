@@ -23,10 +23,18 @@
     fetch('/status').then(r=>r.json()).then(s=>{
         const dot = document.getElementById('nav-status');
         const label = document.getElementById('nav-status-label');
-        if(s.token==='ok') { dot.style.color='#16a34a'; label.textContent='Connected'; dot.title='Token OK, sync: '+s.sync; }
-        else if(s.token==='expired') { dot.style.color='#dc2626'; label.textContent='Token Expired'; dot.title='Token EXPIRED — run rclone authorize'; }
-        else { dot.style.color='#ca8a04'; label.textContent='Issue'; dot.title='Token: '+s.token+', sync: '+s.sync; }
-    }).catch(()=>{ document.getElementById('nav-status-label').textContent='Offline'; });
+        if(s.token==='ok') {
+            dot.style.color='#16a34a';
+            label.textContent = s.sync_age || 'Synced';
+        } else if(s.token==='expired') {
+            dot.style.color='#dc2626';
+            label.textContent='Token Expired';
+            dot.title='Run: rclone authorize "onedrive"';
+        } else {
+            dot.style.color='#ca8a04';
+            label.textContent='Offline';
+        }
+    }).catch(()=>{ document.getElementById('nav-status-label').textContent='Offline'; document.getElementById('nav-status').style.color='#ca8a04'; });
     </script>
     {% endif %}
 
