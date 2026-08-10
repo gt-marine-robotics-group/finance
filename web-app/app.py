@@ -813,30 +813,34 @@ def submit_order():
             item_id = str(item.get("Bill Item ID", ""))
             qty = item.get("Quantity", 1)
 
-            # Write Order ID
-            url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{chr(65 + order_id_col)}{sheet_row}')"
-            _requests.patch(url, headers=headers, json={"values": [[order_id]]}, timeout=10)
+            try:
+                # Write Order ID
+                url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{chr(65 + order_id_col)}{sheet_row}')"
+                _requests.patch(url, headers=headers, json={"values": [[order_id]]}, timeout=30)
 
-            # Write Bill Item ID
-            url2 = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{chr(65 + bill_item_id_col)}{sheet_row}')"
-            _requests.patch(url2, headers=headers, json={"values": [[int(float(item_id)) if item_id else ""]]}, timeout=10)
+                # Write Bill Item ID
+                url2 = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{chr(65 + bill_item_id_col)}{sheet_row}')"
+                _requests.patch(url2, headers=headers, json={"values": [[int(float(item_id)) if item_id else ""]]}, timeout=30)
 
-            # Write Purchaser
-            if purchaser_col is not None:
-                url3 = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{chr(65 + purchaser_col)}{sheet_row}')"
-                _requests.patch(url3, headers=headers, json={"values": [[purchaser]]}, timeout=10)
+                # Write Purchaser
+                if purchaser_col is not None:
+                    url3 = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{chr(65 + purchaser_col)}{sheet_row}')"
+                    _requests.patch(url3, headers=headers, json={"values": [[purchaser]]}, timeout=30)
 
-            # Write Status
-            if status_col is not None:
-                url4 = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{chr(65 + status_col)}{sheet_row}')"
-                _requests.patch(url4, headers=headers, json={"values": [["pending purchase"]]}, timeout=10)
+                # Write Status
+                if status_col is not None:
+                    url4 = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{chr(65 + status_col)}{sheet_row}')"
+                    _requests.patch(url4, headers=headers, json={"values": [["pending purchase"]]}, timeout=30)
 
-            # Write Quantity
-            if qty_col is not None:
-                url5 = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{chr(65 + qty_col)}{sheet_row}')"
-                _requests.patch(url5, headers=headers, json={"values": [[qty]]}, timeout=10)
+                # Write Quantity
+                if qty_col is not None:
+                    url5 = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{chr(65 + qty_col)}{sheet_row}')"
+                    _requests.patch(url5, headers=headers, json={"values": [[qty]]}, timeout=30)
 
-            total_wrote += 1
+                total_wrote += 1
+            except Exception as e:
+                print(f"[order] ⚠️ Failed to write item {item_id}: {e}")
+
             first_empty += 1
 
     # Update status on BillsT items to "pending purchase"
