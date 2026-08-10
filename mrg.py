@@ -1,0 +1,492 @@
+#!/usr/bin/env python3
+"""
+mrg.py — MRG Finance CLI Tool
+
+Usage:
+    mrg.py screenshots [--fresh] [--bill TITLE]
+    mrg.py bill-request [--fresh] [--bill TITLE]
+    mrg.py purchase [--fresh] [--order ORDER_ID]
+    mrg.py price-check [--fresh] [--bill TITLE] [--cart]
+
+Commands:
+    screenshots      Scrape prices + take screenshots for items in a bill
+    bill-request     Submit a bill to CampusLabs Engage
+    purchase         Create purchase requests on Engage (grouped by vendor from OrderT)
+    price-check      Check current prices vs allocation, warn on overrun
+
+Options:
+    --fresh          Download latest xlsx + screenshots from SharePoint before running
+    --bill TITLE     Specify bill title (skips interactive selection)
+    --order ID       Specify order ID (skips interactive selection)
+    --cart           Generate Amazon cart link after price check
+"""
+
+import os
+import sys
+import subprocess
+import argparse
+
+# === Paths ===
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_XLSX = os.path.expanduser(
+    "~/Library/CloudStorage/OneDrive-GeorgiaInstituteofTechnology/"
+    "Documents - Marine Robotics Group/OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx"
+)
+# Fallback for Linux (SIM PC)
+if not os.path.exists(os.path.dirname(DEFAULT_XLSX)):
+    DEFAULT_XLSX = os.path.expanduser("~/mrg/finance/FY27_Bills_Budget.xlsx")
+
+XLSX_PATH = os.environ.get("FINANCE_XLSX_PATH", DEFAULT_XLSX)
+SHEET_NAME = "Bills"
+ORDERING_SHEET = "Ordering"
+SCREENSHOT_DIR = os.path.join(SCRIPT_DIR, "screenshots")
+SKIP_TITLES = ("nan", "request", "liquid", "misc")
+
+
+def fresh_sync():
+    """Download latest xlsx + screenshots from SharePoint."""
+    print("Syncing from SharePoint...")
+    xlsx_dir = os.path.dirname(XLSX_PATH)
+    r1 = subprocess.run(
+        ["rclone", "copy", "--checksum",
+         "onedrive:OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx",
+         xlsx_dir],
+        capture_output=True, text=True, timeout=30
+    )
+    if r1.returncode == 0:
+        print("  ✅ xlsx synced")
+    else:
+        print(f"  ⚠️ xlsx sync failed: {r1.stderr.strip()}")
+
+    r2 = subprocess.run(
+        ["rclone", "copy", "--checksum",
+         "onedrive:OPS-1 Operations/FY27 Finances/screenshots",
+         SCREENSHOT_DIR],
+        capture_output=True, text=True, timeout=60
+    )
+    if r2.returncode == 0:
+        print("  ✅ screenshots synced")
+    else:
+        print(f"  ⚠️ screenshots sync failed")
+    print()
+
+
+def load_xlsx():
+    """Load the xlsx and return filtered dataframe."""
+    import pandas as pd
+    import warnings
+    warnings.filterwarnings('ignore')
+
+    df = pd.read_excel(XLSX_PATH, sheet_name=SHEET_NAME)
+    df.fillna("", inplace=True)
+    df.columns = df.columns.str.strip()
+
+    # Filter to real items
+    df_valid = df[
+        (df["Bill Title"].astype(str).str.strip() != "") &
+        (df["Item Name"].astype(str).str.strip() != "")
+    ].copy()
+    df_valid = df_valid[~df_valid["Bill Title"].astype(str).str.strip().str.lower().apply(
+        lambda t: any(t.startswith(s) for s in SKIP_TITLES)
+    )]
+    return df_valid
+
+
+def load_ordering():
+    """Load the Ordering sheet."""
+    import pandas as pd
+    import warnings
+    warnings.filterwarnings('ignore')
+
+    df = pd.read_excel(XLSX_PATH, sheet_name=ORDERING_SHEET, header=1)
+    df.fillna("", inplace=True)
+    df.columns = df.columns.str.strip()
+    return df
+
+
+def select_bill(df, bill_title=None):
+    """Interactive bill selection or use provided title."""
+    titles = df["Bill Title"].astype(str).str.strip().unique()
+
+    if bill_title:
+        match = [t for t in titles if bill_title.lower() in t.lower()]
+        if match:
+            return match[0]
+        print(f"No bill matching '{bill_title}'")
+        sys.exit(1)
+
+    print("Available Bills:")
+    for i, t in enumerate(titles, 1):
+        count = (df["Bill Title"].astype(str).str.strip() == t).sum()
+        print(f"  {i}. {t} ({count} items)")
+
+    choice = input("\nSelect bill (number or name): ").strip()
+    if choice.isdigit() and 1 <= int(choice) <= len(titles):
+        return titles[int(choice) - 1]
+    return choice
+
+
+# ============================================================
+# COMMAND: screenshots
+# ============================================================
+def cmd_screenshots(args):
+    """Scrape prices and take screenshots for items in a bill."""
+    import re
+    import time
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service
+    from selenium.webdriver.common.by import By
+
+    df = load_xlsx()
+    bill_title = select_bill(df, args.bill)
+    items = df[df["Bill Title"].astype(str).str.strip() == bill_title]
+
+    print(f"\n📸 Taking screenshots for: {bill_title} ({len(items)} items)\n")
+
+    # Setup Chrome
+    chrome_options = Options()
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+
+    service = Service()
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    driver.set_page_load_timeout(20)
+
+    # Create output dir
+    bill_dir = os.path.join(SCREENSHOT_DIR, bill_title)
+    os.makedirs(bill_dir, exist_ok=True)
+
+    for _, row in items.iterrows():
+        item_name = str(row.get("Item Name", "")).strip()
+        url = str(row.get("Link", "")).strip()
+
+        if not url or not url.startswith("http"):
+            print(f"  ⚠️ {item_name}: no URL")
+            continue
+
+        print(f"  {item_name}...", end=" ", flush=True)
+        try:
+            driver.get(url)
+        except Exception:
+            pass
+        time.sleep(4)
+
+        # Screenshot
+        safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in item_name)
+        filepath = os.path.join(bill_dir, f"{safe_name}.png")
+        driver.save_screenshot(filepath)
+
+        # Scrape price
+        price_text = ""
+        for pattern in [r'"priceAmount"\s*:\s*"?([\d.]+)"?', r'"buyingPrice"\s*:\s*"?([\d.]+)"?']:
+            match = re.search(pattern, driver.page_source)
+            if match:
+                price_text = f"${match.group(1)}"
+                break
+
+        if not price_text:
+            selectors = [".a-price .a-offscreen", '[class*="price"]', '[itemprop*="price"]']
+            for sel in selectors:
+                try:
+                    el = driver.find_element(By.CSS_SELECTOR, sel)
+                    text = el.text or el.get_attribute("innerText") or ""
+                    if re.search(r'\d', text):
+                        price_text = text
+                        break
+                except Exception:
+                    continue
+
+        print(f"✅ {price_text or 'no price'}")
+
+    driver.quit()
+    print(f"\n✅ Screenshots saved to: {bill_dir}")
+    print(f"Run 'rclone copy {bill_dir} onedrive:OPS-1\\ Operations/FY27\\ Finances/screenshots/{bill_title}/' to upload")
+
+
+# ============================================================
+# COMMAND: bill-request
+# ============================================================
+def cmd_bill_request(args):
+    """Submit a bill to CampusLabs Engage."""
+    # This wraps the existing automation.py
+    cmd = [sys.executable, os.path.join(SCRIPT_DIR, "automation.py")]
+    if args.fresh:
+        cmd.append("--fresh")
+    os.execv(sys.executable, cmd)
+
+
+# ============================================================
+# COMMAND: purchase
+# ============================================================
+def cmd_purchase(args):
+    """Create purchase requests on Engage from the Ordering sheet."""
+    df_order = load_ordering()
+
+    # Filter to rows with Order IDs but not yet purchased
+    df_pending = df_order[
+        (df_order["Order ID (YYMMDD_vendor_gburdell3)"].astype(str).str.strip() != "") &
+        (df_order["Status"].astype(str).str.strip().isin(["", "pending purchase"]))
+    ]
+
+    if df_pending.empty:
+        print("No pending orders found in the Ordering sheet.")
+        print("Use the web app to create orders first (Order page → select items → Create Order)")
+        sys.exit(0)
+
+    # Group by Order ID
+    orders = {}
+    for _, row in df_pending.iterrows():
+        oid = str(row["Order ID (YYMMDD_vendor_gburdell3)"]).strip()
+        if oid not in orders:
+            orders[oid] = []
+        orders[oid].append(row)
+
+    print(f"\nPending Orders ({len(orders)}):\n")
+    order_list = list(orders.items())
+    for i, (oid, items) in enumerate(order_list, 1):
+        vendor = str(items[0].get("Vendor", "")).strip() or "Unknown"
+        total = sum(float(str(it.get("Allocation", 0)).replace("$", "").replace(",", "") or 0) for it in items)
+        print(f"  {i}. {oid} — {vendor} — {len(items)} items — ${total:.2f}")
+
+    if args.order:
+        selected_oid = args.order
+    else:
+        choice = input("\nSelect order (number or ID): ").strip()
+        if choice.isdigit() and 1 <= int(choice) <= len(order_list):
+            selected_oid = order_list[int(choice) - 1][0]
+        else:
+            selected_oid = choice
+
+    if selected_oid not in orders:
+        print(f"Order '{selected_oid}' not found")
+        sys.exit(1)
+
+    order_items = orders[selected_oid]
+    vendor = str(order_items[0].get("Vendor", "")).strip()
+
+    print(f"\n{'='*60}")
+    print(f"Purchase Request: {selected_oid}")
+    print(f"Vendor: {vendor}")
+    print(f"{'='*60}")
+    print(f"\n{'Item':<35} {'Qty':<5} {'Allocation':<12}")
+    print("-" * 55)
+    total = 0
+    for it in order_items:
+        name = str(it.get("Item Name", ""))[:34]
+        qty = str(it.get("Quantity", ""))
+        alloc = float(str(it.get("Allocation", 0)).replace("$", "").replace(",", "") or 0)
+        total += alloc
+        print(f"  {name:<33} {qty:<5} ${alloc:.2f}")
+    print(f"\n  Total: ${total:.2f}")
+
+    confirm = input(f"\nSubmit purchase request to Engage? [Y/n]: ").strip().lower()
+    if confirm == "n":
+        print("Cancelled.")
+        sys.exit(0)
+
+    # Run the Engage automation
+    cmd = [sys.executable, os.path.join(SCRIPT_DIR, "automation_purchase.py")]
+    if args.fresh:
+        cmd.append("--fresh")
+    os.execv(sys.executable, cmd)
+
+
+# ============================================================
+# COMMAND: price-check
+# ============================================================
+def cmd_price_check(args):
+    """Check current prices vs allocation, generate Amazon cart."""
+    import re
+    import time
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service
+    from selenium.webdriver.common.by import By
+
+    df = load_xlsx()
+    bill_title = select_bill(df, args.bill)
+    items = df[df["Bill Title"].astype(str).str.strip() == bill_title]
+
+    print(f"\n💰 Price Check: {bill_title} ({len(items)} items)\n")
+
+    # Setup Chrome
+    chrome_options = Options()
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+
+    service = Service()
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    driver.set_page_load_timeout(20)
+
+    results = []
+    total_allocated = 0
+    total_current = 0
+    total_overrun = 0
+
+    print(f"{'Item':<30} {'Allocated':<12} {'Current':<12} {'Delta'}")
+    print("-" * 70)
+
+    for _, row in items.iterrows():
+        item_name = str(row.get("Item Name", "")).strip()
+        url = str(row.get("Link", "")).strip()
+        try:
+            allocated = float(str(row.get("Cost", 0)).replace("$", "").replace(",", "") or 0)
+        except (ValueError, TypeError):
+            allocated = 0
+
+        qty = 1
+        try:
+            qty = int(float(str(row.get("Quantity", 1)) or 1))
+        except (ValueError, TypeError):
+            pass
+
+        current_price = None
+        if url and url.startswith("http"):
+            try:
+                driver.get(url)
+            except Exception:
+                pass
+            time.sleep(3)
+
+            # Scrape price
+            for pattern in [r'"priceAmount"\s*:\s*"?([\d.]+)"?', r'"buyingPrice"\s*:\s*"?([\d.]+)"?']:
+                match = re.search(pattern, driver.page_source)
+                if match:
+                    try:
+                        current_price = float(match.group(1))
+                    except ValueError:
+                        pass
+                    break
+
+            if current_price is None:
+                selectors = [".a-price .a-offscreen", '[class*="price"]']
+                for sel in selectors:
+                    try:
+                        el = driver.find_element(By.CSS_SELECTOR, sel)
+                        text = el.text or el.get_attribute("innerText") or ""
+                        price_match = re.search(r'\$?([\d,]+\.?\d*)', text)
+                        if price_match:
+                            current_price = float(price_match.group(1).replace(",", ""))
+                            break
+                    except Exception:
+                        continue
+
+        total_allocated += allocated * qty
+        delta_str = "—"
+        if current_price is not None:
+            delta = current_price - allocated
+            total_current += current_price * qty
+            total_overrun += max(0, delta * qty)
+            if delta > 0:
+                delta_str = f"\033[91m+${delta:.2f}\033[0m"  # Red
+            elif delta < 0:
+                delta_str = f"\033[92m-${abs(delta):.2f}\033[0m"  # Green
+            else:
+                delta_str = f"\033[92m$0.00\033[0m"
+            current_str = f"${current_price:.2f}"
+        else:
+            current_str = "—"
+            total_current += allocated * qty
+
+        print(f"  {item_name[:28]:<28} ${allocated:<10.2f} {current_str:<12} {delta_str}")
+
+        results.append({
+            "name": item_name,
+            "url": url,
+            "allocated": allocated,
+            "current": current_price,
+            "qty": qty,
+        })
+
+    driver.quit()
+
+    print(f"\n{'='*70}")
+    print(f"  Total Allocated: ${total_allocated:.2f}")
+    print(f"  Total Current:   ${total_current:.2f}")
+    if total_overrun > 0:
+        print(f"  \033[91mTotal Overrun:   +${total_overrun:.2f}\033[0m")
+    else:
+        print(f"  \033[92mNo overruns\033[0m")
+
+    # Generate Amazon cart
+    if args.cart:
+        amazon_items = []
+        for r in results:
+            if "amazon" in r.get("url", "").lower():
+                asin_match = re.search(r'/(?:dp|gp/product)/([A-Z0-9]{10})', r["url"])
+                if asin_match:
+                    amazon_items.append((asin_match.group(1), r["qty"]))
+
+        if amazon_items:
+            params = [f"ASIN.{i}={asin}&Quantity.{i}={qty}" for i, (asin, qty) in enumerate(amazon_items, 1)]
+            cart_url = "https://www.amazon.com/gp/aws/cart/add.html?" + "&".join(params)
+            print(f"\n🛒 Amazon Cart ({len(amazon_items)} items):")
+            print(f"   {cart_url}")
+        else:
+            print("\n  No Amazon items with valid ASINs found.")
+
+
+# ============================================================
+# MAIN
+# ============================================================
+def main():
+    parser = argparse.ArgumentParser(
+        description="MRG Finance CLI — bill requests, purchases, and price checking",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  mrg.py screenshots --fresh --bill "FY27 Budget"
+  mrg.py bill-request --fresh
+  mrg.py purchase --fresh
+  mrg.py price-check --bill "FY27 Budget" --cart
+        """
+    )
+    sub = parser.add_subparsers(dest="command")
+
+    # screenshots
+    p_ss = sub.add_parser("screenshots", help="Scrape prices + take screenshots")
+    p_ss.add_argument("--fresh", "-f", action="store_true", help="Sync from SharePoint first")
+    p_ss.add_argument("--bill", "-b", help="Bill title (skips interactive selection)")
+
+    # bill-request
+    p_br = sub.add_parser("bill-request", help="Submit bill to CampusLabs Engage")
+    p_br.add_argument("--fresh", "-f", action="store_true", help="Sync from SharePoint first")
+
+    # purchase
+    p_pr = sub.add_parser("purchase", help="Submit purchase requests to Engage")
+    p_pr.add_argument("--fresh", "-f", action="store_true", help="Sync from SharePoint first")
+    p_pr.add_argument("--order", "-o", help="Order ID (skips interactive selection)")
+
+    # price-check
+    p_pc = sub.add_parser("price-check", help="Check current prices vs allocation")
+    p_pc.add_argument("--fresh", "-f", action="store_true", help="Sync from SharePoint first")
+    p_pc.add_argument("--bill", "-b", help="Bill title (skips interactive selection)")
+    p_pc.add_argument("--cart", "-c", action="store_true", help="Generate Amazon cart link")
+
+    args = parser.parse_args()
+
+    if not args.command:
+        parser.print_help()
+        sys.exit(0)
+
+    # Fresh sync if requested
+    if getattr(args, "fresh", False):
+        fresh_sync()
+
+    # Dispatch
+    commands = {
+        "screenshots": cmd_screenshots,
+        "bill-request": cmd_bill_request,
+        "purchase": cmd_purchase,
+        "price-check": cmd_price_check,
+    }
+    commands[args.command](args)
+
+
+if __name__ == "__main__":
+    main()
