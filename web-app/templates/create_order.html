@@ -70,8 +70,8 @@
             <div style="display: flex; gap: 0.5rem;">
                 <button type="button" class="btn btn-ghost" onclick="checkSelectedPrices()">Check Prices</button>
                 <button type="submit" class="btn btn-primary" id="submit-btn" disabled
-                        onclick="this.disabled=true; this.textContent='Creating...'; this.form.submit();">
-                    Create Order
+                        onclick="this.disabled=true; this.textContent='Submitting...'; this.form.submit();">
+                    {% if request.args.get('filter_vendor') %}Add to Order{% else %}Create Order{% endif %}
                 </button>
             </div>
             <div class="price-results" style="display:none; margin-top:0.75rem;"></div>
