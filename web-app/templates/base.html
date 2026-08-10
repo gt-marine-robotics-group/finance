@@ -13,11 +13,20 @@
         <a href="{{ url_for('dashboard') }}" class="nav-brand">MRG Purchasing</a>
         <div class="nav-links">
             <span class="nav-user">{{ session.get('user_name', '') }}</span>
+            <span class="nav-status" id="nav-status" title="Checking...">●</span>
             <a href="{{ url_for('add_item') }}" class="btn btn-sm btn-primary">+ Add Item</a>
             <a href="{{ url_for('create_order') }}" class="btn btn-sm btn-ghost">Order</a>
             <a href="{{ url_for('logout') }}" class="btn btn-sm btn-ghost">Logout</a>
         </div>
     </nav>
+    <script>
+    fetch('/status').then(r=>r.json()).then(s=>{
+        const dot = document.getElementById('nav-status');
+        if(s.token==='ok') { dot.style.color='#16a34a'; dot.title='Token OK, sync: '+s.sync; }
+        else if(s.token==='expired') { dot.style.color='#dc2626'; dot.title='Token EXPIRED — needs refresh'; }
+        else { dot.style.color='#ca8a04'; dot.title='Token: '+s.token+', sync: '+s.sync; }
+    }).catch(()=>{});
+    </script>
     {% endif %}
 
     <main class="container">

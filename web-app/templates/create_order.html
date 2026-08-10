@@ -1,10 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Create Order - MRG Purchasing{% endblock %}
+{% block title %}Orders - MRG Purchasing{% endblock %}
 
 {% block content %}
-<div class="form-page" style="max-width: 800px;">
-    <h1>Create Order</h1>
-    <p class="text-muted">Select approved items to order. One order per vendor.</p>
+<div class="form-page" style="max-width: 900px;">
+    <h1>Orders</h1>
 
     <div class="toggle-group" style="margin-bottom: 1rem;">
         <a href="{{ url_for('create_order', group='vendor') }}" class="btn btn-sm {{ 'btn-primary' if group_by == 'vendor' else 'btn-ghost' }}">By Vendor</a>
@@ -18,13 +17,11 @@
     </div>
     {% else %}
 
-    {% for vendor, items in vendors.items() %}
-    <form method="POST" action="{{ url_for('submit_order') }}" class="order-vendor-form">
-        <input type="hidden" name="vendor" value="{{ vendor }}">
-
-        <details class="bill-dropdown" open>
+    <form method="POST" action="{{ url_for('submit_order') }}" id="order-form">
+        {% for group_name, items in vendors.items() %}
+        <details class="bill-dropdown" style="margin-bottom: 1rem;">
             <summary class="bill-header-toggle">
-                <h2>{{ vendor }} <span class="badge">{{ items|length }}</span></h2>
+                <h2>{{ group_name }} <span class="badge">{{ items|length }}</span></h2>
                 {% set ns = namespace(total=0) %}
                 {% for item in items %}
                     {% set cost_str = item.get('Cost', '0')|string|replace('$','')|replace(',','') %}
@@ -37,7 +34,7 @@
             <div class="order-items-list">
                 <div class="select-all-row" style="padding: 0.5rem 1rem;">
                     <label class="checkbox-label">
-                        <input type="checkbox" class="select-all-vendor"> <strong>Select All</strong>
+                        <input type="checkbox" class="select-all-group"> <strong>Select All</strong>
                     </label>
                 </div>
 
@@ -45,111 +42,127 @@
                 {% set cost_str = item.get('Cost', '0')|string|replace('$','')|replace(',','') %}
                 {% set qty = item.get('Quantity', '1')|string %}
                 <label class="checkbox-card">
-                    <input type="checkbox" name="item_ids" value="{{ item.get('Bill Item ID', '') }}">
+                    <input type="checkbox" name="item_ids" value="{{ item.get('Bill Item ID', '') }}"
+                           data-vendor="{{ item.get('Vendor', '') }}" data-cost="{{ cost_str }}">
                     <div class="checkbox-card-content">
                         <span class="item-name">{{ item.get('Item Name', 'Unnamed') }}</span>
                         <span class="item-meta">
                             ${{ "%.2f"|format(cost_str|float(0)) }}
                             {% if qty != '1' %} x {{ qty }}{% endif %}
-                            · {{ item.get('Bill Title', '')[:30] }}
+                            · {{ item.get('Vendor', '') }}
+                            {% if group_by == 'vendor' %} · {{ item.get('Bill Title', '')[:25] }}{% endif %}
                         </span>
-                        {% if item.get('Link') %}
-                        <a href="{{ item.get('Link') }}" target="_blank" class="review-link" style="font-size:0.7rem;">{{ item.get('Link', '')[:40] }}...</a>
+                        {% if item.get('Ordering Instructions') %}
+                        <span class="item-meta" style="color: var(--color-warning);">Note: {{ item.get('Ordering Instructions') }}</span>
                         {% endif %}
                     </div>
                 </label>
                 {% endfor %}
             </div>
-
-            <div class="bill-dropdown-actions" style="padding: 1rem;">
-                <button type="submit" class="btn btn-primary btn-block"
-                        onclick="this.disabled=true; this.textContent='Creating order...'; this.form.submit();">
-                    Create {{ vendor }} Order
-                </button>
-                <button type="button" class="btn btn-ghost btn-block check-prices-btn"
-                        onclick="checkPrices(this)">
-                    Check Prices
-                </button>
-                <div class="price-results" style="display:none; margin-top:0.75rem;"></div>
-            </div>
         </details>
+        {% endfor %}
+
+        <div class="order-actions" style="position: sticky; bottom: 0; background: var(--color-surface); padding: 1rem; border-top: 1px solid var(--color-border);">
+            <div id="order-summary" class="text-muted" style="margin-bottom: 0.5rem;">
+                <span id="selected-count">0</span> items selected · $<span id="selected-total">0.00</span>
+                <span id="vendor-warning" style="color: var(--color-danger); display: none;"> · Multiple vendors — will create separate orders</span>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+                <button type="button" class="btn btn-ghost" onclick="checkSelectedPrices()">Check Prices</button>
+                <button type="submit" class="btn btn-primary" id="submit-btn" disabled
+                        onclick="this.disabled=true; this.textContent='Creating...'; this.form.submit();">
+                    Create Order
+                </button>
+            </div>
+            <div class="price-results" style="display:none; margin-top:0.75rem;"></div>
+        </div>
     </form>
-    {% endfor %}
 
     {% endif %}
 </div>
 
 <script>
-document.querySelectorAll('.select-all-vendor').forEach(cb => {
+// Select all per group
+document.querySelectorAll('.select-all-group').forEach(cb => {
     cb.addEventListener('change', function() {
-        const form = this.closest('form');
-        form.querySelectorAll('input[name="item_ids"]').forEach(item => {
+        const details = this.closest('details');
+        details.querySelectorAll('input[name="item_ids"]').forEach(item => {
             item.checked = this.checked;
         });
+        updateSummary();
     });
 });
 
-function checkPrices(btn) {
-    const form = btn.closest('form');
-    const checkboxes = form.querySelectorAll('input[name="item_ids"]:checked');
-    if (checkboxes.length === 0) {
-        alert('Select items first');
-        return;
+// Update summary on any checkbox change
+document.querySelectorAll('input[name="item_ids"]').forEach(cb => {
+    cb.addEventListener('change', updateSummary);
+});
+
+function updateSummary() {
+    const checked = document.querySelectorAll('input[name="item_ids"]:checked');
+    const count = checked.length;
+    let total = 0;
+    const vendors = new Set();
+
+    checked.forEach(cb => {
+        total += parseFloat(cb.dataset.cost || 0);
+        if (cb.dataset.vendor) vendors.add(cb.dataset.vendor);
+    });
+
+    document.getElementById('selected-count').textContent = count;
+    document.getElementById('selected-total').textContent = total.toFixed(2);
+    document.getElementById('submit-btn').disabled = count === 0;
+
+    const warning = document.getElementById('vendor-warning');
+    if (vendors.size > 1) {
+        warning.style.display = 'inline';
+    } else {
+        warning.style.display = 'none';
     }
+}
 
+function checkSelectedPrices() {
+    const checked = document.querySelectorAll('input[name="item_ids"]:checked');
+    if (checked.length === 0) { alert('Select items first'); return; }
+
+    const btn = document.querySelector('.order-actions .btn-ghost');
     btn.disabled = true;
-    btn.textContent = 'Checking prices...';
+    btn.textContent = 'Checking...';
 
-    const resultsDiv = form.querySelector('.price-results');
+    const resultsDiv = document.querySelector('.price-results');
     resultsDiv.style.display = 'block';
-    resultsDiv.innerHTML = '<table class="price-table"><tr><th>Item</th><th>Allocated</th><th>Current</th><th>Delta</th></tr></table><p class="text-muted" id="price-progress">Checking 0/' + checkboxes.length + '...</p>';
+    resultsDiv.innerHTML = '<table class="price-table"><tr><th>Item</th><th>Allocated</th><th>Current</th><th>Delta</th></tr></table><p class="text-muted" id="price-progress">Checking 0/' + checked.length + '...</p>';
 
     const table = resultsDiv.querySelector('table');
-    const progress = resultsDiv.querySelector('#price-progress');
+    const progress = document.getElementById('price-progress');
     let count = 0;
 
-    // Use fetch with streaming
     const formData = new FormData();
-    checkboxes.forEach(cb => formData.append('item_ids', cb.value));
+    checked.forEach(cb => formData.append('item_ids', cb.value));
 
     fetch('{{ url_for("check_prices") }}', { method: 'POST', body: formData })
         .then(response => {
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
-
             function read() {
                 reader.read().then(({done, value}) => {
-                    if (done) {
-                        progress.remove();
-                        btn.disabled = false;
-                        btn.textContent = 'Check Prices';
-                        return;
-                    }
+                    if (done) { progress.remove(); btn.disabled = false; btn.textContent = 'Check Prices'; return; }
                     buffer += decoder.decode(value, {stream: true});
                     const lines = buffer.split('\n');
                     buffer = lines.pop();
-
                     lines.forEach(line => {
                         if (line.startsWith('data: ')) {
                             try {
                                 const r = JSON.parse(line.slice(6));
-                                if (r.done) {
-                                    progress.remove();
-                                    btn.disabled = false;
-                                    btn.textContent = 'Check Prices';
-                                    return;
-                                }
-                                if (r.error) {
-                                    progress.textContent = 'Error: ' + r.error;
-                                    return;
-                                }
+                                if (r.done) { progress.remove(); btn.disabled = false; btn.textContent = 'Check Prices'; return; }
+                                if (r.error) { progress.textContent = 'Error: ' + r.error; return; }
                                 count++;
-                                progress.textContent = 'Checking ' + count + '/' + checkboxes.length + '...';
+                                progress.textContent = 'Checking ' + count + '/' + checked.length + '...';
                                 const cls = r.warning ? 'price-warn' : 'price-ok';
                                 const currentStr = r.current !== null ? '$' + r.current.toFixed(2) : '—';
                                 const deltaStr = r.delta !== null ? (r.delta > 0 ? '+' : '') + '$' + r.delta.toFixed(2) : '—';
-                                table.innerHTML += `<tr class="${cls}"><td>${r.name}</td><td>$${r.allocated.toFixed(2)}</td><td>${currentStr}</td><td>${deltaStr}</td></tr>`;
+                                table.innerHTML += '<tr class="' + cls + '"><td>' + r.name + '</td><td>$' + r.allocated.toFixed(2) + '</td><td>' + currentStr + '</td><td>' + deltaStr + '</td></tr>';
                             } catch(e) {}
                         }
                     });
@@ -158,11 +171,7 @@ function checkPrices(btn) {
             }
             read();
         })
-        .catch(e => {
-            resultsDiv.innerHTML = '<p style="color:red;">Error: ' + e + '</p>';
-            btn.disabled = false;
-            btn.textContent = 'Check Prices';
-        });
+        .catch(e => { resultsDiv.innerHTML = '<p style="color:red;">Error: ' + e + '</p>'; btn.disabled = false; btn.textContent = 'Check Prices'; });
 }
 </script>
 {% endblock %}
