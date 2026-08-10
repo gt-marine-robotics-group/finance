@@ -649,13 +649,14 @@ def submit_order():
     qty_col = order_columns.index("Quantity") if "Quantity" in order_columns else None
 
     date_str = datetime.now().strftime("%y%m%d")
-    safe_name = purchaser.lower().replace(" ", "")[:10] if purchaser else "unknown"
     total_wrote = 0
     order_ids = []
 
     for vendor, vendor_items in vendor_groups.items():
         safe_vendor = vendor.lower().replace(" ", "").replace("-", "")[:10]
-        order_id = f"{date_str}_{safe_vendor}_{safe_name}"
+        # Use GT ID format (first letter + last name + number) from session name
+        gt_id = session.get("user_name", "unknown").lower().replace(" ", "")
+        order_id = f"{date_str}_{safe_vendor}_{gt_id}"
         order_ids.append(order_id)
 
         for item in vendor_items:
