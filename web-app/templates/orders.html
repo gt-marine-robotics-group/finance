@@ -85,6 +85,15 @@
                                 —
                             {% endif %}
                         </td>
+                        <td>
+                            <form method="POST" action="{{ url_for('delete_order_item') }}" style="display:inline">
+                                <input type="hidden" name="order_id" value="{{ order_id }}">
+                                <input type="hidden" name="bill_item_id" value="{{ item.get('Bill Item ID', '') }}">
+                                <input type="hidden" name="row_index" value="{{ item.get('_table_index', '') }}">
+                                <button type="submit" class="btn btn-sm btn-ghost btn-danger-text"
+                                        onclick="return confirm('Remove this item from the order?')">Remove</button>
+                            </form>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -103,6 +112,11 @@
                             onclick="return confirm('Mark all items in this order as purchased?')">
                         Mark Purchased
                     </button>
+                </form>
+                <form method="POST" action="{{ url_for('delete_order') }}" style="display: inline;">
+                    <input type="hidden" name="order_id" value="{{ order_id }}">
+                    <button type="submit" class="btn btn-sm btn-ghost btn-danger-text"
+                            onclick="return confirm('Delete this entire order?')">Delete Order</button>
                 </form>
             </div>
         </div>
