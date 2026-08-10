@@ -71,6 +71,11 @@ body {
     color: var(--color-text-muted);
 }
 
+.nav-status {
+    font-size: 1.2rem;
+    cursor: help;
+}
+
 /* --- Buttons --- */
 
 .btn {
