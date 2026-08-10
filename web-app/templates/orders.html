@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}View Orders - MRG Purchasing{% endblock %}
+
+{% block content %}
+<div class="form-page" style="max-width: 900px;">
+    <div class="dashboard-header">
+        <h1>Orders</h1>
+        <div style="display: flex; gap: 0.5rem;">
+            <form method="POST" action="{{ url_for('apply_order_formatting') }}" style="display: inline;">
+                <button type="submit" class="btn btn-sm btn-ghost" title="Apply pink highlighting to spacer rows on the Ordering sheet">Apply Formatting</button>
+            </form>
+            <a href="{{ url_for('create_order') }}" class="btn btn-sm btn-primary">+ Create Order</a>
+        </div>
+    </div>
+
+    {% if not orders %}
+    <div class="empty-state">
+        <p>No orders found in OrderT.</p>
+        <p class="text-muted">Create an order from the <a href="{{ url_for('create_order') }}">Create Order</a> page.</p>
+    </div>
+    {% else %}
+
+    {% for order_id, order in orders.items() %}
+    {% if not order_id.startswith('ungrouped_') %}
+    <details class="bill-dropdown" style="margin-bottom: 1rem;" {% if loop.index <= 3 %}open{% endif %}>
+        <summary class="bill-header-toggle">
+            <div>
+                <h2 style="margin: 0;">
+                    {{ order.vendor or 'Unknown Vendor' }}
+                    <span class="badge">{{ order.items|length }}</span>
+                </h2>
+                <span class="order-id-label">{{ order_id }}</span>
+            </div>
+            <div style="text-align: right;">
+                <span class="bill-total-inline">${{ "%.2f"|format(order.total_allocation) }}</span>
+                {% if order.status %}
+                <br>
+                {% set status_cls = order.status|lower|replace(' ', '-')|replace('_', '-') %}
+                <span class="status-badge status-{{ status_cls }}">{{ order.status }}</span>
+                {% endif %}
+            </div>
+        </summary>
+
+        <div style="padding: 0.75rem;">
+            {% if order.purchaser %}
+            <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 0.5rem;">Purchaser: {{ order.purchaser }}</p>
+            {% endif %}
+
+            <table class="order-table">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Qty</th>
+                        <th>Allocation</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in order.items %}
+                    <tr>
+                        <td>
+                            <span class="item-name">{{ item.get('Item Name', '') or item.get('Bill Item ID', 'Unknown') }}</span>
+                            {% if item.get('Description') %}
+                            <br><span class="text-muted" style="font-size: 0.8rem;">{{ item.get('Description')[:60] }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ item.get('Quantity', 1) }}</td>
+                        <td>
+                            {% set alloc = item.get('Allocation', '') or item.get('Total Cost', '') %}
+                            {% if alloc %}
+                                ${{ "%.2f"|format(alloc|string|replace('$','')|replace(',','')|float(0)) }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% set item_status = item.get('Status', '')|string|trim %}
+                            {% if item_status %}
+                                {% set status_cls = item_status|lower|replace(' ', '-')|replace('_', '-') %}
+                                <span class="status-badge status-{{ status_cls }}">{{ item_status }}</span>
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div class="order-card-actions">
+                <a href="{{ url_for('create_order') }}" class="btn btn-sm btn-ghost">+ Add Items</a>
+                <form method="POST" action="{{ url_for('mark_order_purchased') }}" style="display: inline;">
+                    <input type="hidden" name="order_id" value="{{ order_id }}">
+                    <select name="purchasing_method" class="input" style="display: inline-block; width: auto; font-size: 0.8rem; padding: 0.3rem 0.5rem;">
+                        <option value="purchased - SOFO">SOFO</option>
+                        <option value="purchased - cash">Cash</option>
+                        <option value="purchased - awaiting reimbursement">Awaiting Reimbursement</option>
+                    </select>
+                    <button type="submit" class="btn btn-sm btn-primary"
+                            onclick="return confirm('Mark all items in this order as purchased?')">
+                        Mark Purchased
+                    </button>
+                </form>
+            </div>
+        </div>
+    </details>
+    {% endif %}
+    {% endfor %}
+
+    {% endif %}
+</div>
+{% endblock %}

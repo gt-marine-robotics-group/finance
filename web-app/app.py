@@ -557,6 +557,118 @@ def export_csv(bill_title):
     return response
 
 
+# --- View Orders ---
+
+
+@app.route("/orders")
+@login_required
+def view_orders():
+    """Show all orders from OrderT grouped by Order ID."""
+    order_rows = xlsx_manager.graph_get_order_rows()
+    order_columns = xlsx_manager.graph_get_table_columns("OrderT")
+
+    # Find the Order ID column name (it has a long suffix)
+    order_id_col = "Order ID"
+    for col in order_columns:
+        if "Order ID" in col:
+            order_id_col = col
+            break
+
+    # Group by Order ID
+    orders = {}
+    for row in order_rows:
+        oid = str(row.get(order_id_col, "")).strip()
+        if not oid:
+            # Use Bill Item ID as fallback group
+            oid = f"ungrouped_{row.get('Bill Item ID', 'unknown')}"
+        if oid not in orders:
+            orders[oid] = {
+                "order_id": oid,
+                "items": [],
+                "vendor": "",
+                "total_allocation": 0.0,
+                "status": "",
+                "purchaser": "",
+            }
+        orders[oid]["items"].append(row)
+
+        # Derive vendor from order_id or from item data
+        vendor = str(row.get("Vendor", "")).strip()
+        if vendor and not orders[oid]["vendor"]:
+            orders[oid]["vendor"] = vendor
+
+        # Sum allocation
+        try:
+            alloc = float(str(row.get("Allocation", 0) or row.get("Total Cost", 0)).replace("$", "").replace(",", "") or 0)
+            orders[oid]["total_allocation"] += alloc
+        except (ValueError, TypeError):
+            pass
+
+        # Status (use the first non-empty one, or track majority)
+        status = str(row.get("Status", "")).strip()
+        if status and not orders[oid]["status"]:
+            orders[oid]["status"] = status
+
+        # Purchaser
+        purchaser = str(row.get("Purchaser", "")).strip()
+        if purchaser and not orders[oid]["purchaser"]:
+            orders[oid]["purchaser"] = purchaser
+
+    # If vendor is empty, try to extract from order_id (format: YYMMDD_vendor_user)
+    for oid, order in orders.items():
+        if not order["vendor"] and "_" in oid:
+            parts = oid.split("_")
+            if len(parts) >= 2:
+                order["vendor"] = parts[1].capitalize()
+
+    # Sort by order_id (newest first - they start with date)
+    sorted_orders = dict(sorted(orders.items(), key=lambda x: x[0], reverse=True))
+
+    return render_template("orders.html", orders=sorted_orders, order_id_col=order_id_col)
+
+
+@app.route("/orders/mark-purchased", methods=["POST"])
+@login_required
+def mark_order_purchased():
+    """Mark all items in an order as purchased."""
+    order_id = request.form.get("order_id", "").strip()
+    purchasing_method = request.form.get("purchasing_method", "purchased - SOFO").strip()
+
+    if not order_id:
+        flash("No order ID provided", "error")
+        return redirect(url_for("view_orders"))
+
+    order_columns = xlsx_manager.graph_get_table_columns("OrderT")
+
+    # Find the Order ID column name
+    order_id_col = "Order ID"
+    for col in order_columns:
+        if "Order ID" in col:
+            order_id_col = col
+            break
+
+    success = xlsx_manager.graph_update_order_status(order_id_col, order_id, purchasing_method, order_columns)
+
+    if success:
+        flash(f"Marked order '{order_id}' as {purchasing_method}", "success")
+    else:
+        flash(f"Failed to update order '{order_id}'", "error")
+
+    return redirect(url_for("view_orders"))
+
+
+@app.route("/orders/apply-formatting", methods=["POST"])
+@login_required
+def apply_order_formatting():
+    """Apply pink conditional formatting to spacer rows on the Ordering sheet."""
+    success = xlsx_manager.graph_apply_spacer_formatting()
+    if success:
+        flash("Applied pink formatting to spacer rows", "success")
+    else:
+        flash("Failed to apply formatting — see docs for manual method", "error")
+    return redirect(url_for("view_orders"))
+
+
 # --- Create Order ---
 
 
