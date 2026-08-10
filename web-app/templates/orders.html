@@ -9,9 +9,6 @@
             <form method="POST" action="{{ url_for('force_pull') }}" style="display: inline;">
                 <button type="submit" class="btn btn-sm btn-ghost">Sync</button>
             </form>
-            <form method="POST" action="{{ url_for('apply_order_formatting') }}" style="display: inline;">
-                <button type="submit" class="btn btn-sm btn-ghost" title="Apply pink highlighting to spacer rows on the Ordering sheet">Apply Formatting</button>
-            </form>
             <a href="{{ url_for('create_order') }}" class="btn btn-sm btn-primary">+ Create Order</a>
         </div>
     </div>
