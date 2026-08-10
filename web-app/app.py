@@ -669,6 +669,107 @@ def apply_order_formatting():
     return redirect(url_for("view_orders"))
 
 
+@app.route("/orders/delete", methods=["POST"])
+@login_required
+def delete_order():
+    """Delete all items in an order (clear rows on OrderT)."""
+    import requests as _requests
+
+    order_id = request.form.get("order_id", "").strip()
+    if not order_id:
+        flash("No order specified", "error")
+        return redirect(url_for("view_orders"))
+
+    creds = xlsx_manager._get_graph_token()
+    if not creds:
+        flash("Graph API unavailable", "error")
+        return redirect(url_for("view_orders"))
+
+    access_token, drive_id, file_id = creds
+    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+
+    # Get all rows and find matching ones
+    rows_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/OrderT/rows"
+    resp = _requests.get(rows_url, headers=headers, timeout=15)
+    if resp.status_code != 200:
+        flash("Failed to read orders", "error")
+        return redirect(url_for("view_orders"))
+
+    order_columns = xlsx_manager.graph_get_table_columns("OrderT")
+    order_id_col_name = next((c for c in order_columns if "Order ID" in c), "Order ID")
+
+    to_clear = []
+    for row in resp.json().get("value", []):
+        vals = row["values"][0]
+        oid_idx = order_columns.index(order_id_col_name)
+        row_oid = str(vals[oid_idx]).strip() if vals[oid_idx] else ""
+        if row_oid == order_id:
+            to_clear.append(row["index"])
+
+    # Clear each row
+    cleared = 0
+    for idx in to_clear:
+        sheet_row = idx + 3
+        try:
+            url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='A{sheet_row}:R{sheet_row}')"
+            _requests.patch(url, headers=headers, json={"values": [[""] * 18]}, timeout=30)
+            cleared += 1
+        except Exception:
+            pass
+
+    # Also update BillsT items back to "bill approved"
+    for row in resp.json().get("value", []):
+        vals = row["values"][0]
+        oid_idx = order_columns.index(order_id_col_name)
+        row_oid = str(vals[oid_idx]).strip() if vals[oid_idx] else ""
+        if row_oid == order_id:
+            bill_item_id = str(vals[order_columns.index("Bill Item ID")]).strip() if "Bill Item ID" in order_columns else ""
+            if bill_item_id:
+                xlsx_manager.update_item(bill_item_id, {"Status": "bill approved"})
+
+    flash(f"Deleted order '{order_id}' ({cleared} rows)", "success")
+    return redirect(url_for("view_orders"))
+
+
+@app.route("/orders/delete-item", methods=["POST"])
+@login_required
+def delete_order_item():
+    """Remove a single item from an order."""
+    import requests as _requests
+
+    order_id = request.form.get("order_id", "").strip()
+    row_index = request.form.get("row_index", "").strip()
+    bill_item_id = request.form.get("bill_item_id", "").strip()
+
+    if not row_index:
+        flash("No item specified", "error")
+        return redirect(url_for("view_orders"))
+
+    creds = xlsx_manager._get_graph_token()
+    if not creds:
+        flash("Graph API unavailable", "error")
+        return redirect(url_for("view_orders"))
+
+    access_token, drive_id, file_id = creds
+    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+
+    # Clear the row
+    sheet_row = int(row_index) + 3
+    try:
+        url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='A{sheet_row}:R{sheet_row}')"
+        _requests.patch(url, headers=headers, json={"values": [[""] * 18]}, timeout=30)
+
+        # Update BillsT item back to "bill approved"
+        if bill_item_id:
+            xlsx_manager.update_item(bill_item_id, {"Status": "bill approved"})
+
+        flash("Item removed from order", "success")
+    except Exception as e:
+        flash(f"Failed to remove item: {e}", "error")
+
+    return redirect(url_for("view_orders"))
+
+
 # --- Create Order ---
 
 
