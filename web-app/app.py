@@ -778,15 +778,15 @@ def submit_order():
             if vals[0] and str(vals[0]).strip():
                 existing_order_ids.add(str(vals[0]).strip())
 
-    # Find max "Order N" number for separator
+    # Find max "Order N" number for separator (stored in Item Name column)
     max_order_num = 0
     if resp.status_code == 200:
         for row in resp.json().get("value", []):
             vals = row["values"][0]
-            oid = str(vals[0]).strip() if vals[0] else ""
-            if oid.startswith("Order") and not vals[1]:
+            item_name = str(vals[3]).strip() if vals[3] else ""
+            if item_name.startswith("Order") and not vals[1]:
                 try:
-                    num = int(oid.replace("Order", "").strip())
+                    num = int(item_name.replace("Order", "").strip())
                     if num > max_order_num:
                         max_order_num = num
                 except ValueError:
@@ -804,8 +804,9 @@ def submit_order():
             max_order_num += 1
             first_empty += 1  # Skip one blank row for visual separation
             sep_row = first_empty + 3
-            sep_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{chr(65 + order_id_col)}{sep_row}')"
-            _requests.patch(sep_url, headers=headers, json={"values": [[f"Order {max_order_num}"]]}, timeout=10)
+            item_name_col = order_columns.index("Item Name") if "Item Name" in order_columns else 3
+            sep_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{chr(65 + item_name_col)}{sep_row}')"
+            _requests.patch(sep_url, headers=headers, json={"values": [[f"Order {max_order_num}"]]}, timeout=30)
             first_empty += 1
 
         for item in vendor_items:
