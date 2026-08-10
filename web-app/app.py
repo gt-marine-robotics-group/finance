@@ -1067,25 +1067,6 @@ def force_pull():
 
 
 if __name__ == "__main__":
-    import sys
-
-    # Prevent duplicate instances
-    PID_FILE = "/tmp/mrg-web-app.pid"
-    if os.path.exists(PID_FILE):
-        old_pid = open(PID_FILE).read().strip()
-        try:
-            os.kill(int(old_pid), 0)
-            print(f"Already running (PID {old_pid}). Kill it first or delete {PID_FILE}")
-            sys.exit(1)
-        except (OSError, ValueError):
-            pass
-
-    with open(PID_FILE, "w") as f:
-        f.write(str(os.getpid()))
-
-    try:
-        screenshot_worker.start_worker()
-        app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-    finally:
-        if os.path.exists(PID_FILE):
-            os.remove(PID_FILE)
+    screenshot_worker.start_worker()
+    debug = os.environ.get("FLASK_DEBUG", "0") == "1"
+    app.run(debug=debug, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
