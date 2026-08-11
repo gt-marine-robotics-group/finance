@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Add Item to {{ bill_title }} - MRG Purchasing{% endblock %}
+
+{% block content %}
+<div class="form-page">
+    <h1>Add Item to Bill</h1>
+    <p class="text-muted" style="margin-bottom: 1.5rem;">Bill: <strong>{{ bill_title }}</strong></p>
+
+    <form method="POST" action="{{ url_for('bills.add_item_to_bill', bill_title=bill_title) }}" class="item-form">
+        <div class="form-group">
+            <label for="item_name">Item Name *</label>
+            <input type="text" id="item_name" name="item_name" required class="input" placeholder="e.g. 12V 10Ah LiFePO4 Battery">
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="cost">Unit Cost ($) *</label>
+                <input type="number" id="cost" name="cost" step="0.01" min="0" required class="input" placeholder="0.00">
+            </div>
+            <div class="form-group">
+                <label for="quantity">Quantity *</label>
+                <input type="number" id="quantity" name="quantity" min="0.01" step="any" value="1" required class="input">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="vendor">Vendor</label>
+            <input type="text" id="vendor" name="vendor" class="input" placeholder="e.g. Amazon, McMaster-Carr">
+        </div>
+
+        <div class="form-group">
+            <label for="link">Product Link / URL</label>
+            <input type="url" id="link" name="link" class="input" placeholder="https://...">
+        </div>
+
+        <div class="form-group">
+            <label for="budget_section">Budget Section</label>
+            <input type="text" id="budget_section" name="budget_section" class="input" placeholder="e.g. B03 - General Inventoried Goods">
+        </div>
+
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" rows="3" class="input" placeholder="Item details, part numbers, or specifications"></textarea>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-block">Add Item to Bill</button>
+            <a href="{{ url_for('bills.bill_view', bill_title=bill_title) }}" class="btn btn-ghost btn-block">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -8,15 +8,23 @@
         <div class="bill-meta">
             <span class="bill-total">Total: <strong>${{ "%.2f"|format(total) }}</strong></span>
             <span class="bill-count">{{ items|length }} item{{ 's' if items|length != 1 }}</span>
+            {% if is_locked %}
+            <span class="badge" style="background: rgba(234, 179, 8, 0.2); color: var(--color-warning); padding: 0.35rem 0.65rem; border-radius: 4px; font-weight: 600;">🔒 Read-Only (Approved / Submitted)</span>
+            {% endif %}
         </div>
         <div class="bill-actions">
-            <a href="{{ url_for('review_bill', bill_title=bill_title) }}" class="btn btn-sm btn-primary">Review</a>
-            <a href="{{ url_for('export_csv', bill_title=bill_title) }}" class="btn btn-sm btn-ghost">Export CSV</a>
-            <a href="{{ url_for('dashboard') }}" class="btn btn-sm btn-ghost">← Back</a>
-            <form method="POST" action="{{ url_for('delete_bill', bill_title=bill_title) }}" style="display:inline"
+            {% if not is_locked %}
+            <a href="{{ url_for('bills.add_item_to_bill', bill_title=bill_title) }}" class="btn btn-sm btn-primary">+ Add Item</a>
+            <a href="{{ url_for('bills.review_bill', bill_title=bill_title) }}" class="btn btn-sm btn-ghost">Review</a>
+            {% endif %}
+            <a href="{{ url_for('bills.export_csv', bill_title=bill_title) }}" class="btn btn-sm btn-ghost">Export CSV</a>
+            <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-sm btn-ghost">← Back</a>
+            {% if not is_locked %}
+            <form method="POST" action="{{ url_for('bills.delete_bill', bill_title=bill_title) }}" style="display:inline"
                   onsubmit="return confirm('Delete this entire bill and all its items? This cannot be undone.')">
                 <button type="submit" class="btn btn-sm btn-ghost btn-danger-text">Delete Bill</button>
             </form>
+            {% endif %}
         </div>
     </div>
 
@@ -60,15 +68,19 @@
                     {% endif %}
                 </td>
                 <td>
-                    <a href="{{ url_for('edit_item', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost">Edit</a>
-                    <a href="{{ url_for('copy_to_bill', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost" title="Copy to another bill">Copy</a>
-                    <form method="POST" action="{{ url_for('remove_from_bill', item_id=item.get('Bill Item ID', '')) }}" style="display:inline">
+                    {% if not is_locked %}
+                    <a href="{{ url_for('items.edit_item', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost">Edit</a>
+                    <a href="{{ url_for('bills.copy_to_bill', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost" title="Copy to another bill">Copy</a>
+                    <form method="POST" action="{{ url_for('bills.remove_from_bill', item_id=item.get('Bill Item ID', '')) }}" style="display:inline">
                         <button type="submit" class="btn btn-sm btn-ghost" title="Remove from bill">Remove</button>
                     </form>
-                    <form method="POST" action="{{ url_for('delete_item', item_id=item.get('Bill Item ID', '')) }}" style="display:inline"
+                    <form method="POST" action="{{ url_for('items.delete_item', item_id=item.get('Bill Item ID', '')) }}" style="display:inline"
                           onsubmit="return confirm('Delete this item permanently?')">
                         <button type="submit" class="btn btn-sm btn-ghost btn-danger-text" title="Delete item">Delete</button>
                     </form>
+                    {% else %}
+                    <span class="text-muted" style="font-size: 0.8rem;">🔒 Locked</span>
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}
@@ -110,15 +122,19 @@
                 {% if item.get('Link') %}
                 <a href="{{ item.get('Link') }}" target="_blank" class="btn btn-sm btn-ghost">Link</a>
                 {% endif %}
-                <a href="{{ url_for('edit_item', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost">Edit</a>
-                <a href="{{ url_for('copy_to_bill', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost">Copy</a>
-                <form method="POST" action="{{ url_for('remove_from_bill', item_id=item.get('Bill Item ID', '')) }}" style="display:inline">
+                {% if not is_locked %}
+                <a href="{{ url_for('items.edit_item', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost">Edit</a>
+                <a href="{{ url_for('bills.copy_to_bill', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost">Copy</a>
+                <form method="POST" action="{{ url_for('bills.remove_from_bill', item_id=item.get('Bill Item ID', '')) }}" style="display:inline">
                     <button type="submit" class="btn btn-sm btn-ghost">Remove</button>
                 </form>
-                <form method="POST" action="{{ url_for('delete_item', item_id=item.get('Bill Item ID', '')) }}" style="display:inline"
+                <form method="POST" action="{{ url_for('items.delete_item', item_id=item.get('Bill Item ID', '')) }}" style="display:inline"
                       onsubmit="return confirm('Delete this item permanently?')">
-                    <button type="submit" class="btn btn-sm btn-ghost"></button>
+                    <button type="submit" class="btn btn-sm btn-ghost btn-danger-text">Delete</button>
                 </form>
+                {% else %}
+                <span class="text-muted" style="font-size: 0.8rem;">🔒 Locked</span>
+                {% endif %}
             </div>
         </div>
         {% endfor %}

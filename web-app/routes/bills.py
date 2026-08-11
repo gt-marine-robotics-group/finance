@@ -83,10 +83,36 @@ def create_bill():
     return render_template("create_bill.html", backlog=backlog, bills=bills)
 
 
+LOCKED_STATUSES = {
+    "bill submitted",
+    "bill approved",
+    "pending purchase",
+    "purchased - sofo",
+    "purchased - cash",
+    "purchased - awaiting reimbursement",
+    "arrived",
+    "approved",
+    "submitted",
+}
+
+
+def is_bill_locked(bill_title: str) -> bool:
+    """Check if any item in a bill has been approved or submitted."""
+    items = xlsx_manager.get_items_by_bill(bill_title)
+    if not items:
+        return False
+    for item in items:
+        st = str(item.get("Status", "")).strip().lower()
+        if st in LOCKED_STATUSES:
+            return True
+    return False
+
+
 @bills_bp.route("/bill/<path:bill_title>")
 @login_required
 def bill_view(bill_title):
     items = xlsx_manager.get_items_by_bill(bill_title)
+    is_locked = is_bill_locked(bill_title)
 
     total = 0
     for item in items:
@@ -105,7 +131,72 @@ def bill_view(bill_title):
         else:
             item["_screenshot_path"] = ""
 
-    return render_template("bill_view.html", bill_title=bill_title, items=items, total=total)
+    return render_template("bill_view.html", bill_title=bill_title, items=items, total=total, is_locked=is_locked)
+
+
+@bills_bp.route("/bill/<path:bill_title>/add-item", methods=["GET", "POST"])
+@login_required
+def add_item_to_bill(bill_title):
+    """Add a new line item directly to an existing bill."""
+    if is_bill_locked(bill_title):
+        flash("Cannot add items to an approved or submitted bill.", "error")
+        return redirect(url_for("bills.bill_view", bill_title=bill_title))
+
+    if request.method == "POST":
+        item_name = request.form.get("item_name", "").strip()
+        cost_raw = request.form.get("cost", "0").strip()
+        qty_raw = request.form.get("quantity", "1").strip()
+        vendor = request.form.get("vendor", "").strip()
+        link = request.form.get("link", "").strip()
+        budget_section = request.form.get("budget_section", "").strip()
+        description = request.form.get("description", "").strip()
+
+        if not item_name:
+            flash("Item name is required", "error")
+            return redirect(url_for("bills.add_item_to_bill", bill_title=bill_title))
+
+        try:
+            cost = float(cost_raw)
+            qty = float(qty_raw)
+            if qty <= 0:
+                flash("Quantity must be greater than 0", "error")
+                return redirect(url_for("bills.add_item_to_bill", bill_title=bill_title))
+        except ValueError:
+            flash("Invalid cost or quantity", "error")
+            return redirect(url_for("bills.add_item_to_bill", bill_title=bill_title))
+
+        all_items = xlsx_manager.read_items()
+        max_id = 0
+        for i in all_items:
+            try:
+                b_id = int(float(str(i.get("Bill Item ID", 0))))
+                if b_id > max_id:
+                    max_id = b_id
+            except (ValueError, TypeError):
+                pass
+        new_item_id = max_id + 1
+
+        new_item_data = {
+            "Bill Item ID": new_item_id,
+            "Bill Title": bill_title,
+            "Item Name": item_name,
+            "Cost": cost,
+            "Quantity": qty,
+            "Vendor": vendor,
+            "Link": link,
+            "Budget Section": budget_section,
+            "Description": description,
+            "Status": "review requested",
+        }
+
+        success = xlsx_manager.add_queue_item(new_item_data)
+        if success:
+            flash(f"Added '{item_name}' to bill '{bill_title}'", "success")
+            return redirect(url_for("bills.bill_view", bill_title=bill_title))
+        else:
+            flash("Failed to add item to bill", "error")
+
+    return render_template("add_item_to_bill.html", bill_title=bill_title)
 
 
 @bills_bp.route("/bill/<path:bill_title>/export")
@@ -132,6 +223,9 @@ def export_csv(bill_title):
 @login_required
 def delete_bill(bill_title):
     """Delete all items in a bill (and its separator row) from BillsT."""
+    if is_bill_locked(bill_title):
+        flash("Cannot delete an approved or submitted bill.", "error")
+        return redirect(url_for("bills.bill_view", bill_title=bill_title))
     creds = xlsx_manager._get_graph_token()
     if not creds:
         flash("Graph API unavailable", "error")
@@ -269,6 +363,10 @@ def copy_to_bill(item_id):
 @login_required
 def review_bill(bill_title):
     """Swipeable review page to quickly edit items and see screenshots."""
+    if is_bill_locked(bill_title):
+        flash("Cannot review or modify an approved or submitted bill.", "error")
+        return redirect(url_for("bills.bill_view", bill_title=bill_title))
+
     items = xlsx_manager.get_items_by_bill(bill_title)
     for item in items:
         name = str(item.get("Item Name", ""))
@@ -284,6 +382,9 @@ def review_bill(bill_title):
 @login_required
 def review_save(bill_title):
     """Save edits from the review page."""
+    if is_bill_locked(bill_title):
+        flash("Cannot modify an approved or submitted bill.", "error")
+        return redirect(url_for("bills.bill_view", bill_title=bill_title))
     item_id = request.form.get("item_id", "").strip()
     if item_id:
         updates = {}
