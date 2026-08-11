@@ -604,6 +604,9 @@ def _fetch_queue_items() -> list[dict]:
             return []
 
         wb = load_workbook(LOCAL_XLSX, read_only=True, data_only=True)
+        if QUEUE_SHEET_NAME not in wb.sheetnames:
+            wb.close()
+            return []
         ws = wb[QUEUE_SHEET_NAME]
         headers_list, header_row = _get_headers(ws)
 
