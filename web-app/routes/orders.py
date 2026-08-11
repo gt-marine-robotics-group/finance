@@ -607,10 +607,12 @@ def edit_order_item(table_index):
 
     bill_item_id = str(item.get("Bill Item ID", "")).strip()
     max_bill_qty = None
+    ordering_instructions = ""
     if bill_item_id:
         all_bill_items = xlsx_manager.read_items()
         matching_b = next((bi for bi in all_bill_items if str(bi.get("Bill Item ID", "")).strip() == bill_item_id), None)
         if matching_b:
+            ordering_instructions = matching_b.get("Description", "")
             try:
                 max_bill_qty = float(str(matching_b.get("Quantity", 999999) or 999999).replace("$", "").replace(",", "") or 999999)
             except (ValueError, TypeError):
@@ -659,7 +661,7 @@ def edit_order_item(table_index):
             flash("Failed to update order item", "error")
         return redirect(url_for("orders.view_orders"))
 
-    return render_template("edit_order_item.html", item=item, table_index=table_index, max_bill_qty=max_bill_qty)
+    return render_template("edit_order_item.html", item=item, table_index=table_index, max_bill_qty=max_bill_qty, ordering_instructions=ordering_instructions)
 
 
 @orders_bp.route("/orders/edit/<order_id>", methods=["GET", "POST"])
@@ -746,16 +748,18 @@ def edit_order(order_id):
         flash(f"Updated order '{order_id}' ({updated_count} line items updated)", "success")
         return redirect(url_for("orders.view_orders"))
 
-    # Attach max_bill_qty to each order item for rendering
+    # Attach max_bill_qty and read-only _ordering_instructions from Bills sheet to each order item for rendering
     for item in order_items:
         b_id = str(item.get("Bill Item ID", "")).strip()
         matching_b = items_by_id.get(b_id) if b_id else None
         if matching_b:
+            item["_ordering_instructions"] = matching_b.get("Description", "")
             try:
                 item["_max_bill_qty"] = float(str(matching_b.get("Quantity", 999999) or 999999).replace("$", "").replace(",", "") or 999999)
             except (ValueError, TypeError):
                 item["_max_bill_qty"] = None
         else:
+            item["_ordering_instructions"] = item.get("Description", "") or item.get("Notes", "")
             item["_max_bill_qty"] = None
 
     return render_template("edit_order.html", order_id=order_id, items=order_items, vendor=current_vendor, purchaser=current_purchaser, status=current_status)

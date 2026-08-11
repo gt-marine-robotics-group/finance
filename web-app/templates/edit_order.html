@@ -95,10 +95,10 @@
             </div>
 
             <div class="form-group" style="margin-bottom: 0;">
-                <label for="notes_{{ idx }}">Ordering Instructions</label>
-                <input type="text" id="notes_{{ idx }}" name="notes_{{ idx }}" class="input"
-                       placeholder="Add part numbers, vendor options, or special ordering instructions..."
-                       value="{{ item.get('Notes', '') or item.get('Ordering Instructions', '') }}">
+                <label for="ordering_instructions_{{ idx }}">Ordering Instructions (Read-Only from Bills Table)</label>
+                <input type="text" id="ordering_instructions_{{ idx }}" class="input" readonly
+                       style="background: rgba(0,0,0,0.03); color: var(--color-text-muted); cursor: not-allowed;"
+                       value="{{ item.get('_ordering_instructions', '') or item.get('Description', '') }}">
             </div>
         </div>
         {% endfor %}
