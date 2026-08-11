@@ -387,15 +387,11 @@ def get_screenshot_path(item_name: str, bill_title: str = "") -> str | None:
         if os.path.exists(filepath):
             return filepath
 
-    filepath = os.path.join(SCREENSHOT_DIR, "_backlog", f"{safe_name}.png")
-    if os.path.exists(filepath):
-        return filepath
-
-    if os.path.exists(SCREENSHOT_DIR):
-        for subdir in os.listdir(SCREENSHOT_DIR):
-            filepath = os.path.join(SCREENSHOT_DIR, subdir, f"{safe_name}.png")
-            if os.path.exists(filepath):
-                return filepath
+    # Check common folders directly (O(1) stat calls)
+    for folder in ("_queue", "_backlog"):
+        filepath = os.path.join(SCREENSHOT_DIR, folder, f"{safe_name}.png")
+        if os.path.exists(filepath):
+            return filepath
 
     return None
 
