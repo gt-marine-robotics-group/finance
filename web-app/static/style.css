@@ -916,8 +916,12 @@ select.input {
     color: var(--color-text-muted);
 }
 
-.empty-state a {
+.empty-state a:not(.btn) {
     color: var(--color-primary);
+}
+
+.empty-state a.btn-primary {
+    color: white !important;
 }
 
 .text-muted {
