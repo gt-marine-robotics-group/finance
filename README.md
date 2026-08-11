@@ -4,11 +4,13 @@ Bill request automation, order management, price checking, and purchasing workfl
 
 ---
 
-## ⚡ Local Computer Setup & Quick Start
+## ⚡ Local Computer Setup & Quick Start (macOS / Linux / Windows)
 
 ### 1. Install CLI Tool Globally (`mrg-finance`)
 
-Prerequisite: Install `uv` (`curl -LsSf https://astral.sh/uv/install.sh | sh` or `brew install uv`).
+**Prerequisites**: Python 3.10+ and `uv`.
+- **macOS / Linux / WSL**: `curl -LsSf https://astral.sh/uv/install.sh | sh` *(or `brew install uv`)*
+- **Windows (PowerShell)**: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
 
 ```bash
 # Clone the repository
@@ -19,7 +21,7 @@ cd finance
 uv tool install .
 ```
 
-*Once installed, you can run `mrg-finance` from **any terminal/directory** on your computer!*
+*Once installed, `mrg-finance` (or `mrg-finance.exe` on Windows) is available from **any terminal/directory** on your computer!*
 
 ### 2. Primary CLI Commands
 
@@ -37,7 +39,7 @@ mrg-finance price-check --bill "FY27 Budget" --cart
 ### 3. Run Web App Dashboard Locally
 
 ```bash
-# Create virtual environment & install dependencies
+# Create virtual environment
 uv venv
 
 # Activate virtual environment:
@@ -46,24 +48,16 @@ uv venv
 # - Windows CMD:         .venv\Scripts\activate.bat
 source .venv/bin/activate
 
+# Install web app dependencies
 uv pip install -r requirements.txt
 
-# Start local server (macOS/Linux: python3, Windows: python)
-python3 web-app/app.py
+# Start local web app server
+python3 web-app/app.py   # On Windows: python web-app/app.py
 ```
 
 Open **`http://localhost:5000`** in your browser:
 - **Login Password**: `boats0519`
 - **User Name**: Your Name / GT ID *(e.g. `Aaron`)*
-
----
-
-### 🪟 Windows Notes (PowerShell & WSL 2)
-- **WSL 2 (Recommended for Windows)**: Works 100% identically to Linux/macOS out of the box.
-- **Native Windows (PowerShell / CMD)**:
-  1. Install Python 3.10+ and Google Chrome.
-  2. Install `uv` via PowerShell: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`.
-  3. Run `uv tool install .` in PowerShell. `mrg-finance.exe` will be available in your PATH.
 
 ---
 
