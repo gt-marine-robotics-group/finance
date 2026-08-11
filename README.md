@@ -72,15 +72,26 @@ To enable automatic screenshot & `.xlsx` syncing on your computer:
 
 2. **Configure GT OneDrive Remote (1-time setup)**:
    Run `rclone config` in your terminal:
-   - Type **`n`** for New Remote $\rightarrow$ Name it **`onedrive`**.
+   - Type **`n`** for New Remote $\rightarrow$ Name it **`onedrive`** *(Must be exactly `onedrive` in lowercase!)*.
    - Select **`Microsoft OneDrive`** $\rightarrow$ Press Enter through default prompts.
    - When the browser opens, log in with your **Georgia Tech SSO** credentials.
    - Select **OneDrive Business / SharePoint** and target the `OPS-1 Operations/FY27 Finances` folder.
 
-3. **How Syncing & Overwrite Protection Work**:
+3. **How Syncing Works**:
    - **Download Sync**: `mrg-finance --fresh` downloads the latest `.xlsx` and team screenshots from SharePoint.
    - **Upload Sync**: `mrg-finance screenshots` automatically uploads newly captured screenshots to SharePoint (`onedrive:OPS-1 Operations/FY27 Finances/screenshots/`).
-   - **🛡️ Zero Overwrite Risk**: Syncing uses `rclone copy --checksum`, which only copies missing or new files. Ground-truth bill screenshots (`screenshots/<bill_title>/<item_name>.png`) are permanently preserved and never overwritten by team syncs.
+
+---
+
+## 🛡️ Built-In System Reliability & Safeguards
+
+The system is designed with **5 strict technical safeguards** to prevent accidental mistakes or budget overruns:
+
+1. **🚫 Zero File Deletions (`rclone copy`)**: Syncing strictly uses `rclone copy --checksum` (never `rclone sync`). It **only adds missing files** and never deletes existing remote or local screenshots.
+2. **🔒 Duplicate Order Protection**: Items marked `pending purchase` or listed on `OrderT` are strictly locked. The web UI disables selection and the backend rejects duplicate submissions.
+3. **🛡️ Ground-Truth Screenshot Protection**: Existing bill submission screenshots are permanently preserved and never overwritten automatically when taking screenshots.
+4. **🛑 Read-Only Instructions & Quantity Caps**: Order forms enforce maximum quantity caps based on SOFO approval, and vendor `Ordering Instructions` are read-only to prevent accidental edits.
+5. **🩹 Graceful `rclone` Fallback**: If `rclone` is not installed or configured, the system output displays a notice and operates locally without crashing.
 
 ---
 
