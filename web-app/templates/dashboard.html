@@ -11,8 +11,9 @@
     </div>
 
     {# Quick-add bar #}
-    <form method="POST" action="{{ url_for('quick_add') }}" class="quick-add">
+    <form method="POST" action="{{ url_for('items.quick_add') }}" class="quick-add">
         <input type="text" name="item_name" placeholder="Quick add item..." required class="input">
+        <input type="number" name="quantity" value="1" min="0.01" step="any" placeholder="Qty" required class="input" style="width: 80px;">
         <input type="text" name="link" placeholder="Link (optional)" class="input quick-add-link">
         <button type="submit" class="btn btn-primary">+</button>
     </form>

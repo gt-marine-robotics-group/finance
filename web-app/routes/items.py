@@ -24,8 +24,9 @@ items_bp = Blueprint("items", __name__)
 @items_bp.route("/quick-add", methods=["POST"])
 @login_required
 def quick_add():
-    """Quick add — just name and optional link. Goes to backlog."""
+    """Quick add — item name, quantity, and optional link. Goes to backlog."""
     item_name = request.form.get("item_name", "").strip()
+    quantity_raw = request.form.get("quantity", "1").strip()
     link = request.form.get("link", "").strip()
     if link and not link.startswith("http"):
         link = "https://" + link
@@ -34,13 +35,21 @@ def quick_add():
         flash("Item name required", "error")
         return redirect(url_for("dashboard.dashboard"))
 
+    try:
+        qty_val = float(quantity_raw)
+        if qty_val <= 0:
+            qty_val = 1.0
+    except ValueError:
+        qty_val = 1.0
+
+    qty_str = str(int(qty_val)) if qty_val == int(qty_val) else str(qty_val)
     vendor = price_scraper.detect_vendor_from_url(link) if link else ""
 
     item_data = {
         "Item Name": item_name,
         "Link": link,
         "Cost": "",
-        "Quantity": "1",
+        "Quantity": qty_str,
         "Vendor": vendor,
         "Description": "",
         "Budget Section": "",
