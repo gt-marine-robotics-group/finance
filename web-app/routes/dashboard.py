@@ -62,21 +62,18 @@ def force_pull():
     """Force a fresh pull from SharePoint, bypassing all caches."""
     xlsx_manager.invalidate_all_caches()
 
-    # Delete local file so rclone is forced to re-download
-    if os.path.exists(xlsx_manager.LOCAL_XLSX):
-        try:
-            os.remove(xlsx_manager.LOCAL_XLSX)
-        except OSError:
-            pass
-
-    result = xlsx_manager.sync_pull()
+    # Perform synchronous sync (without deleting existing file to prevent broken dashboard rendering)
+    result = xlsx_manager.sync_pull(force=True)
     if result:
         if os.path.exists(xlsx_manager.LOCAL_XLSX):
             os.utime(xlsx_manager.LOCAL_XLSX, None)
         flash("Synced from SharePoint", "success")
     else:
         flash("Sync failed — check rclone config", "error")
-    return redirect(url_for("dashboard.dashboard"))
+
+    # Redirect back to referring page (orders, bills, dashboard, etc.)
+    next_page = request.referrer or url_for("dashboard.dashboard")
+    return redirect(next_page)
 
 
 @dashboard_bp.route("/status")

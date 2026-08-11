@@ -113,20 +113,23 @@ def _run_rclone(args: list[str]) -> bool:
         return False
 
 
-def sync_pull() -> bool:
-    """Pull latest xlsx from SharePoint in background when interval expires."""
+def sync_pull(force: bool = False) -> bool:
+    """Pull latest xlsx from SharePoint. Background by default, synchronous when force=True."""
     global _last_pull_time
     import time as _time
 
     now = _time.time()
-    if now - _last_pull_time < PULL_INTERVAL:
+    if not force and (now - _last_pull_time < PULL_INTERVAL):
         return True  # Use cached local copy
 
     _last_pull_time = now
+    local_dir = str(Path(LOCAL_XLSX).parent)
+    os.makedirs(local_dir, exist_ok=True)
+
+    if force:
+        return _run_rclone(["copy", "--checksum", RCLONE_REMOTE, local_dir])
 
     def _do_pull():
-        local_dir = str(Path(LOCAL_XLSX).parent)
-        os.makedirs(local_dir, exist_ok=True)
         _run_rclone(["copy", "--checksum", RCLONE_REMOTE, local_dir])
 
     # Trigger pull in background thread so HTTP request does not wait on rclone
