@@ -7,14 +7,17 @@ Bill request automation, order management, price checking, and purchasing workfl
 ## ⚡ Quick Start
 
 ```bash
-# 1. Run Web App locally / test suite
-source .venv/bin/activate && pytest tests/
+# 1. Install mrg-finance CLI globally via uv
+uv tool install .
 
-# 2. Primary Officer Command: Submit Bill Request to Engage
-python3 mrg.py bill-request --fresh
+# 2. Or install in editable dev mode
+uv pip install -e .
 
-# 3. Submit Purchase Request to Engage
-python3 mrg.py purchase --fresh
+# 3. Primary Officer Command: Submit Bill Request to Engage
+mrg-finance bill-request --fresh
+
+# 4. Submit Purchase Request to Engage
+mrg-finance purchase --fresh
 ```
 
 ---
@@ -22,7 +25,7 @@ python3 mrg.py purchase --fresh
 ## 🚀 Core Features
 
 - **🌐 Web App (`http://<sim-pc-ip>:5000`)**: Dashboard, item queue, inline bill editing, vendor order creation, and side-by-side screenshot comparisons.
-- **🤖 Engage CLI Automation**: Selenium scripts for CampusLabs Engage bill & purchase request submissions with GT SSO + Duo MFA.
+- **🤖 Engage CLI Automation (`mrg-finance`)**: `uv`-installable CLI with Selenium scripts for CampusLabs Engage bill & purchase request submissions with GT SSO + Duo MFA.
 - **🛡️ Ground-Truth Protection**: Original bill screenshots (`screenshots/<bill_title>/`) are permanently preserved and never overwritten.
 
 ---
@@ -55,12 +58,12 @@ python3 mrg.py purchase --fresh
 </details>
 
 <details>
-<summary><strong>4. 🤖 CLI Commands Reference (`mrg.py`)</strong></summary>
+<summary><strong>4. 🤖 CLI Commands Reference (`mrg-finance`)</strong></summary>
 
-- `python3 mrg.py bill-request --fresh`: Interactive bill selection, screenshot audit/capture, web review window launch, and CampusLabs Engage submission.
-- `python3 mrg.py purchase --fresh`: Interactive live price check, web order review launch, and Engage purchase request submission.
-- `python3 mrg.py price-check`: Headless live price check comparing online prices vs approved allocations.
-- `python3 mrg.py screenshots`: Batch pre-capturing item screenshots.
+- `mrg-finance bill-request --fresh`: Interactive bill selection, screenshot audit/capture, web review window launch, and CampusLabs Engage submission.
+- `mrg-finance purchase --fresh`: Interactive live price check, web order review launch, and Engage purchase request submission.
+- `mrg-finance price-check`: Headless live price check comparing online prices vs approved allocations.
+- `mrg-finance screenshots`: Batch pre-capturing item screenshots.
 </details>
 
 <details>
