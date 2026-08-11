@@ -39,14 +39,24 @@
                 </div>
 
                 {% for item in items %}
+                {% set b_id = item.get('Bill Item ID', '')|string %}
+                {% set is_already_ordered = b_id in ordered_items_map %}
                 {% set cost_str = item.get('Cost', '0')|string|replace('$','')|replace(',','') %}
                 {% set qty = item.get('Quantity', '1')|string %}
-                <label class="checkbox-card">
-                    <input type="checkbox" name="item_ids" value="{{ item.get('Bill Item ID', '') }}"
+                <label class="checkbox-card" {% if is_already_ordered %}style="opacity: 0.65; background: rgba(0,0,0,0.02); cursor: not-allowed;"{% endif %}>
+                    <input type="checkbox" name="item_ids" value="{{ b_id }}"
+                           {% if is_already_ordered %}disabled{% endif %}
                            data-vendor="{{ item.get('Vendor', '') }}" data-cost="{{ cost_str }}"
-                           data-item-id="{{ item.get('Bill Item ID', '') }}">
+                           data-item-id="{{ b_id }}">
                     <div class="checkbox-card-content">
-                        <span class="item-name">{{ item.get('Item Name', 'Unnamed') }}</span>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span class="item-name">{{ item.get('Item Name', 'Unnamed') }}</span>
+                            {% if is_already_ordered %}
+                            <span class="badge" style="background: rgba(234, 179, 8, 0.2); color: #d97706; font-weight: 600; font-size: 0.75rem;">
+                                🔒 Already Ordered ({{ ordered_items_map[b_id] }})
+                            </span>
+                            {% endif %}
+                        </div>
                         <span class="item-meta">
                             ${{ "%.2f"|format(cost_str|float(0)) }}
                             · {{ item.get('Vendor', '') }}
@@ -54,9 +64,10 @@
                         </span>
                         <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.35rem;" onclick="event.stopPropagation();">
                             <span style="font-size: 0.8rem; font-weight: 500; color: var(--color-text-muted);">Order Qty (Max {{ qty }}):</span>
-                            <input type="number" name="quantity_{{ item.get('Bill Item ID', '') }}"
-                                   id="qty_input_{{ item.get('Bill Item ID', '') }}"
+                            <input type="number" name="quantity_{{ b_id }}"
+                                   id="qty_input_{{ b_id }}"
                                    value="{{ qty }}" min="0.01" max="{{ qty }}" step="any" required class="input item-qty-input"
+                                   {% if is_already_ordered %}disabled{% endif %}
                                    style="width: 85px; padding: 0.2rem 0.4rem; font-size: 0.85rem;"
                                    oninput="updateSummary()">
                         </div>

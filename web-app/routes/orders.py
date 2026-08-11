@@ -314,7 +314,16 @@ def create_order():
             groups[key] = []
         groups[key].append(item)
 
-    return render_template("create_order.html", vendors=groups, group_by=group_by)
+    # Map of Bill Item ID -> Order ID for items already added to OrderT
+    order_rows = xlsx_manager.graph_get_order_rows()
+    ordered_items_map = {}
+    for r in order_rows:
+        b_id = str(r.get("Bill Item ID", "")).strip()
+        oid = str(r.get("Order ID (YYMMDD_vendor_gburdell3)", "") or r.get("Order ID", "")).strip()
+        if b_id and oid and not oid.startswith("ungrouped_"):
+            ordered_items_map[b_id] = oid
+
+    return render_template("create_order.html", vendors=groups, group_by=group_by, ordered_items_map=ordered_items_map)
 
 
 @orders_bp.route("/create-order/submit", methods=["POST"])
@@ -420,34 +429,12 @@ def submit_order():
 
         for item in vendor_items:
             item_id = str(item.get("Bill Item ID", "")).strip()
-            try:
-                max_bill_qty = float(str(item.get("Quantity", 1) or 1).replace("$", "").replace(",", "") or 1)
-            except (ValueError, TypeError):
-                max_bill_qty = 999999.0
+            item_name = item.get("Item Name", "Item")
 
-            # Read custom order quantity from form if provided
-            custom_qty_raw = request.form.get(f"quantity_{item_id}", "").strip()
-            if custom_qty_raw:
-                try:
-                    add_qty = float(custom_qty_raw)
-                    if add_qty <= 0:
-                        flash("Quantity must be greater than 0", "error")
-                        return redirect(url_for("orders.create_order"))
-                    if add_qty > max_bill_qty:
-                        item_name = item.get("Item Name", "Item")
-                        flash(f"Order quantity ({add_qty}) for '{item_name}' cannot exceed approved bill quantity ({max_bill_qty})", "error")
-                        return redirect(url_for("orders.create_order"))
-                except ValueError:
-                    flash(f"Invalid quantity '{custom_qty_raw}'", "error")
-                    return redirect(url_for("orders.create_order"))
-            else:
-                add_qty = min(max_bill_qty, 1.0) if max_bill_qty >= 1 else max_bill_qty
-
-            # Deduplication: If item is ALREADY in an existing order on OrderT, update its quantity instead of creating a duplicate row!
+            # Reject adding an item that is ALREADY in an existing order to prevent duplicate orders & cost overruns!
             if item_id in existing_bill_item_map:
-                row_idx, current_qty = existing_bill_item_map[item_id]
-                new_qty = current_qty + add_qty
-                sheet_row = row_idx + 3
+                flash(f"Item '{item_name}' (ID: {item_id}) is already included in an existing order and cannot be added again.", "error")
+                return redirect(url_for("orders.create_order"))
                 col_letter = col_letters[qty_col_idx] if qty_col_idx < len(col_letters) else "F"
                 update_qty_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{col_letter}{sheet_row}')"
                 try:
