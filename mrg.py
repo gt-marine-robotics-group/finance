@@ -79,8 +79,7 @@ def load_xlsx():
     import warnings
     warnings.filterwarnings('ignore')
 
-    df = pd.read_excel(XLSX_PATH, sheet_name=SHEET_NAME)
-    df.fillna("", inplace=True)
+    df = pd.read_excel(XLSX_PATH, sheet_name=SHEET_NAME).astype(object).fillna("")
     df.columns = df.columns.str.strip()
 
     # Filter to real items
@@ -100,8 +99,7 @@ def load_ordering():
     import warnings
     warnings.filterwarnings('ignore')
 
-    df = pd.read_excel(XLSX_PATH, sheet_name=ORDERING_SHEET, header=1)
-    df.fillna("", inplace=True)
+    df = pd.read_excel(XLSX_PATH, sheet_name=ORDERING_SHEET, header=1).astype(object).fillna("")
     df.columns = df.columns.str.strip()
     return df
 

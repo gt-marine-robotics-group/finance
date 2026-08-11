@@ -61,12 +61,11 @@ if not USERNAME:
 if not PASSWORD:
     PASSWORD = getpass.getpass("Enter your password: ")
 if not BILL_NO:
-    # Show available bill titles from spreadsheet
     if CSV_FILE.endswith(".xlsx"):
         _df_temp = pd.read_excel(CSV_FILE, sheet_name=SHEET_NAME)
     else:
         _df_temp = pd.read_csv(CSV_FILE)
-    _df_temp.fillna("", inplace=True)
+    _df_temp = _df_temp.astype(object).fillna("")
     _df_temp.columns = _df_temp.columns.str.strip()
     _titles = _df_temp["Bill Title"].astype(str).str.strip().unique()
     _skip = ("nan", "request", "liquid", "misc")
@@ -338,7 +337,7 @@ if CSV_FILE.endswith(".xlsx"):
     df = pd.read_excel(CSV_FILE, sheet_name=SHEET_NAME)
 else:
     df = pd.read_csv(CSV_FILE)
-df.fillna("", inplace=True)
+df = df.astype(object).fillna("")
 df.columns = df.columns.str.strip()
 
 if "Cost" in df.columns:

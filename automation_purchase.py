@@ -68,7 +68,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 excel_file = pd.ExcelFile(XLSX_PATH)
-df_bills = pd.read_excel(excel_file, sheet_name="Bills").fillna("")
+df_bills = pd.read_excel(excel_file, sheet_name="Bills").astype(object).fillna("")
 df_bills.columns = df_bills.columns.str.strip()
 
 # Build mapping of Bill Item ID -> Bill Row info
@@ -80,7 +80,7 @@ for _, row in df_bills.iterrows():
 
 df_orders = pd.DataFrame()
 if "Ordering" in excel_file.sheet_names:
-    df_orders = pd.read_excel(excel_file, sheet_name="Ordering").fillna("")
+    df_orders = pd.read_excel(excel_file, sheet_name="Ordering").astype(object).fillna("")
     df_orders.columns = df_orders.columns.str.strip()
 
 # Check for Order ID column name
