@@ -6,9 +6,6 @@
     <div class="dashboard-header">
         <h1>Current Orders</h1>
         <div style="display: flex; gap: 0.5rem;">
-            <form method="POST" action="{{ url_for('force_pull') }}" style="display: inline;">
-                <button type="submit" class="btn btn-sm btn-ghost">Sync</button>
-            </form>
             <a href="{{ url_for('create_order') }}" class="btn btn-sm btn-primary">+ Create Order</a>
         </div>
     </div>
