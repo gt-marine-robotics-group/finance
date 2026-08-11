@@ -95,10 +95,10 @@
             </div>
 
             <div class="form-group" style="margin-bottom: 0;">
-                <label for="notes_{{ idx }}">Notes (OrderT Column J)</label>
+                <label for="notes_{{ idx }}">Ordering Instructions</label>
                 <input type="text" id="notes_{{ idx }}" name="notes_{{ idx }}" class="input"
-                       placeholder="Add tracking #, shipping notes, or special instructions..."
-                       value="{{ item.get('Notes', '') }}">
+                       placeholder="Add part numbers, vendor options, or special ordering instructions..."
+                       value="{{ item.get('Notes', '') or item.get('Ordering Instructions', '') }}">
             </div>
         </div>
         {% endfor %}
