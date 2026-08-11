@@ -166,5 +166,5 @@ def test_prevent_duplicate_order_item_submission(client):
          patch("requests.get", side_effect=mock_requests_get):
         response = client.post("/create-order/submit", data={"item_ids": ["101"]}, follow_redirects=True)
         assert response.status_code == 200
-        assert b"already included in an existing order" in response.data
+        assert b"is already assigned to an order" in response.data or b"already included in an existing order" in response.data
 

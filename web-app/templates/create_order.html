@@ -40,7 +40,8 @@
 
                 {% for item in items %}
                 {% set b_id = item.get('Bill Item ID', '')|string %}
-                {% set is_already_ordered = b_id in ordered_items_map %}
+                {% set status_str = item.get('Status', '')|string|lower|trim %}
+                {% set is_already_ordered = (b_id in ordered_items_map) or (status_str == 'pending purchase') or ('purchased' in status_str) or (status_str == 'arrived') %}
                 {% set cost_str = item.get('Cost', '0')|string|replace('$','')|replace(',','') %}
                 {% set qty = item.get('Quantity', '1')|string %}
                 <label class="checkbox-card" {% if is_already_ordered %}style="opacity: 0.65; background: rgba(0,0,0,0.02); cursor: not-allowed;"{% endif %}>
@@ -53,7 +54,7 @@
                             <span class="item-name">{{ item.get('Item Name', 'Unnamed') }}</span>
                             {% if is_already_ordered %}
                             <span class="badge" style="background: rgba(234, 179, 8, 0.2); color: #d97706; font-weight: 600; font-size: 0.75rem;">
-                                🔒 Already Ordered ({{ ordered_items_map[b_id] }})
+                                🔒 Pending Purchase {% if b_id in ordered_items_map %}({{ ordered_items_map[b_id] }}){% endif %}
                             </span>
                             {% endif %}
                         </div>
@@ -90,7 +91,7 @@
                 <button type="button" class="btn btn-ghost" onclick="checkSelectedPrices()">Check Prices</button>
                 <button type="submit" class="btn btn-primary" id="submit-btn" disabled
                         onclick="this.disabled=true; this.textContent='Submitting...'; this.form.submit();">
-                    {% if request.args.get('filter_vendor') %}Add to Order{% else %}Create Order{% endif %}
+                    {% if filter_vendor or request.args.get('filter_vendor') %}➕ Add Items to Order{% else %}🛒 Create Order{% endif %}
                 </button>
             </div>
             <div class="price-results" style="display:none; margin-top:0.75rem;"></div>
