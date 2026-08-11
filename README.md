@@ -55,7 +55,7 @@ python3 web-app/app.py   # On Windows: python web-app/app.py
 
 Open **`http://localhost:5000`** in your browser:
 - **Login Password**: `boats0519`
-- **User Name**: Your Name / GT ID *(e.g. `Aaron`)*
+- **User Name**: Your Name / GT ID *(e.g. `gburdell3`)*
 
 ---
 
