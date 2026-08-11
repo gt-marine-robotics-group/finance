@@ -561,7 +561,7 @@ if __name__ == "__main__":
         df = pd.read_excel(CSV_PATH, sheet_name=SHEET_NAME)
     else:
         df = pd.read_csv(CSV_PATH, encoding="utf-8", on_bad_lines="skip")
-    df.fillna("", inplace=True)
+    df = df.astype(object).fillna("")
     df.columns = df.columns.str.strip()
 
     required_cols = {"Item Name", "Link", "Cost", "Bill Title"}
