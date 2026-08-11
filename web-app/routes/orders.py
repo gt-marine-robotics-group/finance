@@ -760,3 +760,87 @@ def edit_order(order_id):
             item["_max_bill_qty"] = None
 
     return render_template("edit_order.html", order_id=order_id, items=order_items, vendor=current_vendor, purchaser=current_purchaser, status=current_status)
+
+
+@orders_bp.route("/orders/review/<order_id>")
+@login_required
+def review_order(order_id):
+    """Side-by-side order review comparing original bill submission screenshots/prices vs live scraped data."""
+    order_rows = xlsx_manager.graph_get_order_rows()
+    order_items = [r for r in order_rows if str(r.get("Order ID (YYMMDD_vendor_gburdell3)", "") or r.get("Order ID", "")).strip() == order_id]
+
+    if not order_items:
+        flash("Order not found", "error")
+        return redirect(url_for("orders.view_orders"))
+
+    all_bill_items = xlsx_manager.read_items()
+    items_by_id = {str(i.get("Bill Item ID", "")).strip(): i for i in all_bill_items if i.get("Bill Item ID")}
+
+    total_allocated = 0.0
+    total_live = 0.0
+    has_any_live_price = False
+
+    for item in order_items:
+        b_id = str(item.get("Bill Item ID", "")).strip()
+        matching_b = items_by_id.get(b_id) if b_id else None
+
+        item_name = str(item.get("Item Name", "") or (matching_b.get("Item Name", "") if matching_b else "")).strip()
+        bill_title = str(matching_b.get("Bill Title", "") if matching_b else "").strip()
+        url = str(matching_b.get("Link", "") if matching_b else "").strip()
+
+        # 1. Original bill submission cost & screenshot
+        try:
+            qty = float(item.get("Quantity", 1) or 1)
+        except (ValueError, TypeError):
+            qty = 1.0
+
+        try:
+            unit_cost = float(str(matching_b.get("Cost", 0) if matching_b else item.get("Cost", 0)).replace("$", "").replace(",", "") or 0)
+        except (ValueError, TypeError):
+            unit_cost = 0.0
+
+        item["_allocated_cost"] = unit_cost
+        item["_allocated_total"] = unit_cost * qty
+        total_allocated += (unit_cost * qty)
+
+        orig_shot = screenshot_worker.get_screenshot_path(item_name, bill_title)
+        if orig_shot:
+            item["_orig_screenshot"] = os.path.relpath(orig_shot, screenshot_worker.SCREENSHOT_DIR)
+        else:
+            item["_orig_screenshot"] = ""
+
+        # 2. Live price & live screenshot
+        live_price = None
+        if url and url.startswith("http"):
+            scraped = price_scraper.scrape_item_price(url)
+            if scraped and scraped.get("current_price") is not None:
+                live_price = scraped["current_price"]
+                has_any_live_price = True
+
+        item["_live_price"] = live_price
+        if live_price is not None:
+            total_live += (live_price * qty)
+            item["_delta"] = (live_price * qty) - (unit_cost * qty)
+        else:
+            item["_delta"] = None
+
+        live_shot = screenshot_worker.get_screenshot_path(item_name, f"_order_{order_id}")
+        if live_shot:
+            item["_live_screenshot"] = os.path.relpath(live_shot, screenshot_worker.SCREENSHOT_DIR)
+        else:
+            item["_live_screenshot"] = item.get("_orig_screenshot", "")
+
+    total_delta = (total_live - total_allocated) if has_any_live_price else None
+    vendor = price_scraper.normalize_vendor(order_items[0].get("Vendor", "")) if order_items else ""
+    amazon_cart_url = price_scraper.generate_amazon_cart_url(order_items)
+
+    return render_template(
+        "review_order.html",
+        order_id=order_id,
+        items=order_items,
+        vendor=vendor,
+        total_allocated=total_allocated,
+        total_live=total_live if has_any_live_price else None,
+        total_delta=total_delta,
+        amazon_cart_url=amazon_cart_url,
+    )
