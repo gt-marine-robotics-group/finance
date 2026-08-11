@@ -284,23 +284,52 @@ for i, req in enumerate(requests_to_submit):
 
         # Upload receipt/screenshot if available
         local_path = None
-        for ext in [".png", ".jpg", ".jpeg", ".pdf"]:
-            candidate = os.path.join(DOWNLOAD_DIR, f"{req['item_name']}{ext}")
-            if os.path.exists(candidate):
-                local_path = candidate
+        safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in req['item_name'])
+        safe_bill = "".join(c if c.isalnum() or c in " -_" else "_" for c in bill_title)
+
+        candidates = [
+            os.path.join(os.path.dirname(__file__), "web-app", "screenshots", safe_bill, f"{safe_name}.png"),
+            os.path.join(os.path.dirname(__file__), "web-app", "screenshots", "_queue", f"{safe_name}.png"),
+            os.path.join(DOWNLOAD_DIR, f"{req['item_name']}.png"),
+        ]
+        for ext in ["", ".png", ".jpg", ".jpeg", ".pdf"]:
+            for candidate in candidates:
+                test_path = candidate + ext if not candidate.endswith(ext) else candidate
+                if os.path.exists(test_path):
+                    local_path = test_path
+                    break
+            if local_path:
                 break
+
+        # On-the-fly screenshot capture fallback if missing
+        if not local_path and req.get("link") and str(req["link"]).startswith("http"):
+            try:
+                print(f"  📸 Screenshot missing — capturing on the fly for '{req['item_name']}'...")
+                driver.get(req["link"])
+                time.sleep(4)
+                bill_dir = os.path.join(os.path.dirname(__file__), "web-app", "screenshots", safe_bill)
+                os.makedirs(bill_dir, exist_ok=True)
+                shot_path = os.path.join(bill_dir, f"{safe_name}.png")
+                driver.save_screenshot(shot_path)
+                local_path = shot_path
+                print(f"  ✅ Captured on-the-fly screenshot: {os.path.basename(shot_path)}")
+                driver.get(PURCHASE_URL)
+                time.sleep(2)
+            except Exception as shot_err:
+                print(f"  ⚠️ On-the-fly screenshot failed: {shot_err}")
+
         if local_path:
             try:
                 file_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
                 if file_inputs:
                     driver.execute_script("arguments[0].style.display='block';", file_inputs[0])
                     file_inputs[0].send_keys(os.path.abspath(local_path))
-                    print(f"  📎 Uploaded: {os.path.basename(local_path)}")
+                    print(f"  📎 Uploaded screenshot: {os.path.basename(local_path)}")
                     time.sleep(2)
             except Exception as e:
                 print(f"  ⚠️ Upload failed: {e}")
         else:
-            print(f"  ⚠️ No receipt file for '{req['item_name']}'")
+            print(f"  ⚠️ No screenshot file found or captured for '{req['item_name']}'")
 
         # PAUSE — let user review and submit manually
         print(f"\n  ⏸️  Form pre-filled. Review and fill remaining fields (Category, Account).")
