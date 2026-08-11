@@ -105,9 +105,26 @@ def add_item():
     return render_template("add_item.html", bills=xlsx_manager.get_bills())
 
 
+LOCKED_STATUSES = {
+    "bill submitted",
+    "bill approved",
+    "pending purchase",
+    "purchased - sofo",
+    "purchased - cash",
+    "purchased - awaiting reimbursement",
+    "arrived",
+    "approved",
+    "submitted",
+}
+
+
 @items_bp.route("/edit/<item_id>", methods=["GET", "POST"])
 @login_required
 def edit_item(item_id):
+    item = xlsx_manager.get_item(item_id)
+    if item and str(item.get("Status", "")).strip().lower() in LOCKED_STATUSES:
+        flash("Cannot edit an item from an approved or submitted bill.", "error")
+        return redirect(request.referrer or url_for("dashboard.dashboard"))
     if request.method == "POST":
         updates = {}
         for field in [
@@ -238,6 +255,10 @@ def delete_queue_item_route(table_index):
 @items_bp.route("/delete/<item_id>", methods=["POST"])
 @login_required
 def delete_item(item_id):
+    item = xlsx_manager.get_item(item_id)
+    if item and str(item.get("Status", "")).strip().lower() in LOCKED_STATUSES:
+        flash("Cannot delete an item from an approved or submitted bill.", "error")
+        return redirect(request.referrer or url_for("dashboard.dashboard"))
     success = xlsx_manager.delete_item(item_id)
     if success:
         flash("Item deleted", "success")
