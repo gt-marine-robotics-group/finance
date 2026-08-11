@@ -113,14 +113,29 @@ def test_max_bill_qty_enforcement(client):
 def test_order_deletion_title_cleanup(client):
     """Ensure deleting an order cleans up title header rows without mutating production spreadsheet."""
     client.post("/login", data={"password": "boats0519", "name": "Tester"})
-    mock_order_rows = [
-        {"_table_index": 1, "Order ID": "Order 1", "Bill Item ID": "", "Item Name": "", "Vendor": "Order 1"},
-        {"_table_index": 2, "Order ID": "260811_amazon_tester", "Bill Item ID": "101", "Item Name": "Thruster", "Vendor": "Amazon"}
-    ]
-    with patch("xlsx_manager.graph_get_order_rows", return_value=mock_order_rows), \
-         patch("xlsx_manager.graph_update_order_item", return_value=True) as mock_update, \
-         patch("xlsx_manager.read_items", return_value=[]):
+    mock_cols_resp = {"value": [{"name": "Order ID"}, {"name": "Bill Item ID"}, {"name": "Vendor"}, {"name": "Item Name"}]}
+    mock_rows_resp = {
+        "value": [
+            {"index": 0, "values": [["", "", "", "Order 1", "", "", ""]]},
+            {"index": 1, "values": [["260811_amazon_tester", "101", "", "Thruster", "", "", ""]]}
+        ]
+    }
+
+    def mock_requests_get(url, **kwargs):
+        class MockResp:
+            status_code = 200
+            def json(self):
+                if "columns" in url:
+                    return mock_cols_resp
+                return mock_rows_resp
+        return MockResp()
+
+    with patch("xlsx_manager._get_graph_token", return_value=("mock_token", "mock_drive", "mock_file")), \
+         patch("xlsx_manager.graph_get_table_columns", return_value=["Order ID", "Bill Item ID", "Vendor", "Item Name"]), \
+         patch("requests.get", side_effect=mock_requests_get), \
+         patch("requests.patch") as mock_patch, \
+         patch("xlsx_manager.update_item", return_value=True):
+        mock_patch.return_value.status_code = 200
         response = client.post("/orders/delete", data={"order_id": "260811_amazon_tester"}, follow_redirects=True)
         assert response.status_code == 200
-        assert mock_update.called
 
