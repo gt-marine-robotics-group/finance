@@ -80,8 +80,8 @@ for _, row in df_bills.iterrows():
 
 df_orders = pd.DataFrame()
 if "Ordering" in excel_file.sheet_names:
-    df_orders = pd.read_excel(excel_file, sheet_name="Ordering").astype(object).fillna("")
-    df_orders.columns = df_orders.columns.str.strip()
+    df_orders = pd.read_excel(excel_file, sheet_name="Ordering", header=1).astype(object).fillna("")
+    df_orders.columns = [str(c).strip() for c in df_orders.columns]
 
 # Check for Order ID column name
 oid_col = next((c for c in df_orders.columns if isinstance(c, str) and "Order ID" in c), "Order ID") if not df_orders.empty else "Order ID"
