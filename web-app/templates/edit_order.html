@@ -60,9 +60,9 @@
 
             <div class="form-row">
                 <div class="form-group">
-                    <label for="quantity_{{ idx }}">Quantity *</label>
+                    <label for="quantity_{{ idx }}">Quantity * {% if item.get('_max_bill_qty') %}(Max: {{ item.get('_max_bill_qty') }}){% endif %}</label>
                     <input type="number" id="quantity_{{ idx }}" name="quantity_{{ idx }}"
-                           min="0.01" step="any" required class="input"
+                           min="0.01" {% if item.get('_max_bill_qty') %}max="{{ item.get('_max_bill_qty') }}"{% endif %} step="any" required class="input"
                            value="{{ item.get('Quantity', 1) }}">
                 </div>
                 <div class="form-group">

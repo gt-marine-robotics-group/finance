@@ -420,6 +420,10 @@ def submit_order():
 
         for item in vendor_items:
             item_id = str(item.get("Bill Item ID", "")).strip()
+            try:
+                max_bill_qty = float(str(item.get("Quantity", 1) or 1).replace("$", "").replace(",", "") or 1)
+            except (ValueError, TypeError):
+                max_bill_qty = 999999.0
 
             # Read custom order quantity from form if provided
             custom_qty_raw = request.form.get(f"quantity_{item_id}", "").strip()
@@ -429,16 +433,15 @@ def submit_order():
                     if add_qty <= 0:
                         flash("Quantity must be greater than 0", "error")
                         return redirect(url_for("orders.create_order"))
+                    if add_qty > max_bill_qty:
+                        item_name = item.get("Item Name", "Item")
+                        flash(f"Order quantity ({add_qty}) for '{item_name}' cannot exceed approved bill quantity ({max_bill_qty})", "error")
+                        return redirect(url_for("orders.create_order"))
                 except ValueError:
                     flash(f"Invalid quantity '{custom_qty_raw}'", "error")
                     return redirect(url_for("orders.create_order"))
             else:
-                try:
-                    add_qty = float(item.get("Quantity", 1) or 1)
-                    if add_qty <= 0:
-                        add_qty = 1.0
-                except (ValueError, TypeError):
-                    add_qty = 1.0
+                add_qty = min(max_bill_qty, 1.0) if max_bill_qty >= 1 else max_bill_qty
 
             # Deduplication: If item is ALREADY in an existing order on OrderT, update its quantity instead of creating a duplicate row!
             if item_id in existing_bill_item_map:
@@ -603,6 +606,17 @@ def edit_order_item(table_index):
         flash("Order item not found", "error")
         return redirect(url_for("orders.view_orders"))
 
+    bill_item_id = str(item.get("Bill Item ID", "")).strip()
+    max_bill_qty = None
+    if bill_item_id:
+        all_bill_items = xlsx_manager.read_items()
+        matching_b = next((bi for bi in all_bill_items if str(bi.get("Bill Item ID", "")).strip() == bill_item_id), None)
+        if matching_b:
+            try:
+                max_bill_qty = float(str(matching_b.get("Quantity", 999999) or 999999).replace("$", "").replace(",", "") or 999999)
+            except (ValueError, TypeError):
+                max_bill_qty = None
+
     if request.method == "POST":
         updates = {}
         for field in ["Item Name", "Vendor", "Purchaser", "Status", "Quantity", "Notes"]:
@@ -617,6 +631,9 @@ def edit_order_item(table_index):
                 if q_val <= 0:
                     flash("Quantity must be greater than 0", "error")
                     return redirect(url_for("orders.edit_order_item", table_index=table_index))
+                if max_bill_qty is not None and q_val > max_bill_qty:
+                    flash(f"Quantity ({q_val}) cannot exceed approved bill quantity ({max_bill_qty})", "error")
+                    return redirect(url_for("orders.edit_order_item", table_index=table_index))
                 updates["Quantity"] = q_val
             except ValueError:
                 flash(f"Invalid quantity '{updates['Quantity']}'", "error")
@@ -624,7 +641,6 @@ def edit_order_item(table_index):
 
         success = xlsx_manager.graph_update_order_item(table_index, updates)
 
-        bill_item_id = str(item.get("Bill Item ID", "")).strip()
         if bill_item_id and success:
             bill_updates = {}
             if "Item Name" in updates:
@@ -644,7 +660,7 @@ def edit_order_item(table_index):
             flash("Failed to update order item", "error")
         return redirect(url_for("orders.view_orders"))
 
-    return render_template("edit_order_item.html", item=item, table_index=table_index)
+    return render_template("edit_order_item.html", item=item, table_index=table_index, max_bill_qty=max_bill_qty)
 
 
 @orders_bp.route("/orders/edit/<order_id>", methods=["GET", "POST"])
@@ -657,6 +673,9 @@ def edit_order(order_id):
     if not order_items:
         flash("Order not found", "error")
         return redirect(url_for("orders.view_orders"))
+
+    all_bill_items = xlsx_manager.read_items()
+    items_by_id = {str(i.get("Bill Item ID", "")).strip(): i for i in all_bill_items if i.get("Bill Item ID")}
 
     current_vendor = price_scraper.normalize_vendor(order_items[0].get("Vendor", "")) if order_items else ""
     current_purchaser = order_items[0].get("Purchaser", "") if order_items else ""
@@ -672,6 +691,15 @@ def edit_order(order_id):
             t_idx = item.get("_table_index")
             if t_idx is None:
                 continue
+
+            b_id = str(item.get("Bill Item ID", "")).strip()
+            matching_b = items_by_id.get(b_id) if b_id else None
+            max_b_qty = None
+            if matching_b:
+                try:
+                    max_b_qty = float(str(matching_b.get("Quantity", 999999) or 999999).replace("$", "").replace(",", "") or 999999)
+                except (ValueError, TypeError):
+                    max_b_qty = None
 
             item_updates = {}
             item_name = request.form.get(f"item_name_{idx}", "").strip()
@@ -698,6 +726,9 @@ def edit_order(order_id):
                     if q_val <= 0:
                         flash(f"Quantity for item '{item_name}' must be greater than 0", "error")
                         return redirect(url_for("orders.edit_order", order_id=order_id))
+                    if max_b_qty is not None and q_val > max_b_qty:
+                        flash(f"Quantity for '{item_name}' ({q_val}) cannot exceed approved bill quantity ({max_b_qty})", "error")
+                        return redirect(url_for("orders.edit_order", order_id=order_id))
                     item_updates["Quantity"] = q_val
                 except ValueError:
                     flash(f"Invalid quantity '{item_qty_raw}' for item '{item_name}'", "error")
@@ -705,7 +736,6 @@ def edit_order(order_id):
 
             if item_updates and xlsx_manager.graph_update_order_item(t_idx, item_updates):
                 updated_count += 1
-                b_id = str(item.get("Bill Item ID", "")).strip()
                 if b_id:
                     b_up = {}
                     if "Item Name" in item_updates: b_up["Item Name"] = item_updates["Item Name"]
@@ -716,5 +746,17 @@ def edit_order(order_id):
 
         flash(f"Updated order '{order_id}' ({updated_count} line items updated)", "success")
         return redirect(url_for("orders.view_orders"))
+
+    # Attach max_bill_qty to each order item for rendering
+    for item in order_items:
+        b_id = str(item.get("Bill Item ID", "")).strip()
+        matching_b = items_by_id.get(b_id) if b_id else None
+        if matching_b:
+            try:
+                item["_max_bill_qty"] = float(str(matching_b.get("Quantity", 999999) or 999999).replace("$", "").replace(",", "") or 999999)
+            except (ValueError, TypeError):
+                item["_max_bill_qty"] = None
+        else:
+            item["_max_bill_qty"] = None
 
     return render_template("edit_order.html", order_id=order_id, items=order_items, vendor=current_vendor, purchaser=current_purchaser, status=current_status)

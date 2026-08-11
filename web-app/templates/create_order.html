@@ -53,10 +53,10 @@
                             {% if group_by == 'vendor' %} · {{ item.get('Bill Title', '')[:25] }}{% endif %}
                         </span>
                         <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.35rem;" onclick="event.stopPropagation();">
-                            <span style="font-size: 0.8rem; font-weight: 500; color: var(--color-text-muted);">Order Qty:</span>
+                            <span style="font-size: 0.8rem; font-weight: 500; color: var(--color-text-muted);">Order Qty (Max {{ qty }}):</span>
                             <input type="number" name="quantity_{{ item.get('Bill Item ID', '') }}"
                                    id="qty_input_{{ item.get('Bill Item ID', '') }}"
-                                   value="{{ qty }}" min="0.01" step="any" required class="input item-qty-input"
+                                   value="{{ qty }}" min="0.01" max="{{ qty }}" step="any" required class="input item-qty-input"
                                    style="width: 85px; padding: 0.2rem 0.4rem; font-size: 0.85rem;"
                                    oninput="updateSummary()">
                         </div>
