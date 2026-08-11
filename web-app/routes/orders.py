@@ -148,7 +148,7 @@ def apply_order_formatting():
 @orders_bp.route("/orders/delete", methods=["POST"])
 @login_required
 def delete_order():
-    """Delete all items in an order (clear rows on OrderT)."""
+    """Delete all items in an order and clean up its order title header row."""
     order_id = request.form.get("order_id", "").strip()
     if not order_id:
         flash("No order specified", "error")
@@ -168,45 +168,67 @@ def delete_order():
         flash("Failed to read orders", "error")
         return redirect(url_for("orders.view_orders"))
 
+    rows_val = resp.json().get("value", [])
     order_columns = xlsx_manager.graph_get_table_columns("OrderT")
     order_id_col_name = next((c for c in order_columns if "Order ID" in c), "Order ID")
+    oid_idx = order_columns.index(order_id_col_name) if order_id_col_name in order_columns else 0
+    item_name_idx = order_columns.index("Item Name") if "Item Name" in order_columns else 3
+    bill_item_col_idx = order_columns.index("Bill Item ID") if "Bill Item ID" in order_columns else 1
 
-    to_clear = []
-    for row in resp.json().get("value", []):
+    to_clear_indices = []
+    bill_items_to_reset = []
+
+    for row in rows_val:
         vals = row["values"][0]
-        oid_idx = order_columns.index(order_id_col_name)
-        row_oid = str(vals[oid_idx]).strip() if vals[oid_idx] else ""
+        row_oid = str(vals[oid_idx]).strip() if len(vals) > oid_idx and vals[oid_idx] else ""
         if row_oid == order_id:
-            to_clear.append(row["index"])
+            to_clear_indices.append(row["index"])
+            b_id = str(vals[bill_item_col_idx]).strip() if len(vals) > bill_item_col_idx and vals[bill_item_col_idx] else ""
+            if b_id:
+                bill_items_to_reset.append(b_id)
 
+    # Check for order title header row ("Order N") immediately above the first item row
+    if to_clear_indices:
+        first_item_idx = min(to_clear_indices)
+        if first_item_idx > 0:
+            prev_row = next((r for r in rows_val if r.get("index") == first_item_idx - 1), None)
+            if prev_row:
+                p_vals = prev_row["values"][0]
+                p_oid = str(p_vals[oid_idx]).strip() if len(p_vals) > oid_idx and p_vals[oid_idx] else ""
+                p_bid = str(p_vals[bill_item_col_idx]).strip() if len(p_vals) > bill_item_col_idx and p_vals[bill_item_col_idx] else ""
+                p_name = str(p_vals[item_name_idx]).strip() if len(p_vals) > item_name_idx and p_vals[item_name_idx] else ""
+
+                if p_name.startswith("Order") and not p_oid and not p_bid:
+                    to_clear_indices.append(first_item_idx - 1)
+
+    col_letters = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R']
     cleared = 0
-    for idx in to_clear:
+
+    for idx in sorted(to_clear_indices):
         sheet_row = idx + 3
         try:
-            url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='A{sheet_row}:R{sheet_row}')"
-            requests.patch(url, headers=headers, json={"values": [[""] * 18]}, timeout=30)
+            # Clear input cells A, B, D, E, F, G, J without touching formula cells (C, H, I)
+            for col_i in [0, 1, 3, 4, 5, 6, 9]:
+                if col_i < len(col_letters):
+                    col_let = col_letters[col_i]
+                    cell_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{col_let}{sheet_row}')"
+                    requests.patch(cell_url, headers=headers, json={"values": [[""]]}, timeout=10)
             cleared += 1
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[order] ⚠️ Error clearing row {sheet_row}: {e}")
 
-    for row in resp.json().get("value", []):
-        vals = row["values"][0]
-        oid_idx = order_columns.index(order_id_col_name)
-        row_oid = str(vals[oid_idx]).strip() if vals[oid_idx] else ""
-        if row_oid == order_id:
-            bill_item_id = str(vals[order_columns.index("Bill Item ID")]).strip() if "Bill Item ID" in order_columns else ""
-            if bill_item_id:
-                xlsx_manager.update_item(bill_item_id, {"Status": "bill approved"})
+    for b_id in bill_items_to_reset:
+        xlsx_manager.update_item(b_id, {"Status": "bill approved"})
 
     xlsx_manager.invalidate_orders_cache()
-    flash(f"Deleted order '{order_id}' ({cleared} rows)", "success")
+    flash(f"Deleted order '{order_id}' and title header ({cleared} rows cleared)", "success")
     return redirect(url_for("orders.view_orders"))
 
 
 @orders_bp.route("/orders/delete-item", methods=["POST"])
 @login_required
 def delete_order_item():
-    """Remove a single item from an order."""
+    """Remove a single item from an order and clean up title header if order is empty."""
     order_id = request.form.get("order_id", "").strip()
     row_index = request.form.get("row_index", "").strip()
     bill_item_id = request.form.get("bill_item_id", "").strip()
@@ -224,12 +246,40 @@ def delete_order_item():
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
 
     sheet_row = int(row_index) + 3
+    col_letters = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R']
+
     try:
-        url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='A{sheet_row}:R{sheet_row}')"
-        requests.patch(url, headers=headers, json={"values": [[""] * 18]}, timeout=30)
+        # Clear input cells A, B, D, E, F, G, J for this item row
+        for col_i in [0, 1, 3, 4, 5, 6, 9]:
+            if col_i < len(col_letters):
+                col_let = col_letters[col_i]
+                cell_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{col_let}{sheet_row}')"
+                requests.patch(cell_url, headers=headers, json={"values": [[""]]}, timeout=10)
 
         if bill_item_id:
             xlsx_manager.update_item(bill_item_id, {"Status": "bill approved"})
+
+        # Check if any remaining items exist for this order_id
+        order_rows = xlsx_manager._fetch_order_rows()
+        remaining_items = [r for r in order_rows if str(r.get("Order ID (YYMMDD_vendor_gburdell3)", "") or r.get("Order ID", "")).strip() == order_id]
+
+        if not remaining_items and order_id:
+            # Order is now empty! Clean up the Order N title header row above if present
+            target_idx = int(row_index)
+            if target_idx > 0:
+                rows_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/OrderT/rows"
+                resp = requests.get(rows_url, headers=headers, timeout=15)
+                if resp.status_code == 200:
+                    rows_val = resp.json().get("value", [])
+                    prev_row = next((r for r in rows_val if r.get("index") == target_idx - 1), None)
+                    if prev_row:
+                        p_vals = prev_row["values"][0]
+                        p_name = str(p_vals[3]).strip() if len(p_vals) > 3 and p_vals[3] else ""
+                        p_oid = str(p_vals[0]).strip() if len(p_vals) > 0 and p_vals[0] else ""
+                        if p_name.startswith("Order") and not p_oid:
+                            header_sheet_row = target_idx - 1 + 3
+                            cell_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='D{header_sheet_row}')"
+                            requests.patch(cell_url, headers=headers, json={"values": [[""]]}, timeout=10)
 
         xlsx_manager.invalidate_orders_cache()
         flash("Item removed from order", "success")
