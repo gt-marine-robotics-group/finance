@@ -40,13 +40,10 @@
         {% endif %}
         {% if item.get('_table_index') is not none and item.get('Bill Item ID', '') == '' %}
         {# Queue item - use table index #}
-        <a href="{{ url_for('edit_queue_item', table_index=item.get('_table_index', '')) }}" class="btn btn-sm btn-ghost">Edit</a>
-        <form method="POST" action="{{ url_for('delete_queue_item_route', table_index=item.get('_table_index', '')) }}" style="display:inline"
+        <form method="POST" action="{{ url_for('items.delete_queue_item_route', table_index=item.get('_table_index', '')) }}" style="display:inline"
               onsubmit="return confirm('Delete from backlog?')">
             <button type="submit" class="btn btn-sm btn-ghost btn-danger-text">Delete</button>
         </form>
-        {% else %}
-        <a href="{{ url_for('edit_item', item_id=item.get('Bill Item ID', '')) }}" class="btn btn-sm btn-ghost">Edit</a>
         {% endif %}
         {% if not item.get('_has_screenshot') and item.get('Link') %}
         {% if item.get('Bill Item ID') %}
