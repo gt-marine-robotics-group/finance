@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Edit Order: {{ order_id }} - MRG Purchasing{% endblock %}
+
+{% block content %}
+<div class="form-page">
+    <h1>Edit Order: {{ order_id }}</h1>
+    <p class="text-muted" style="margin-bottom: 1.5rem;">
+        Applies changes to all {{ items|length }} item(s) in this order.
+    </p>
+
+    <form method="POST" action="{{ url_for('orders.edit_order', order_id=order_id) }}" class="item-form">
+        <div class="form-group">
+            <label for="vendor">Vendor</label>
+            <input type="text" id="vendor" name="vendor" class="input"
+                   value="{{ vendor }}">
+        </div>
+
+        <div class="form-group">
+            <label for="purchaser">Purchaser</label>
+            <input type="text" id="purchaser" name="purchaser" class="input"
+                   value="{{ purchaser }}">
+        </div>
+
+        <div class="form-group">
+            <label for="status">Status</label>
+            <select id="status" name="status" class="input">
+                <option value="">-- Leave Unchanged --</option>
+                {% for status_opt in [
+                    'pending purchase', 'purchased - SOFO', 'purchased - cash',
+                    'purchased - awaiting reimbursement', 'arrived', 'bill approved',
+                    'review requested', 'canceled'
+                ] %}
+                <option value="{{ status_opt }}" {{ 'selected' if status_opt == status }}>{{ status_opt }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-block">Update All Order Items</button>
+            <a href="{{ url_for('orders.view_orders') }}" class="btn btn-ghost btn-block">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
