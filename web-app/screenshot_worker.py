@@ -282,6 +282,18 @@ def _process_job(job: dict):
             _status[item_name] = "error"
         return None
 
+    safe_bill = _safe_dirname(bill_title) if bill_title else "_backlog"
+    safe_name = _safe_filename(item_name)
+    bill_dir = os.path.join(SCREENSHOT_DIR, safe_bill)
+    os.makedirs(bill_dir, exist_ok=True)
+    filepath = os.path.join(bill_dir, f"{safe_name}.png")
+
+    if not job.get("overwrite") and os.path.exists(filepath):
+        print(f"[screenshot] ℹ️ Preserving ground-truth screenshot: {filepath}")
+        with _status_lock:
+            _status[item_name] = "done"
+        return {"item_name": item_name, "screenshot": filepath}
+
     try:
         try:
             driver.get(url)
@@ -289,12 +301,6 @@ def _process_job(job: dict):
             print(f"[screenshot worker] Page load warning for {item_name}: {load_err}")
 
         time.sleep(DELAY)
-
-        safe_bill = _safe_dirname(bill_title) if bill_title else "_backlog"
-        safe_name = _safe_filename(item_name)
-        bill_dir = os.path.join(SCREENSHOT_DIR, safe_bill)
-        os.makedirs(bill_dir, exist_ok=True)
-        filepath = os.path.join(bill_dir, f"{safe_name}.png")
         driver.save_screenshot(filepath)
 
         price_text = price_scraper.scrape_price_from_driver(driver)
@@ -360,15 +366,20 @@ def stop_worker():
     _close_driver()
 
 
-def queue_screenshot(item_name: str, url: str, bill_title: str = ""):
-    """Add a screenshot job to the queue."""
+def queue_screenshot(item_name: str, url: str, bill_title: str = "", overwrite: bool = False):
+    """Add a screenshot job to the queue. Skips if screenshot already exists unless overwrite=True."""
     if not url or not item_name:
+        return
+
+    # Protect existing ground-truth screenshots
+    if not overwrite and has_screenshot(item_name, bill_title):
+        print(f"[screenshot] ℹ️ Screenshot exists for '{item_name}' — preserving ground truth")
         return
 
     with _status_lock:
         _status[item_name] = "queued"
 
-    _queue.put({"item_name": item_name, "url": url, "bill_title": bill_title})
+    _queue.put({"item_name": item_name, "url": url, "bill_title": bill_title, "overwrite": overwrite})
 
 
 def get_status(item_name: str) -> str:
