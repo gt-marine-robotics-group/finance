@@ -43,17 +43,25 @@
                 {% set qty = item.get('Quantity', '1')|string %}
                 <label class="checkbox-card">
                     <input type="checkbox" name="item_ids" value="{{ item.get('Bill Item ID', '') }}"
-                           data-vendor="{{ item.get('Vendor', '') }}" data-cost="{{ cost_str }}">
+                           data-vendor="{{ item.get('Vendor', '') }}" data-cost="{{ cost_str }}"
+                           data-item-id="{{ item.get('Bill Item ID', '') }}">
                     <div class="checkbox-card-content">
                         <span class="item-name">{{ item.get('Item Name', 'Unnamed') }}</span>
                         <span class="item-meta">
                             ${{ "%.2f"|format(cost_str|float(0)) }}
-                            {% if qty != '1' %} x {{ qty }}{% endif %}
                             · {{ item.get('Vendor', '') }}
                             {% if group_by == 'vendor' %} · {{ item.get('Bill Title', '')[:25] }}{% endif %}
                         </span>
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.35rem;" onclick="event.stopPropagation();">
+                            <span style="font-size: 0.8rem; font-weight: 500; color: var(--color-text-muted);">Order Qty:</span>
+                            <input type="number" name="quantity_{{ item.get('Bill Item ID', '') }}"
+                                   id="qty_input_{{ item.get('Bill Item ID', '') }}"
+                                   value="{{ qty }}" min="0.01" step="any" required class="input item-qty-input"
+                                   style="width: 85px; padding: 0.2rem 0.4rem; font-size: 0.85rem;"
+                                   oninput="updateSummary()">
+                        </div>
                         {% if item.get('Ordering Instructions') %}
-                        <span class="item-meta" style="color: var(--color-warning);">Note: {{ item.get('Ordering Instructions') }}</span>
+                        <span class="item-meta" style="color: var(--color-warning); margin-top: 0.25rem;">Note: {{ item.get('Ordering Instructions') }}</span>
                         {% endif %}
                     </div>
                 </label>
@@ -105,7 +113,10 @@ function updateSummary() {
     const vendors = new Set();
 
     checked.forEach(cb => {
-        total += parseFloat(cb.dataset.cost || 0);
+        const itemId = cb.dataset.itemId;
+        const qtyInput = document.getElementById('qty_input_' + itemId);
+        const qtyVal = qtyInput ? (parseFloat(qtyInput.value) || 1) : 1;
+        total += (parseFloat(cb.dataset.cost || 0) * qtyVal);
         if (cb.dataset.vendor) vendors.add(cb.dataset.vendor);
     });
 
