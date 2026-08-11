@@ -86,11 +86,21 @@ if "Ordering" in excel_file.sheet_names:
 # Check for Order ID column name
 oid_col = next((c for c in df_orders.columns if isinstance(c, str) and "Order ID" in c), "Order ID") if not df_orders.empty else "Order ID"
 
+# Check for --order flag (passed from mrg.py)
+pre_selected_order = None
+if "--order" in sys.argv:
+    idx = sys.argv.index("--order")
+    if idx + 1 < len(sys.argv):
+        pre_selected_order = sys.argv[idx + 1]
+
 # Determine source mode
-print("\n📋 Purchase Request Source:")
-print("  1. Read from Orders Table (Ordering sheet — OrderT)")
-print("  2. Read from Bills Table (Bills sheet)")
-src_choice = input("\nSelect source [1/2] (default 1): ").strip()
+if pre_selected_order:
+    src_choice = "1"
+else:
+    print("\n📋 Purchase Request Source:")
+    print("  1. Read from Orders Table (Ordering sheet — OrderT)")
+    print("  2. Read from Bills Table (Bills sheet)")
+    src_choice = input("\nSelect source [1/2] (default 1): ").strip() or "1"
 
 requests_to_submit = []
 bill_title = ""
@@ -178,11 +188,15 @@ else:
         v_name = items_in_o[0].get("Vendor", "Unknown") if items_in_o else "Unknown"
         print(f"  {i}. {oid} ({v_name}, {len(items_in_o)} items)")
 
-    choice = input("\nSelect order (number or Order ID): ").strip()
-    if choice.isdigit() and 1 <= int(choice) <= len(order_ids):
-        selected_order_id = order_ids[int(choice) - 1]
+    if pre_selected_order:
+        selected_order_id = pre_selected_order
+        print(f"\nUsing order: {selected_order_id}")
     else:
-        selected_order_id = choice
+        choice = input("\nSelect order (number or Order ID): ").strip()
+        if choice.isdigit() and 1 <= int(choice) <= len(order_ids):
+            selected_order_id = order_ids[int(choice) - 1]
+        else:
+            selected_order_id = choice
 
     order_rows = order_groups.get(selected_order_id, [])
     if not order_rows:
