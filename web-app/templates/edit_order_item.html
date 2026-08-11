@@ -22,8 +22,8 @@
                        value="{{ item.get('Vendor', '') }}">
             </div>
             <div class="form-group">
-                <label for="quantity">Quantity *</label>
-                <input type="number" id="quantity" name="quantity" min="0.01" step="any" required class="input"
+                <label for="quantity">Quantity * {% if max_bill_qty %}(Max: {{ max_bill_qty }}){% endif %}</label>
+                <input type="number" id="quantity" name="quantity" min="0.01" {% if max_bill_qty %}max="{{ max_bill_qty }}"{% endif %} step="any" required class="input"
                        value="{{ item.get('Quantity', 1) }}">
             </div>
         </div>
