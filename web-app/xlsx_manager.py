@@ -570,32 +570,35 @@ def _fetch_queue_items() -> list[dict]:
         access_token, drive_id, file_id = creds
         headers = {"Authorization": f"Bearer {access_token}"}
 
-        # Get columns
-        cols_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/TestTable/columns"
-        cols_resp = _requests.get(cols_url, headers=headers, timeout=10)
+        try:
+            # Get columns
+            cols_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/TestTable/columns"
+            cols_resp = _requests.get(cols_url, headers=headers, timeout=10)
 
-        # Get rows
-        rows_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/TestTable/rows"
-        rows_resp = _requests.get(rows_url, headers=headers, timeout=10)
+            # Get rows
+            rows_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/TestTable/rows"
+            rows_resp = _requests.get(rows_url, headers=headers, timeout=10)
 
-        if cols_resp.status_code == 200 and rows_resp.status_code == 200:
-            columns = [c["name"] for c in cols_resp.json()["value"]]
-            items = []
-            for row in rows_resp.json().get("value", []):
-                values = row["values"][0] if row.get("values") else []
-                item = {}
-                for i, col in enumerate(columns):
-                    if i < len(values):
-                        val = values[i]
-                        if isinstance(val, str):
-                            val = " ".join(val.split())
-                        item[col] = val if val else ""
-                    else:
-                        item[col] = ""
-                if item.get("Item Name"):
-                    item["_table_index"] = row["index"]
-                    items.append(item)
-            return items
+            if cols_resp.status_code == 200 and rows_resp.status_code == 200:
+                columns = [c["name"] for c in cols_resp.json()["value"]]
+                items = []
+                for row in rows_resp.json().get("value", []):
+                    values = row["values"][0] if row.get("values") else []
+                    item = {}
+                    for i, col in enumerate(columns):
+                        if i < len(values):
+                            val = values[i]
+                            if isinstance(val, str):
+                                val = " ".join(val.split())
+                            item[col] = val if val else ""
+                        else:
+                            item[col] = ""
+                    if item.get("Item Name"):
+                        item["_table_index"] = row["index"]
+                        items.append(item)
+                return items
+        except _requests.exceptions.RequestException as req_err:
+            print(f"[xlsx] ⚠️ Queue Graph API request timed out: {req_err}")
 
     # Fallback to local xlsx
     with _lock:
