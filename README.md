@@ -21,8 +21,6 @@ cd finance
 uv tool install .
 ```
 
-*Once installed, `mrg-finance` (or `mrg-finance.exe` on Windows) is available from **any terminal/directory** on your computer!*
-
 ### 2. Primary CLI Commands
 
 ```bash
