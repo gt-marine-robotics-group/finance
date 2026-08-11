@@ -108,6 +108,14 @@ if bill_items.empty:
 bill_no = str(bill_items["Bill No."].iloc[0]).replace(".0", "").strip()
 
 # === Build purchase request list ===
+import webbrowser
+review_url = f"http://localhost:5000/bill/{bill_title}"
+print(f"🌐 Launching Review Window in browser: {review_url}")
+try:
+    webbrowser.open(review_url)
+except Exception:
+    pass
+
 print(f"\n{'='*60}")
 print(f"📋 Purchase Requests for: {bill_title} (Bill #{bill_no})")
 print(f"{'='*60}")

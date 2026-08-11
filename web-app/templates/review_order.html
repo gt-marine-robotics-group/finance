@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}Review Order: {{ order_id }} - MRG Purchasing{% endblock %}
+
+{% block content %}
+<div class="form-page" style="max-width: 1000px;">
+    <div class="dashboard-header">
+        <div>
+            <h1>Review Order: {{ order_id }}</h1>
+            <p class="text-muted" style="margin-top: 0.25rem;">
+                Compare original ground-truth bill submissions against newly scraped live prices & screenshots.
+            </p>
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+            <a href="{{ url_for('orders.edit_order', order_id=order_id) }}" class="btn btn-sm btn-ghost">Edit Order</a>
+            <a href="{{ url_for('orders.view_orders') }}" class="btn btn-sm btn-ghost">← Back to Orders</a>
+        </div>
+    </div>
+
+    {# Summary Banner #}
+    <div class="card" style="padding: 1.25rem; margin-bottom: 1.5rem; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-surface);">
+        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem;">
+            <div>
+                <span class="text-muted" style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;">Vendor</span>
+                <div style="font-size: 1.2rem; font-weight: 700;">{{ vendor or 'Unknown Vendor' }}</div>
+            </div>
+            <div>
+                <span class="text-muted" style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;">Approved Allocation</span>
+                <div style="font-size: 1.2rem; font-weight: 600;">${{ "%.2f"|format(total_allocated) }}</div>
+            </div>
+            <div>
+                <span class="text-muted" style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;">Current Live Total</span>
+                <div style="font-size: 1.2rem; font-weight: 600;">
+                    {% if total_live is not none %}
+                    ${{ "%.2f"|format(total_live) }}
+                    {% else %}
+                    —
+                    {% endif %}
+                </div>
+            </div>
+            <div>
+                <span class="text-muted" style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;">Price Difference</span>
+                <div>
+                    {% if total_delta is not none %}
+                        {% if total_delta > 0.01 %}
+                        <span class="badge" style="background: rgba(239, 68, 68, 0.2); color: var(--color-danger); font-size: 1rem; font-weight: 700; padding: 0.35rem 0.75rem;">
+                            +${{ "%.2f"|format(total_delta) }} (OVER BUDGET)
+                        </span>
+                        {% elif total_delta < -0.01 %}
+                        <span class="badge" style="background: rgba(34, 197, 94, 0.2); color: #22c55e; font-size: 1rem; font-weight: 700; padding: 0.35rem 0.75rem;">
+                            -${{ "%.2f"|format(-total_delta) }} (SAVINGS)
+                        </span>
+                        {% else %}
+                        <span class="badge" style="background: rgba(34, 197, 94, 0.2); color: #22c55e; font-size: 1rem; font-weight: 700; padding: 0.35rem 0.75rem;">
+                            ✅ MATCH ($0.00)
+                        </span>
+                        {% endif %}
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {% if amazon_cart_url %}
+        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--color-border);">
+            <a href="{{ amazon_cart_url }}" target="_blank" class="btn btn-primary btn-block" style="text-align: center;">
+                🛒 Open Amazon Multi-Item Cart
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    {# Item Comparison Cards #}
+    <h2 style="font-size: 1.2rem; margin-bottom: 1rem;">Item Price & Screenshot Comparisons ({{ items|length }})</h2>
+
+    {% for item in items %}
+    <div class="card" style="margin-bottom: 1.5rem; padding: 1.25rem; border: 1px solid var(--color-border); border-radius: var(--radius);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+            <div>
+                <h3 style="margin: 0; font-size: 1.1rem;">
+                    {{ item.get('Item Name', '') or item.get('Bill Item ID', 'Item') }}
+                    {% if item.get('Quantity') %}
+                    <span class="badge" style="font-size: 0.85rem;">Qty: {{ item.get('Quantity') }}</span>
+                    {% endif %}
+                </h3>
+                {% if item.get('Bill Title') %}
+                <span class="text-muted" style="font-size: 0.85rem;">From Bill: <strong>{{ item.get('Bill Title') }}</strong></span>
+                {% endif %}
+            </div>
+            <div>
+                {% if item.get('_delta') is not none %}
+                    {% if item.get('_delta') > 0.01 %}
+                    <span class="badge" style="background: rgba(239, 68, 68, 0.2); color: var(--color-danger); font-weight: 700;">
+                        +${{ "%.2f"|format(item.get('_delta')) }} increase
+                    </span>
+                    {% elif item.get('_delta') < -0.01 %}
+                    <span class="badge" style="background: rgba(34, 197, 94, 0.2); color: #22c55e; font-weight: 700;">
+                        -${{ "%.2f"|format(-item.get('_delta')) }} decrease
+                    </span>
+                    {% else %}
+                    <span class="badge" style="background: rgba(34, 197, 94, 0.2); color: #22c55e; font-weight: 700;">
+                        ✅ Price Match
+                    </span>
+                    {% endif %}
+                {% endif %}
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem;">
+            
+            {# Left Column: Original Bill Submission Ground Truth #}
+            <div style="padding: 1rem; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-bg);">
+                <div style="font-weight: 600; margin-bottom: 0.5rem; color: var(--color-text-muted); font-size: 0.85rem; text-transform: uppercase;">
+                    1. Original Bill Ground Truth
+                </div>
+                <div style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem;">
+                    ${{ "%.2f"|format(item.get('_allocated_cost', 0)) }}
+                    <span style="font-size: 0.85rem; font-weight: normal;" class="text-muted">/ unit</span>
+                </div>
+                <div style="margin-bottom: 0.75rem;">
+                    {% if item.get('_orig_screenshot') %}
+                    <a href="{{ url_for('static', filename=item.get('_orig_screenshot')) }}" target="_blank">
+                        <img src="{{ url_for('static', filename=item.get('_orig_screenshot')) }}"
+                             alt="Original Screenshot" style="max-width: 100%; border-radius: 4px; border: 1px solid var(--color-border); max-height: 250px; object-fit: contain;">
+                    </a>
+                    {% else %}
+                    <div class="empty-state" style="padding: 1.5rem; text-align: center;">
+                        <span class="text-muted">No original screenshot found</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# Right Column: Newly Scraped Live Price & Screenshot #}
+            <div style="padding: 1rem; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-bg);">
+                <div style="font-weight: 600; margin-bottom: 0.5rem; color: var(--color-text-muted); font-size: 0.85rem; text-transform: uppercase;">
+                    2. Current Live Web Scrape
+                </div>
+                <div style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem;">
+                    {% if item.get('_live_price') is not none %}
+                    ${{ "%.2f"|format(item.get('_live_price')) }}
+                    <span style="font-size: 0.85rem; font-weight: normal;" class="text-muted">/ unit</span>
+                    {% else %}
+                    <span class="text-muted">Live Price Unavailable</span>
+                    {% endif %}
+                </div>
+                <div style="margin-bottom: 0.75rem;">
+                    {% if item.get('_live_screenshot') %}
+                    <a href="{{ url_for('static', filename=item.get('_live_screenshot')) }}" target="_blank">
+                        <img src="{{ url_for('static', filename=item.get('_live_screenshot')) }}"
+                             alt="Live Screenshot" style="max-width: 100%; border-radius: 4px; border: 1px solid var(--color-border); max-height: 250px; object-fit: contain;">
+                    </a>
+                    {% else %}
+                    <div class="empty-state" style="padding: 1.5rem; text-align: center;">
+                        <span class="text-muted">No live screenshot available</span>
+                    </div>
+                    {% endif %}
+                </div>
+                {% if item.get('Link') %}
+                <a href="{{ item.get('Link') }}" target="_blank" class="btn btn-sm btn-ghost btn-block" style="text-align: center;">
+                    🔗 Open Live Product Link
+                </a>
+                {% endif %}
+            </div>
+
+        </div>
+    </div>
+    {% endfor %}
+
+    <div class="form-actions" style="margin-top: 1.5rem;">
+        <a href="{{ url_for('orders.view_orders') }}" class="btn btn-primary btn-block" style="text-align: center;">Back to Current Orders</a>
+    </div>
+</div>
+{% endblock %}

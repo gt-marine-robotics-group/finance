@@ -103,6 +103,7 @@
             </table>
 
             <div class="order-card-actions">
+                <a href="{{ url_for('orders.review_order', order_id=order_id) }}" class="btn btn-sm btn-primary">Review Order</a>
                 <a href="{{ url_for('orders.edit_order', order_id=order_id) }}" class="btn btn-sm btn-ghost">Edit Order</a>
                 <a href="{{ url_for('create_order', group='vendor', filter_vendor=order.vendor) }}" class="btn btn-sm btn-ghost">+ Add Items</a>
                 <form method="POST" action="{{ url_for('mark_order_purchased') }}" style="display: inline;">
