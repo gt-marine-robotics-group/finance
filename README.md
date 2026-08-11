@@ -61,12 +61,80 @@ mrg-finance purchase --fresh
 </details>
 
 <details>
-<summary><strong>4. 🤖 CLI Commands Reference (`mrg-finance`)</strong></summary>
+<summary><strong>4. 🤖 CLI Commands & Options Reference (`mrg-finance`)</strong></summary>
 
-- `mrg-finance bill-request --fresh`: Interactive bill selection, screenshot audit/capture, web review window launch, and CampusLabs Engage submission.
-- `mrg-finance purchase --fresh`: Interactive live price check, web order review launch, and Engage purchase request submission.
-- `mrg-finance price-check`: Headless live price check comparing online prices vs approved allocations.
-- `mrg-finance screenshots`: Batch pre-capturing item screenshots.
+### 🛡️ Screenshot Overwrite Policy
+> **Does the `screenshots` command overwrite old screenshots?**  
+> **NO.** Original ground-truth bill screenshots stored in `screenshots/<bill_title>/<item_name>.png` are **permanently preserved** and never overwritten automatically.  
+> - **Bill Requests**: The script audits existing files and only captures screenshots for items that are missing images.  
+> - **Order Reviews**: Live price audit captures during `mrg-finance purchase` are isolated in `screenshots/_order_<order_id>/` so original bill submission evidence is never touched.  
+> - **Manual Re-take**: Officers can intentionally force re-capturing individual item screenshots via the web page **`📸`** buttons or `/bill/<bill_title>` header actions.
+
+---
+
+### 📋 Full Command & Option Reference
+
+#### 1. `mrg-finance bill-request`
+Automates bill submission on CampusLabs Engage.
+- **Options**:
+  - `-f`, `--fresh`: Pull a fresh copy of the budget `.xlsx` from SharePoint/OneDrive via `rclone` before running.
+- **Workflow**:
+  1. Prompts for interactive bill selection.
+  2. Runs a missing screenshot audit. Prompts to capture any missing item screenshots via headless Chrome.
+  3. Launches the Web Review Page (`http://localhost:5000/review/<bill_title>`) in your default browser.
+  4. Pre-fills CampusLabs Engage form fields and pauses for officer inspection before final submission.
+- **Example**:
+  ```bash
+  mrg-finance bill-request --fresh
+  ```
+
+#### 2. `mrg-finance purchase`
+Automates purchase request submissions on CampusLabs Engage.
+- **Options**:
+  - `-f`, `--fresh`: Pull a fresh copy of the budget `.xlsx` from SharePoint/OneDrive via `rclone` before running.
+  - `-o`, `--order <ORDER_ID>`: Specify an Order ID directly (skips interactive order selection).
+- **Workflow**:
+  1. Prompts to select an Order ID from `OrderT` (or fallback by Bill Title).
+  2. Prompts to run a live price check audit.
+  3. Displays live price comparison table with budget overrun alerts (`+$XX.XX`).
+  4. Auto-generates 1-Click Amazon Multi-Item Cart link (or displays non-Amazon vendor cart warning).
+  5. Auto-opens Side-by-Side Order Review window (`http://localhost:5000/orders/review/<order_id>`).
+  6. Launches Engage purchase request pre-filling with GT SSO + Duo MFA.
+- **Example**:
+  ```bash
+  mrg-finance purchase --fresh --order "260811_amazon_awu335"
+  ```
+
+#### 3. `mrg-finance price-check`
+Runs a headless online price check against product links.
+- **Options**:
+  - `-f`, `--fresh`: Pull a fresh copy of the budget `.xlsx` from SharePoint/OneDrive via `rclone` before running.
+  - `-b`, `--bill <TITLE>`: Specify a Bill Title directly (skips interactive selection).
+  - `-c`, `--cart`: Automatically generate and prompt to open the 1-Click Amazon Multi-Item Cart URL.
+- **Workflow**:
+  1. Scrapes live prices from product links via headless Chrome.
+  2. Compares live price vs approved bill allocation cost in a terminal table.
+  3. Flags budget overruns (`+$XX.XX OVER BUDGET`) or savings.
+  4. Auto-builds 1-Click Amazon Cart link and offers to launch it in your browser.
+- **Example**:
+  ```bash
+  mrg-finance price-check --fresh --bill "FY27 Budget" --cart
+  ```
+
+#### 4. `mrg-finance screenshots`
+Scrapes live product prices and captures headless Chrome screenshots for bill items.
+- **Options**:
+  - `-f`, `--fresh`: Pull a fresh copy of the budget `.xlsx` from SharePoint/OneDrive via `rclone` before running.
+  - `-b`, `--bill <TITLE>`: Specify a Bill Title directly (skips interactive selection).
+- **Workflow**:
+  1. Scrapes current prices and takes full-page product screenshots.
+  2. Saves screenshots to `screenshots/<bill_title>/<item_name>.png`.
+  3. Existing screenshots are strictly preserved and **never overwritten**.
+- **Example**:
+  ```bash
+  mrg-finance screenshots --fresh --bill "FY27 Budget"
+  ```
+
 </details>
 
 <details>
