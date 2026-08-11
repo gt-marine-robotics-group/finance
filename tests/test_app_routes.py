@@ -140,3 +140,31 @@ def test_order_deletion_title_cleanup(client):
         response = client.post("/orders/delete", data={"order_id": "260811_amazon_tester"}, follow_redirects=True)
         assert response.status_code == 200
 
+
+def test_prevent_duplicate_order_item_submission(client):
+    """Ensure submitting an item that is already in an existing order is rejected."""
+    client.post("/login", data={"password": "boats0519", "name": "Tester"})
+    mock_item = [{"Bill Item ID": "101", "Item Name": "Duplicate Thruster", "Vendor": "Amazon", "Status": "bill approved"}]
+    mock_cols_resp = {"value": [{"name": "Order ID"}, {"name": "Bill Item ID"}, {"name": "Vendor"}, {"name": "Item Name"}, {"name": "Quantity"}]}
+    mock_rows_resp = {
+        "value": [
+            {"index": 0, "values": [["260811_amazon_tester", "101", "Amazon", "Duplicate Thruster", "1.0"]]}
+        ]
+    }
+    def mock_requests_get(url, **kwargs):
+        class MockResp:
+            status_code = 200
+            def json(self):
+                if "columns" in url:
+                    return mock_cols_resp
+                return mock_rows_resp
+        return MockResp()
+
+    with patch("xlsx_manager.read_items", return_value=mock_item), \
+         patch("xlsx_manager._get_graph_token", return_value=("mock_token", "mock_drive", "mock_file")), \
+         patch("xlsx_manager.graph_get_table_columns", return_value=["Order ID", "Bill Item ID", "Vendor", "Item Name", "Quantity"]), \
+         patch("requests.get", side_effect=mock_requests_get):
+        response = client.post("/create-order/submit", data={"item_ids": ["101"]}, follow_redirects=True)
+        assert response.status_code == 200
+        assert b"already included in an existing order" in response.data
+
