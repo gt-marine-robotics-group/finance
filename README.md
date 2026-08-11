@@ -86,14 +86,28 @@ To enable automatic screenshot & `.xlsx` syncing on your computer:
    - **Linux**: `sudo apt install rclone`
    - **Windows**: `winget install rclone.rclone` *(or in PowerShell: `choco install rclone`)*
 
-2. **Configure GT OneDrive Remote (1-time setup)**:
-   Run `rclone config` in your terminal:
-   - Type **`n`** for New Remote $\rightarrow$ Name it **`onedrive`** *(Must be exactly `onedrive` in lowercase!)*.
-   - Select **`Microsoft OneDrive`** $\rightarrow$ Press Enter through default prompts.
-   - When the browser opens, log in with your **Georgia Tech SSO** credentials.
-   - Select **OneDrive Business / SharePoint** and target the `OPS-1 Operations/FY27 Finances` folder.
+2. **Configure GT OneDrive Remote (Step-by-Step Prompt Walkthrough)**:
+   Run `rclone config` in your terminal and follow this exact key sequence:
+   - `e/n/d/r/c/s/q>` $\rightarrow$ Type **`n`** *(New remote)*
+   - `name>` $\rightarrow$ Type **`onedrive`** *(Must be exactly `onedrive` in lowercase!)*
+   - `Storage>` $\rightarrow$ Type **`42`** *(Microsoft OneDrive)*
+   - `client_id>` $\rightarrow$ Press **Enter** *(Leave blank)*
+   - `client_secret>` $\rightarrow$ Press **Enter** *(Leave blank)*
+   - `region>` $\rightarrow$ Press **Enter** *(Default `1 / global`)*
+   - `Edit advanced config?` $\rightarrow$ Type **`n`**
+   - `Use web browser to authenticate?` $\rightarrow$ Type **`y`**
+   - **Browser Pop-up**: Log in with your **Georgia Tech SSO (`<username>@gatech.edu`) + Duo MFA** and click Accept.
+   - `Choose a number from 1 to 6 >` $\rightarrow$ Type **`1`** *(OneDrive Personal or Business)*
+   - `Chose drive to use:>` $\rightarrow$ Type **`0`** *(OneDrive Business)*
+   - `Is that OK?` $\rightarrow$ Type **`y`**
+   - Main Menu $\rightarrow$ Type **`q`** to quit.
 
-3. **How Syncing Works**:
+3. **Verify Configuration**:
+   ```bash
+   rclone ls "onedrive:OPS-1 Operations/FY27 Finances"
+   ```
+
+4. **How Syncing Works**:
    - **Download Sync**: `mrg-finance --fresh` downloads the latest `.xlsx` and team screenshots from SharePoint.
    - **Upload Sync**: `mrg-finance screenshots` automatically uploads newly captured screenshots to SharePoint (`onedrive:OPS-1 Operations/FY27 Finances/screenshots/`).
 
