@@ -50,8 +50,8 @@
         </div>
 
         <div class="form-group">
-            <label for="notes">Ordering Instructions</label>
-            <textarea id="notes" name="notes" rows="3" class="input" placeholder="Add part numbers, vendor options, or special ordering instructions...">{{ item.get('Notes', '') or item.get('Ordering Instructions', '') }}</textarea>
+            <label for="ordering_instructions">Ordering Instructions (Read-Only from Bills Table)</label>
+            <textarea id="ordering_instructions" rows="2" class="input" readonly style="background: rgba(0,0,0,0.03); color: var(--color-text-muted); cursor: not-allowed;">{{ ordering_instructions or item.get('Description', '') }}</textarea>
         </div>
 
         <div class="form-actions">
