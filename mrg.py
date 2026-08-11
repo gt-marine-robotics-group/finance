@@ -179,6 +179,11 @@ def cmd_screenshots(args):
         # Screenshot
         safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in item_name)
         filepath = os.path.join(bill_dir, f"{safe_name}.png")
+
+        if not getattr(args, "force", False) and os.path.exists(filepath):
+            print(f"  ℹ️ {item_name}: screenshot already exists (skipping to preserve ground truth)")
+            continue
+
         driver.save_screenshot(filepath)
 
         # Scrape price
