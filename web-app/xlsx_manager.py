@@ -269,26 +269,54 @@ def _patch_row_values(sheet_table: str, row_index: int, values: list, columns: l
     return True
 
 
+_cached_table_columns: dict[str, list[str]] = {}
+
+FALLBACK_COLUMNS = {
+    "OrderT": [
+        "Order ID (YYMMDD_vendor_gburdell3)", "Bill Item ID", "Vendor",
+        "Item Name", "Purchaser", "Status", "Quantity", "Allocation",
+        "Cost Overrun", "Notes"
+    ],
+    "BillsT": [
+        "Bill Item ID", "Bill No.", "Bill Title", "Item Name", "Status",
+        "Budget Section", "Vendor", "Description", "Quantity", "Cost",
+        "Total Cost", "Link", "File URL", "Person Requesting"
+    ],
+    "TestTable": [
+        "Bill Item ID", "Bill No.", "Bill Title", "Item Name",
+        "Budget Section", "Quantity", "Cost", "Vendor", "Description", "Link"
+    ],
+}
+
+
 def graph_get_table_columns(sheet_table: str) -> list[str]:
-    """Get column names for a table via Graph API."""
+    """Get column names for a table via Graph API with caching & fallback."""
+    if sheet_table in _cached_table_columns and _cached_table_columns[sheet_table]:
+        return _cached_table_columns[sheet_table]
+
     import requests as _requests
 
     creds = _get_graph_token()
     if not creds:
-        return []
+        return FALLBACK_COLUMNS.get(sheet_table, [])
 
     access_token, drive_id, file_id = creds
-
     url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/{sheet_table}/columns"
-    resp = _requests.get(
-        url,
-        headers={"Authorization": f"Bearer {access_token}"},
-        timeout=10,
-    )
 
-    if resp.status_code == 200:
-        return [c["name"] for c in resp.json()["value"]]
-    return []
+    try:
+        resp = _requests.get(
+            url,
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            cols = [c["name"] for c in resp.json()["value"]]
+            _cached_table_columns[sheet_table] = cols
+            return cols
+    except Exception as e:
+        print(f"[graph] ⚠️ Exception reading columns for {sheet_table}: {e}")
+
+    return FALLBACK_COLUMNS.get(sheet_table, [])
 
 
 def sync_push() -> bool:

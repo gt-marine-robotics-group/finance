@@ -281,27 +281,32 @@ def submit_order():
         return redirect(url_for("orders.create_order"))
 
     rows_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/OrderT/rows"
-    resp = requests.get(rows_url, headers=headers, timeout=15)
     last_data_idx = -1
     existing_order_ids = set()
     max_order_num = 0
 
-    if resp.status_code == 200:
-        rows_val = resp.json().get("value", [])
-        for row in rows_val:
-            vals = row["values"][0]
-            if (vals[0] and str(vals[0]).strip()) or (vals[1] and str(vals[1]).strip()):
-                last_data_idx = row["index"]
-            if vals[0] and str(vals[0]).strip():
-                existing_order_ids.add(str(vals[0]).strip())
-            item_name = str(vals[3]).strip() if len(vals) > 3 and vals[3] else ""
-            if item_name.startswith("Order") and not vals[1]:
-                try:
-                    num = int(item_name.replace("Order", "").strip())
-                    if num > max_order_num:
-                        max_order_num = num
-                except ValueError:
-                    pass
+    try:
+        resp = requests.get(rows_url, headers=headers, timeout=20)
+        if resp.status_code == 200:
+            rows_val = resp.json().get("value", [])
+            for row in rows_val:
+                vals = row["values"][0]
+                if (vals[0] and str(vals[0]).strip()) or (vals[1] and str(vals[1]).strip()):
+                    last_data_idx = row["index"]
+                if vals[0] and str(vals[0]).strip():
+                    existing_order_ids.add(str(vals[0]).strip())
+                item_name = str(vals[3]).strip() if len(vals) > 3 and vals[3] else ""
+                if item_name.startswith("Order") and not vals[1]:
+                    try:
+                        num = int(item_name.replace("Order", "").strip())
+                        if num > max_order_num:
+                            max_order_num = num
+                    except ValueError:
+                        pass
+    except requests.exceptions.RequestException as e:
+        print(f"[order] ⚠️ Graph API request failed: {e}")
+        flash("Microsoft Graph API request timed out — please try submitting again", "error")
+        return redirect(url_for("orders.create_order"))
 
     first_empty = last_data_idx + 1
     date_str = datetime.now().strftime("%y%m%d")
