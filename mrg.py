@@ -94,28 +94,14 @@ def load_xlsx():
 
 
 def load_ordering():
-    """Load the Ordering sheet (fetches Graph API live cloud data if available, with xlsx fallback)."""
+    """Load the Ordering sheet from local xlsx."""
     import pandas as pd
     import warnings
     warnings.filterwarnings('ignore')
 
-    try:
-        sys.path.insert(0, os.path.join(SCRIPT_DIR, "web-app"))
-        import xlsx_manager
-        rows = xlsx_manager.graph_get_order_rows()
-        if rows:
-            df = pd.DataFrame(rows).astype(object).fillna("")
-            df.columns = df.columns.str.strip()
-            return df
-    except Exception:
-        pass
-
-    try:
-        df = pd.read_excel(XLSX_PATH, sheet_name=ORDERING_SHEET, header=1).astype(object).fillna("")
-        df.columns = df.columns.str.strip()
-        return df
-    except Exception:
-        return pd.DataFrame()
+    df = pd.read_excel(XLSX_PATH, sheet_name=ORDERING_SHEET, header=1).astype(object).fillna("")
+    df.columns = df.columns.str.strip()
+    return df
 
 
 def select_bill(df, bill_title=None):
