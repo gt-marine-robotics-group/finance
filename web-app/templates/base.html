@@ -13,10 +13,9 @@
         <a href="{{ url_for('dashboard') }}" class="nav-brand">MRG Purchasing</a>
         <div class="nav-links">
             <span class="nav-user">{{ session.get('user_name', '') }}</span>
-            <span class="nav-status" id="nav-status" title="Click to sync now" onclick="triggerSync()" style="cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 0.25rem;">
+            <span class="nav-status-badge" id="nav-status" title="Click to sync with SharePoint" onclick="triggerSync()">
                 <span id="nav-sync-icon" style="display: inline-block;">●</span> <small id="nav-status-label">...</small>
             </span>
-            <button type="button" class="btn btn-sm btn-ghost" onclick="triggerSync()" title="Force sync from SharePoint">🔄 Sync</button>
             <a href="{{ url_for('add_item') }}" class="btn btn-sm btn-primary">+ Add Item</a>
             <a href="{{ url_for('view_orders') }}" class="btn btn-sm btn-ghost">Orders</a>
             <a href="{{ url_for('logout') }}" class="btn btn-sm btn-ghost">Logout</a>
@@ -25,6 +24,28 @@
     <style>
         @keyframes spin { 100% { transform: rotate(360deg); } }
         .spinning { animation: spin 1s linear infinite; }
+        .nav-status-badge {
+            cursor: pointer;
+            user-select: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.25rem 0.65rem;
+            border-radius: 9999px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            background: rgba(255, 255, 255, 0.05);
+            transition: all 0.2s ease;
+            font-size: 0.85rem;
+        }
+        .nav-status-badge:hover {
+            background: rgba(255, 255, 255, 0.18);
+            border-color: rgba(255, 255, 255, 0.35);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+            transform: translateY(-1px);
+        }
+        .nav-status-badge:active {
+            transform: translateY(0);
+        }
     </style>
     <script>
     function triggerSync() {
