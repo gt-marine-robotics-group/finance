@@ -59,6 +59,31 @@ Open **`http://localhost:5000`** in your browser:
 
 ---
 
+### 4. ☁️ SharePoint & Screenshot Sync Setup (`rclone`)
+
+Screenshots are synced directly with the team's shared **GT OneDrive / SharePoint** folder (and kept out of Git to keep the repository lightweight).
+
+To enable automatic screenshot & `.xlsx` syncing on your computer:
+
+1. **Install `rclone`**:
+   - **macOS**: `brew install rclone`
+   - **Linux**: `sudo apt install rclone`
+   - **Windows**: `winget install rclone.rclone` *(or in PowerShell: `choco install rclone`)*
+
+2. **Configure GT OneDrive Remote (1-time setup)**:
+   Run `rclone config` in your terminal:
+   - Type **`n`** for New Remote $\rightarrow$ Name it **`onedrive`**.
+   - Select **`Microsoft OneDrive`** $\rightarrow$ Press Enter through default prompts.
+   - When the browser opens, log in with your **Georgia Tech SSO** credentials.
+   - Select **OneDrive Business / SharePoint** and target the `OPS-1 Operations/FY27 Finances` folder.
+
+3. **How Syncing & Overwrite Protection Work**:
+   - **Download Sync**: `mrg-finance --fresh` downloads the latest `.xlsx` and team screenshots from SharePoint.
+   - **Upload Sync**: `mrg-finance screenshots` automatically uploads newly captured screenshots to SharePoint (`onedrive:OPS-1 Operations/FY27 Finances/screenshots/`).
+   - **🛡️ Zero Overwrite Risk**: Syncing uses `rclone copy --checksum`, which only copies missing or new files. Ground-truth bill screenshots (`screenshots/<bill_title>/<item_name>.png`) are permanently preserved and never overwritten by team syncs.
+
+---
+
 ## 🤖 CLI Commands & Options Reference (`mrg-finance`)
 
 ### 🛡️ Screenshot Overwrite Policy
