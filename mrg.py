@@ -404,8 +404,10 @@ def cmd_price_check(args):
             try:
                 webbrowser.open(cart_url)
                 print("   ✅ Opened Amazon Cart in default browser.")
-            except Exception as e:
-                print(f"   ⚠️ Could not launch browser: {e}")
+    non_amazon_count = len(results) - len(amazon_items)
+    if non_amazon_count > 0:
+        print(f"\nℹ️ Non-Amazon Vendor Items Detected ({non_amazon_count} item(s)):")
+        print("   Please create a shopping cart directly on the vendor website and take a cart screenshot before submitting your purchase request.")
 
 
 # ============================================================
