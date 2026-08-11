@@ -97,8 +97,10 @@ To enable automatic screenshot & `.xlsx` syncing on your computer:
    - `Edit advanced config?` $\rightarrow$ Type **`n`**
    - `Use web browser to authenticate?` $\rightarrow$ Type **`y`**
    - **Browser Pop-up**: Log in with your **Georgia Tech SSO (`<username>@gatech.edu`) + Duo MFA** and click Accept.
-   - `Choose a number from 1 to 6 >` $\rightarrow$ Type **`1`** *(OneDrive Personal or Business)*
-   - `Chose drive to use:>` $\rightarrow$ Type **`0`** *(OneDrive Business)*
+   - `config_type>` $\rightarrow$ Type **`3`** *(SharePoint site name or URL)*
+   - `config_site_url>` $\rightarrow$ Type **`https://gtvault.sharepoint.com/sites/MarineRoboticsGroup`**
+   - `config_driveid>` $\rightarrow$ Type **`3`** *(Documents)*
+   - `Drive OK?` $\rightarrow$ Type **`y`**
    - `Is that OK?` $\rightarrow$ Type **`y`**
    - Main Menu $\rightarrow$ Type **`q`** to quit.
 
