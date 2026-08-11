@@ -141,12 +141,64 @@ for i, (_, row) in enumerate(bill_items.iterrows()):
         "total": total,
         "bill_line_ref": bill_line_ref,
         "bill_item_id": bill_item_id,
+        "link": str(row.get("Link", "")).strip(),
     })
 
     print(f"{i+1:<4} {bill_item_id:<6} {item_name:<35} {qty:<5} ${cost:<9.2f} ${total:.2f}")
 
 grand_total = sum(r["total"] for r in requests_to_submit)
-print(f"\n  💰 Grand Total: ${grand_total:.2f}")
+print(f"\n  💰 Grand Total Allocation: ${grand_total:.2f}")
+
+# === Live Price Check Audit ===
+import price_scraper
+print(f"\n🔍 Running Live Price Check Audit against online product links...")
+total_scraped_live = 0.0
+has_scraped_data = False
+has_overrun = False
+
+print(f"\n{'Item Name':<35} {'Allocated':<12} {'Live Price':<12} {'Status'}")
+print("-" * 75)
+
+for r in requests_to_submit:
+    url = r.get("link", "")
+    alloc_unit = r["cost"]
+    live_unit = None
+
+    if url and url.startswith("http"):
+        try:
+            scraped = price_scraper.scrape_item_price(url)
+            if scraped and scraped.get("current_price") is not None:
+                live_unit = float(scraped["current_price"])
+                has_scraped_data = True
+        except Exception:
+            pass
+
+    unit_delta = (live_unit - alloc_unit) if live_unit is not None else 0.0
+
+    if live_unit is not None:
+        total_scraped_live += (live_unit * r["quantity"])
+        if unit_delta > 0.01:
+            has_overrun = True
+            status_str = f"+${unit_delta:.2f} (OVER BUDGET)"
+        elif unit_delta < -0.01:
+            status_str = f"-${-unit_delta:.2f} (SAVINGS)"
+        else:
+            status_str = "✅ Match"
+        print(f"{r['item_name']:<35} ${alloc_unit:<11.2f} ${live_unit:<11.2f} {status_str}")
+    else:
+        total_scraped_live += r["total"]
+        print(f"{r['item_name']:<35} ${alloc_unit:<11.2f} {'—':<11} ℹ️ Scrape unavailable")
+
+print("-" * 75)
+if has_scraped_data:
+    total_delta = total_scraped_live - grand_total
+    if total_delta > 0.01:
+        print(f"⚠️ OVERRUN WARNING: Total live cost is +${total_delta:.2f} higher than approved allocation!")
+    elif total_delta < -0.01:
+        print(f"🎉 SAVINGS NOTICE: Total live cost is -${-total_delta:.2f} lower than approved allocation!")
+    else:
+        print("✅ Live prices match approved bill allocations 100%.")
+
 print(f"  📝 Each item will be a separate purchase request")
 print(f"  📝 Bill/Line reference auto-generated (e.g. '{requests_to_submit[0]['bill_line_ref']}')")
 
