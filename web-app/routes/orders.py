@@ -323,7 +323,7 @@ def create_order():
         if b_id and oid and not oid.startswith("ungrouped_"):
             ordered_items_map[b_id] = oid
 
-    return render_template("create_order.html", vendors=groups, group_by=group_by, ordered_items_map=ordered_items_map)
+    return render_template("create_order.html", vendors=groups, group_by=group_by, ordered_items_map=ordered_items_map, filter_vendor=filter_vendor)
 
 
 @orders_bp.route("/create-order/submit", methods=["POST"])
@@ -430,10 +430,11 @@ def submit_order():
         for item in vendor_items:
             item_id = str(item.get("Bill Item ID", "")).strip()
             item_name = item.get("Item Name", "Item")
+            status_str = str(item.get("Status", "")).strip().lower()
 
-            # Reject adding an item that is ALREADY in an existing order to prevent duplicate orders & cost overruns!
-            if item_id in existing_bill_item_map:
-                flash(f"Item '{item_name}' (ID: {item_id}) is already included in an existing order and cannot be added again.", "error")
+            # Reject adding an item that is ALREADY in an existing order or pending purchase!
+            if item_id in existing_bill_item_map or status_str == "pending purchase" or "purchased" in status_str:
+                flash(f"Item '{item_name}' (ID: {item_id}) has status '{item.get('Status')}' and is already assigned to an order. It cannot be reordered.", "error")
                 return redirect(url_for("orders.create_order"))
 
             try:
