@@ -492,3 +492,104 @@ def check_prices():
             yield "data: {\"done\": true}\n\n"
 
     return Response(generate(), mimetype="text/event-stream")
+
+
+@orders_bp.route("/orders/edit-item/<int:table_index>", methods=["GET", "POST"])
+@login_required
+def edit_order_item(table_index):
+    """Edit a single order item in OrderT."""
+    order_rows = xlsx_manager.graph_get_order_rows()
+    item = None
+    for r in order_rows:
+        if r.get("_table_index") == table_index:
+            item = r
+            break
+
+    if not item:
+        flash("Order item not found", "error")
+        return redirect(url_for("orders.view_orders"))
+
+    if request.method == "POST":
+        updates = {}
+        for field in ["Item Name", "Vendor", "Purchaser", "Status", "Quantity", "Notes"]:
+            form_key = field.lower().replace(" ", "_").replace(".", "")
+            val = request.form.get(form_key)
+            if val is not None:
+                updates[field] = val.strip()
+
+        if "Quantity" in updates and updates["Quantity"]:
+            try:
+                updates["Quantity"] = float(updates["Quantity"])
+            except ValueError:
+                pass
+
+        success = xlsx_manager.graph_update_order_item(table_index, updates)
+
+        bill_item_id = str(item.get("Bill Item ID", "")).strip()
+        if bill_item_id and success:
+            bill_updates = {}
+            if "Item Name" in updates:
+                bill_updates["Item Name"] = updates["Item Name"]
+            if "Vendor" in updates:
+                bill_updates["Vendor"] = updates["Vendor"]
+            if "Quantity" in updates:
+                bill_updates["Quantity"] = updates["Quantity"]
+            if "Status" in updates:
+                bill_updates["Status"] = updates["Status"]
+            if bill_updates:
+                xlsx_manager.update_item(bill_item_id, bill_updates)
+
+        if success:
+            flash("Order item updated", "success")
+        else:
+            flash("Failed to update order item", "error")
+        return redirect(url_for("orders.view_orders"))
+
+    return render_template("edit_order_item.html", item=item, table_index=table_index)
+
+
+@orders_bp.route("/orders/edit/<order_id>", methods=["GET", "POST"])
+@login_required
+def edit_order(order_id):
+    """Edit order details across all items in an order."""
+    order_rows = xlsx_manager.graph_get_order_rows()
+    order_items = [r for r in order_rows if str(r.get("Order ID (YYMMDD_vendor_gburdell3)", "") or r.get("Order ID", "")).strip() == order_id]
+
+    if not order_items:
+        flash("Order not found", "error")
+        return redirect(url_for("orders.view_orders"))
+
+    current_vendor = price_scraper.normalize_vendor(order_items[0].get("Vendor", "")) if order_items else ""
+    current_purchaser = order_items[0].get("Purchaser", "") if order_items else ""
+    current_status = order_items[0].get("Status", "") if order_items else ""
+
+    if request.method == "POST":
+        new_vendor = request.form.get("vendor", "").strip()
+        new_purchaser = request.form.get("purchaser", "").strip()
+        new_status = request.form.get("status", "").strip()
+
+        updates = {}
+        if new_vendor:
+            updates["Vendor"] = new_vendor
+        if new_purchaser:
+            updates["Purchaser"] = new_purchaser
+        if new_status:
+            updates["Status"] = new_status
+
+        updated_count = 0
+        for item in order_items:
+            t_idx = item.get("_table_index")
+            if t_idx is not None:
+                if xlsx_manager.graph_update_order_item(t_idx, updates):
+                    updated_count += 1
+                    b_id = str(item.get("Bill Item ID", "")).strip()
+                    if b_id:
+                        b_up = {}
+                        if new_vendor: b_up["Vendor"] = new_vendor
+                        if new_status: b_up["Status"] = new_status
+                        xlsx_manager.update_item(b_id, b_up)
+
+        flash(f"Updated order '{order_id}' ({updated_count} items)", "success")
+        return redirect(url_for("orders.view_orders"))
+
+    return render_template("edit_order.html", order_id=order_id, items=order_items, vendor=current_vendor, purchaser=current_purchaser, status=current_status)

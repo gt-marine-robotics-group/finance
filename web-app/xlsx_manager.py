@@ -858,6 +858,51 @@ def graph_get_order_rows() -> list[dict]:
     return result
 
 
+def graph_update_order_item(table_index: int, updates: dict) -> bool:
+    """
+    Update fields of a single item row in OrderT by table_index via Graph API.
+    Updates matching columns and invalidates orders cache.
+    """
+    import requests as _requests
+
+    creds = _get_graph_token()
+    if not creds:
+        return False
+
+    access_token, drive_id, file_id = creds
+    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+
+    order_columns = graph_get_table_columns("OrderT")
+    if not order_columns:
+        return False
+
+    sheet_row = table_index + 3  # +3 because row 1=TOTALS, row 2=header, 0-based index
+    col_letters = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R']
+
+    success_count = 0
+    for field, value in updates.items():
+        matched_idx = None
+        for i, c_name in enumerate(order_columns):
+            if c_name.lower() == field.lower() or (field == "Item Name" and "Item" in c_name):
+                matched_idx = i
+                break
+
+        if matched_idx is not None and matched_idx < len(col_letters):
+            col_letter = col_letters[matched_idx]
+            cell_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{col_letter}{sheet_row}')"
+            try:
+                r = _requests.patch(cell_url, headers=headers, json={"values": [[value]]}, timeout=10)
+                if r.status_code == 200:
+                    success_count += 1
+            except Exception as e:
+                print(f"[graph] ⚠️ Error updating cell {col_letter}{sheet_row}: {e}")
+
+    if success_count > 0:
+        invalidate_orders_cache()
+        return True
+    return False
+
+
 def _fetch_order_rows() -> list[dict]:
     """Fetch order rows directly from Graph API."""
     import requests as _requests

@@ -85,7 +85,10 @@
                                 —
                             {% endif %}
                         </td>
-                        <td>
+                        <td style="white-space: nowrap;">
+                            {% if item.get('_table_index') is not none %}
+                            <a href="{{ url_for('orders.edit_order_item', table_index=item.get('_table_index')) }}" class="btn btn-sm btn-ghost" style="margin-right: 0.25rem;">Edit</a>
+                            {% endif %}
                             <form method="POST" action="{{ url_for('delete_order_item') }}" style="display:inline">
                                 <input type="hidden" name="order_id" value="{{ order_id }}">
                                 <input type="hidden" name="bill_item_id" value="{{ item.get('Bill Item ID', '') }}">
@@ -100,6 +103,7 @@
             </table>
 
             <div class="order-card-actions">
+                <a href="{{ url_for('orders.edit_order', order_id=order_id) }}" class="btn btn-sm btn-ghost">Edit Order</a>
                 <a href="{{ url_for('create_order', group='vendor', filter_vendor=order.vendor) }}" class="btn btn-sm btn-ghost">+ Add Items</a>
                 <form method="POST" action="{{ url_for('mark_order_purchased') }}" style="display: inline;">
                     <input type="hidden" name="order_id" value="{{ order_id }}">
