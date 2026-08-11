@@ -134,6 +134,113 @@ def bill_view(bill_title):
     return render_template("bill_view.html", bill_title=bill_title, items=items, total=total, is_locked=is_locked)
 
 
+@bills_bp.route("/bill/<path:bill_title>/take-screenshots", methods=["POST"])
+@login_required
+def take_bill_screenshots(bill_title):
+    """Queue fresh screenshots for all items in a bill."""
+    items = xlsx_manager.get_items_by_bill(bill_title)
+    queued_count = 0
+    for item in items:
+        url = str(item.get("Link", "")).strip()
+        name = str(item.get("Item Name", "")).strip()
+        if url and name and url.startswith("http"):
+            screenshot_worker.queue_screenshot(name, url, bill_title, overwrite=True)
+            queued_count += 1
+
+    if queued_count > 0:
+        flash(f"Queued fresh screenshots for {queued_count} item(s) in '{bill_title}'", "success")
+    else:
+        flash(f"No valid item links found in '{bill_title}' for screenshots", "error")
+
+    return redirect(url_for("bills.bill_view", bill_title=bill_title))
+
+
+@bills_bp.route("/bill/<path:bill_title>/update-items", methods=["POST"])
+@login_required
+def update_bill_items(bill_title):
+    """Batch update all line items directly on the bill view page."""
+    if is_bill_locked(bill_title):
+        flash("Cannot modify an approved or submitted bill.", "error")
+        return redirect(url_for("bills.bill_view", bill_title=bill_title))
+
+    items = xlsx_manager.get_items_by_bill(bill_title)
+    updated_count = 0
+
+    for idx, item in enumerate(items):
+        item_id = str(item.get("Bill Item ID", "")).strip()
+        if not item_id:
+            continue
+
+        item_name = request.form.get(f"item_name_{idx}", "").strip()
+        cost_raw = request.form.get(f"cost_{idx}", "").strip()
+        qty_raw = request.form.get(f"quantity_{idx}", "").strip()
+        vendor = request.form.get(f"vendor_{idx}", "").strip()
+        link = request.form.get(f"link_{idx}", "").strip()
+        budget_section = request.form.get(f"budget_section_{idx}", "").strip()
+        description = request.form.get(f"description_{idx}", "").strip()
+
+        updates = {}
+        if item_name:
+            updates["Item Name"] = item_name
+        if vendor:
+            updates["Vendor"] = vendor
+        if link:
+            updates["Link"] = link
+        if budget_section:
+            updates["Budget Section"] = budget_section
+        if description:
+            updates["Description"] = description
+
+        if cost_raw:
+            try:
+                c_val = float(cost_raw)
+                if c_val >= 0:
+                    updates["Cost"] = c_val
+            except ValueError:
+                pass
+
+        if qty_raw:
+            try:
+                q_val = float(qty_raw)
+                if q_val > 0:
+                    updates["Quantity"] = q_val
+            except ValueError:
+                pass
+
+        if updates and xlsx_manager.update_item(item_id, updates):
+            updated_count += 1
+            if "Link" in updates and updates["Link"].startswith("http"):
+                name = updates.get("Item Name", item.get("Item Name", ""))
+                screenshot_worker.queue_screenshot(name, updates["Link"], bill_title, overwrite=True)
+
+    flash(f"Updated {updated_count} line item(s) in '{bill_title}'", "success")
+    return redirect(url_for("bills.bill_view", bill_title=bill_title))
+
+
+@bills_bp.route("/queue-screenshot/<item_id>", methods=["POST"])
+@login_required
+def queue_single_item_screenshot(item_id):
+    """Queue a fresh screenshot for a single line item."""
+    all_items = xlsx_manager.read_items()
+    target_item = next((i for i in all_items if str(i.get("Bill Item ID", "")).strip() == str(item_id)), None)
+
+    if not target_item:
+        flash("Item not found", "error")
+        return redirect(request.referrer or url_for("dashboard.dashboard"))
+
+    name = str(target_item.get("Item Name", "")).strip()
+    url = str(target_item.get("Link", "")).strip()
+    bill_title = str(target_item.get("Bill Title", "")).strip()
+
+    if not url or not url.startswith("http"):
+        flash(f"No valid link for item '{name}'", "error")
+        return redirect(request.referrer or url_for("dashboard.dashboard"))
+
+    screenshot_worker.queue_screenshot(name, url, bill_title, overwrite=True)
+    flash(f"Queued fresh screenshot for '{name}'", "success")
+    return redirect(request.referrer or url_for("dashboard.dashboard"))
+
+
 @bills_bp.route("/bill/<path:bill_title>/add-item", methods=["GET", "POST"])
 @login_required
 def add_item_to_bill(bill_title):

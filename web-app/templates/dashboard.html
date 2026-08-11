@@ -61,7 +61,7 @@
                 {% else %}
                 <span class="badge" style="background: rgba(234, 179, 8, 0.2); color: var(--color-warning); padding: 0.3rem 0.6rem; font-weight: 600; font-size: 0.8rem;">🔒 Approved</span>
                 {% endif %}
-                <a href="{{ url_for('bills.bill_view', bill_title=title) }}" class="btn btn-sm btn-ghost">View Full Bill →</a>
+                <a href="{{ url_for('bills.bill_view', bill_title=title) }}" class="btn btn-sm btn-ghost">Edit Bill →</a>
             </div>
             <div class="item-grid">
                 {% for item in items %}
