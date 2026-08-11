@@ -383,22 +383,29 @@ def cmd_price_check(args):
     else:
         print(f"  \033[92mNo overruns\033[0m")
 
-    # Generate Amazon cart
-    if args.cart:
-        amazon_items = []
-        for r in results:
-            if "amazon" in r.get("url", "").lower():
-                asin_match = re.search(r'/(?:dp|gp/product)/([A-Z0-9]{10})', r["url"])
-                if asin_match:
-                    amazon_items.append((asin_match.group(1), r["qty"]))
+    # Generate Amazon cart link for all Amazon items
+    amazon_items = []
+    for r in results:
+        url_str = str(r.get("url", "")).lower()
+        if "amazon" in url_str:
+            asin_match = re.search(r'/(?:dp|gp/product)/([A-Z0-9]{10})', url_str)
+            if asin_match:
+                amazon_items.append((asin_match.group(1), r["qty"]))
 
-        if amazon_items:
-            params = [f"ASIN.{i}={asin}&Quantity.{i}={qty}" for i, (asin, qty) in enumerate(amazon_items, 1)]
-            cart_url = "https://www.amazon.com/gp/aws/cart/add.html?" + "&".join(params)
-            print(f"\n🛒 Amazon Cart ({len(amazon_items)} items):")
-            print(f"   {cart_url}")
-        else:
-            print("\n  No Amazon items with valid ASINs found.")
+    if amazon_items:
+        params = [f"ASIN.{i}={asin}&Quantity.{i}={qty}" for i, (asin, qty) in enumerate(amazon_items, 1)]
+        cart_url = "https://www.amazon.com/gp/aws/cart/add.html?" + "&".join(params)
+        print(f"\n🛒 1-Click Amazon Multi-Item Cart ({len(amazon_items)} items):")
+        print(f"   {cart_url}")
+        
+        open_cart = input("\nOpen Amazon Cart in browser now? (Y/n): ").strip().lower()
+        if open_cart in ("", "y", "yes"):
+            import webbrowser
+            try:
+                webbrowser.open(cart_url)
+                print("   ✅ Opened Amazon Cart in default browser.")
+            except Exception as e:
+                print(f"   ⚠️ Could not launch browser: {e}")
 
 
 # ============================================================
