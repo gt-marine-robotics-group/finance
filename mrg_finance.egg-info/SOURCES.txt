@@ -1,0 +1,15 @@
+README.md
+automation.py
+automation_purchase.py
+mrg.py
+price_scraper.py
+pyproject.toml
+mrg_finance.egg-info/PKG-INFO
+mrg_finance.egg-info/SOURCES.txt
+mrg_finance.egg-info/dependency_links.txt
+mrg_finance.egg-info/entry_points.txt
+mrg_finance.egg-info/requires.txt
+mrg_finance.egg-info/top_level.txt
+tests/test_app_routes.py
+tests/test_price_scraper.py
+tests/test_xlsx_manager.py
