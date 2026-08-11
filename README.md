@@ -39,16 +39,31 @@ mrg-finance price-check --bill "FY27 Budget" --cart
 ```bash
 # Create virtual environment & install dependencies
 uv venv
-source .venv/bin/activate   # On Windows: .venv\Scripts\activate
+
+# Activate virtual environment:
+# - macOS / Linux / WSL:  source .venv/bin/activate
+# - Windows PowerShell:  .\.venv\Scripts\Activate.ps1
+# - Windows CMD:         .venv\Scripts\activate.bat
+source .venv/bin/activate
+
 uv pip install -r requirements.txt
 
-# Start local server
+# Start local server (macOS/Linux: python3, Windows: python)
 python3 web-app/app.py
 ```
 
 Open **`http://localhost:5000`** in your browser:
 - **Login Password**: `boats0519`
 - **User Name**: Your Name / GT ID *(e.g. `Aaron`)*
+
+---
+
+### 🪟 Windows Notes (PowerShell & WSL 2)
+- **WSL 2 (Recommended for Windows)**: Works 100% identically to Linux/macOS out of the box.
+- **Native Windows (PowerShell / CMD)**:
+  1. Install Python 3.10+ and Google Chrome.
+  2. Install `uv` via PowerShell: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`.
+  3. Run `uv tool install .` in PowerShell. `mrg-finance.exe` will be available in your PATH.
 
 ---
 
