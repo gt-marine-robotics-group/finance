@@ -44,7 +44,7 @@ if "--fresh" in sys.argv or "-f" in sys.argv:
 
 # Prompt
 if not PASSWORD:
-    PASSWORD = getpass.getpass("Enter your password: ")
+    PASSWORD = getpass.getpass("Enter GT password (for CampusLabs + Duo MFA): ")
 
 
 def safe_float(val, default=0.0):
@@ -207,17 +207,18 @@ else:
 
     for i, row in enumerate(order_rows):
         b_id = str(row.get("Bill Item ID", "")).replace(".0", "").strip()
-        b_row = bill_item_map.get(b_id, {})
+        b_row = bill_item_map.get(b_id, None)
+        has_bill_row = b_row is not None
 
-        item_name = str(row.get("Item Name", "") or b_row.get("Item Name", "")).strip()
-        description = str(b_row.get("Description", "")).strip()
-        link = str(b_row.get("Link", "")).strip()
+        item_name = str(row.get("Item Name", "") or (b_row.get("Item Name", "") if has_bill_row else "")).strip()
+        description = str(b_row.get("Description", "") if has_bill_row else "").strip()
+        link = str(b_row.get("Link", "") if has_bill_row else "").strip()
 
-        cost = safe_float(b_row.get("Cost", 0) if b_row else row.get("Allocation", 0))
+        cost = safe_float(b_row.get("Cost", 0) if has_bill_row else row.get("Allocation", 0))
         qty = safe_int(row.get("Quantity", 1))
         total = cost * qty
 
-        if b_row and not bill_no:
+        if has_bill_row and not bill_no:
             bill_no = str(b_row.get("Bill No.", "")).replace(".0", "").strip()
 
         bill_line_ref = f"Bill {bill_no or '?'}, Line {b_id or i+1}"
