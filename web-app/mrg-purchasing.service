@@ -5,16 +5,16 @@ After=network.target
 [Service]
 Type=simple
 User=awu335
-WorkingDirectory=/home/awu335/mrg/finance/mrg-purchasing
-ExecStart=/home/awu335/mrg/finance/mrg-purchasing/.venv/bin/python app.py
+WorkingDirectory=/home/awu335/mrg/finance/web-app
+ExecStart=/home/awu335/mrg/finance/web-app/.venv/bin/gunicorn app:app --workers 3 --bind 0.0.0.0:5000 --timeout 120
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
 
 # Resource limits - keep it lightweight for shared sim PC
-CPUQuota=25%
-MemoryMax=512M
-Nice=10
+CPUQuota=50%
+MemoryMax=768M
+Nice=5
 
 [Install]
 WantedBy=multi-user.target
