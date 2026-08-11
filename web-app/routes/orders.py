@@ -336,7 +336,6 @@ def submit_order():
 
         if order_id not in existing_order_ids:
             max_order_num += 1
-            first_empty += 1
             sep_row = first_empty + 3
             item_name_col = order_columns.index("Item Name") if "Item Name" in order_columns else 3
             sep_col_letter = col_letters[item_name_col] if item_name_col < len(col_letters) else "D"
