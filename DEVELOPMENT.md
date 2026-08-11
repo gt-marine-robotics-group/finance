@@ -52,7 +52,7 @@ python app.py
 
 ```bash
 rclone config
-# Type: onedrive → option 3 (URL) → https://gatech.sharepoint.com/sites/MarineRoboticsGroup
+# Type: onedrive → option 3 (URL) → https://gtvault.sharepoint.com/sites/MarineRoboticsGroup → Documents (option 3)
 # Auth: run `rclone authorize "onedrive"` on a machine with a browser, paste token
 ```
 
