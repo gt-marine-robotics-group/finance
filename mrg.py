@@ -26,6 +26,8 @@ import sys
 import subprocess
 import argparse
 
+import price_scraper
+
 # === Paths ===
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_XLSX = os.path.expanduser(
@@ -180,25 +182,7 @@ def cmd_screenshots(args):
         driver.save_screenshot(filepath)
 
         # Scrape price
-        price_text = ""
-        for pattern in [r'"priceAmount"\s*:\s*"?([\d.]+)"?', r'"buyingPrice"\s*:\s*"?([\d.]+)"?']:
-            match = re.search(pattern, driver.page_source)
-            if match:
-                price_text = f"${match.group(1)}"
-                break
-
-        if not price_text:
-            selectors = [".a-price .a-offscreen", '[class*="price"]', '[itemprop*="price"]']
-            for sel in selectors:
-                try:
-                    el = driver.find_element(By.CSS_SELECTOR, sel)
-                    text = el.text or el.get_attribute("innerText") or ""
-                    if re.search(r'\d', text):
-                        price_text = text
-                        break
-                except Exception:
-                    continue
-
+        price_text = price_scraper.scrape_price_from_driver(driver)
         print(f"✅ {price_text or 'no price'}")
 
     driver.quit()
@@ -354,27 +338,8 @@ def cmd_price_check(args):
             time.sleep(3)
 
             # Scrape price
-            for pattern in [r'"priceAmount"\s*:\s*"?([\d.]+)"?', r'"buyingPrice"\s*:\s*"?([\d.]+)"?']:
-                match = re.search(pattern, driver.page_source)
-                if match:
-                    try:
-                        current_price = float(match.group(1))
-                    except ValueError:
-                        pass
-                    break
-
-            if current_price is None:
-                selectors = [".a-price .a-offscreen", '[class*="price"]']
-                for sel in selectors:
-                    try:
-                        el = driver.find_element(By.CSS_SELECTOR, sel)
-                        text = el.text or el.get_attribute("innerText") or ""
-                        price_match = re.search(r'\$?([\d,]+\.?\d*)', text)
-                        if price_match:
-                            current_price = float(price_match.group(1).replace(",", ""))
-                            break
-                    except Exception:
-                        continue
+            price_text = price_scraper.scrape_price_from_driver(driver)
+            current_price = price_scraper.parse_price(price_text)
 
         total_allocated += allocated * qty
         delta_str = "—"

@@ -5,10 +5,18 @@ Pull before read, push after write. The xlsx on SharePoint is the source of trut
 """
 
 import os
+import sys
 import subprocess
 import threading
 from pathlib import Path
 from openpyxl import load_workbook
+
+# Add parent directory for price_scraper import
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
+import price_scraper
 
 # Config from environment
 RCLONE_REMOTE = os.environ.get(
@@ -32,6 +40,28 @@ _cached_items_time = 0
 _cached_queue: list[dict] = []
 _cached_queue_time = 0
 ITEMS_CACHE_TTL = 300  # 5 minutes — hit Sync to force refresh
+
+
+def invalidate_items_cache():
+    """Invalidate items cache and reset pull timer."""
+    global _cached_items, _cached_items_time, _last_pull_time
+    _cached_items = []
+    _cached_items_time = 0
+    _last_pull_time = 0
+
+
+def invalidate_queue_cache():
+    """Invalidate test queue cache."""
+    global _cached_queue, _cached_queue_time
+    _cached_queue = []
+    _cached_queue_time = 0
+
+
+def invalidate_all_caches():
+    """Invalidate all cached items and queue data."""
+    invalidate_items_cache()
+    invalidate_queue_cache()
+
 
 # Column mapping (xlsx columns in the Bills sheet)
 COLUMNS = [
@@ -423,6 +453,9 @@ def add_item(item_data: dict) -> bool:
     Add a new item to the QUEUE (TestTable on Test sheet) via Graph API.
     Also writes locally for immediate display.
     """
+    if "Vendor" in item_data and item_data["Vendor"]:
+        item_data["Vendor"] = price_scraper.normalize_vendor(item_data["Vendor"])
+
     # Get TestTable columns
     columns = graph_get_table_columns("TestTable")
     if not columns:
@@ -440,10 +473,8 @@ def add_item(item_data: dict) -> bool:
     success = graph_add_row("TestTable", row_values)
 
     # Invalidate queue cache so next read gets fresh data with correct _table_index
-    global _cached_queue, _cached_queue_time
     if success:
-        _cached_queue = []
-        _cached_queue_time = 0
+        invalidate_queue_cache()
 
     # Also write locally for immediate read-back
     with _lock:
@@ -462,6 +493,7 @@ def add_item(item_data: dict) -> bool:
                 print(f"[local] Write failed: {e}")
 
     return success
+
 
 
 def read_queue_items() -> list[dict]:
@@ -673,9 +705,57 @@ def move_to_bill(queue_items: list[dict], bill_title: str, add_separator: bool =
 
 def update_item(item_id: str, updates: dict) -> bool:
     """
-    Update an existing item by Bill Item ID.
-    Only modifies specified fields.
+    Update an existing item by Bill Item ID via Graph API or local fallback.
+    Only modifies specified fields, preserving formula columns (Bill Item ID, Total Cost).
     """
+    if not item_id:
+        return False
+
+    if "Vendor" in updates and updates["Vendor"]:
+        updates["Vendor"] = price_scraper.normalize_vendor(updates["Vendor"])
+
+    creds = _get_graph_token()
+    if creds:
+        access_token, drive_id, file_id = creds
+        headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+
+        # Read rows to find row matching Bill Item ID
+        rows_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/BillsT/rows"
+        import requests as _requests
+        resp = _requests.get(rows_url, headers=headers, timeout=15)
+
+        if resp.status_code == 200:
+            target_idx = None
+            for row in resp.json().get("value", []):
+                vals = row["values"][0] if row.get("values") else []
+                if vals and str(vals[0]).strip() == str(item_id).strip():
+                    target_idx = row["index"]
+                    break
+
+            if target_idx is not None:
+                bills_columns = graph_get_table_columns("BillsT")
+                sheet_row = target_idx + 2
+                col_letters = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T']
+
+                FORMULA_COLUMNS = {"Bill Item ID", "Total Cost"}
+                updated_count = 0
+                for field_name, value in updates.items():
+                    if field_name in FORMULA_COLUMNS:
+                        continue
+                    if field_name in bills_columns:
+                        c_idx = bills_columns.index(field_name)
+                        if c_idx < len(col_letters):
+                            cell_addr = f"{col_letters[c_idx]}{sheet_row}"
+                            url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Bills')/range(address='{cell_addr}')"
+                            patch_resp = _requests.patch(url, headers=headers, json={"values": [[value]]}, timeout=10)
+                            if patch_resp.status_code == 200:
+                                updated_count += 1
+
+                if updated_count > 0:
+                    invalidate_items_cache()
+                    return True
+
+    # Fallback: update local xlsx
     with _lock:
         sync_pull()
 
@@ -692,8 +772,8 @@ def update_item(item_id: str, updates: dict) -> bool:
             return False
 
         for key, value in updates.items():
-            if key in headers:
-                col_idx = headers.index(key) + 1  # openpyxl is 1-indexed
+            if key in headers and key not in ("Bill Item ID", "Total Cost"):
+                col_idx = headers.index(key) + 1
                 ws.cell(row=row_idx, column=col_idx, value=value)
 
         # Recalculate Total Cost if qty or cost changed
@@ -714,8 +794,7 @@ def update_item(item_id: str, updates: dict) -> bool:
 
         wb.save(LOCAL_XLSX)
         wb.close()
-
-        _push_async()
+        invalidate_items_cache()
         return True
 
 

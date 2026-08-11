@@ -8,3 +8,6 @@ __pycache__/
 *.pyc
 *.csv
 FY27_Bills_Budget.xlsx
+.pytest_cache/
+.agents/
+
