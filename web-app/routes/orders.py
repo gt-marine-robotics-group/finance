@@ -435,17 +435,28 @@ def submit_order():
             if item_id in existing_bill_item_map:
                 flash(f"Item '{item_name}' (ID: {item_id}) is already included in an existing order and cannot be added again.", "error")
                 return redirect(url_for("orders.create_order"))
-                col_letter = col_letters[qty_col_idx] if qty_col_idx < len(col_letters) else "F"
-                update_qty_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{col_letter}{sheet_row}')"
+
+            try:
+                max_bill_qty = float(str(item.get("Quantity", 1) or 1).replace("$", "").replace(",", "") or 1)
+            except (ValueError, TypeError):
+                max_bill_qty = 999999.0
+
+            # Read custom order quantity from form if provided
+            custom_qty_raw = request.form.get(f"quantity_{item_id}", "").strip()
+            if custom_qty_raw:
                 try:
-                    patch_resp = requests.patch(update_qty_url, headers=headers, json={"values": [[new_qty]]}, timeout=15)
-                    if patch_resp.status_code == 200:
-                        total_wrote += 1
-                        existing_bill_item_map[item_id] = (row_idx, new_qty)
-                        print(f"[order] ✅ Updated quantity for item {item_id}: {current_qty} -> {new_qty}")
-                except Exception as e:
-                    print(f"[order] ⚠️ Failed to update quantity for item {item_id}: {e}")
-                continue
+                    add_qty = float(custom_qty_raw)
+                    if add_qty <= 0:
+                        flash("Quantity must be greater than 0", "error")
+                        return redirect(url_for("orders.create_order"))
+                    if add_qty > max_bill_qty:
+                        flash(f"Order quantity ({add_qty}) for '{item_name}' cannot exceed approved bill quantity ({max_bill_qty})", "error")
+                        return redirect(url_for("orders.create_order"))
+                except ValueError:
+                    flash(f"Invalid quantity '{custom_qty_raw}'", "error")
+                    return redirect(url_for("orders.create_order"))
+            else:
+                add_qty = min(max_bill_qty, 1.0) if max_bill_qty >= 1 else max_bill_qty
 
             sheet_row = first_empty + 3
 
