@@ -5,10 +5,11 @@ dashboard.py - Main dashboard, system status, and force pull routes.
 import os
 import json
 import requests
-from flask import Blueprint, render_template, redirect, url_for, flash
+from flask import Blueprint, render_template, redirect, url_for, flash, request
 import xlsx_manager
 import screenshot_worker
 from routes.auth import login_required
+from routes.bills import is_bill_locked
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
@@ -26,6 +27,8 @@ def dashboard():
             if title not in bills:
                 bills[title] = []
             bills[title].append(item)
+
+    locked_bills = {title: is_bill_locked(title) for title in bills}
 
     # Get queue items from Test sheet
     backlog = xlsx_manager.get_backlog_items()
@@ -53,7 +56,7 @@ def dashboard():
         else:
             item["_screenshot_path"] = ""
 
-    return render_template("dashboard.html", bills=bills, backlog=backlog)
+    return render_template("dashboard.html", bills=bills, backlog=backlog, locked_bills=locked_bills)
 
 
 @dashboard_bp.route("/force-pull", methods=["POST"])

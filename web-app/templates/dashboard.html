@@ -28,7 +28,7 @@
                 <span class="bill-total-inline">Items not yet assigned to a bill</span>
             </summary>
             <div class="bill-dropdown-actions">
-                <a href="{{ url_for('create_bill') }}" class="btn btn-sm btn-primary">Create Bill from Backlog</a>
+                <a href="{{ url_for('bills.create_bill') }}" class="btn btn-sm btn-primary">Create Bill from Backlog</a>
             </div>
             <div class="item-grid">
                 {% for item in backlog %}
@@ -55,8 +55,13 @@
                 {% endfor %}
                 <span class="bill-total-inline">${{ "%.2f"|format(ns.total) }}</span>
             </summary>
-            <div class="bill-dropdown-actions">
-                <a href="{{ url_for('bill_view', bill_title=title) }}" class="btn btn-sm btn-ghost">View Full Bill →</a>
+            <div class="bill-dropdown-actions" style="display: flex; gap: 0.5rem; align-items: center;">
+                {% if not locked_bills.get(title) %}
+                <a href="{{ url_for('bills.review_bill', bill_title=title) }}" class="btn btn-sm btn-primary">Review Bill</a>
+                {% else %}
+                <span class="badge" style="background: rgba(234, 179, 8, 0.2); color: var(--color-warning); padding: 0.3rem 0.6rem; font-weight: 600; font-size: 0.8rem;">🔒 Approved</span>
+                {% endif %}
+                <a href="{{ url_for('bills.bill_view', bill_title=title) }}" class="btn btn-sm btn-ghost">View Full Bill →</a>
             </div>
             <div class="item-grid">
                 {% for item in items %}
@@ -70,7 +75,7 @@
     {% if not backlog and not bills %}
     <div class="empty-state">
         <p>No items yet.</p>
-        <a href="{{ url_for('add_item') }}" class="btn btn-primary">+ Add First Item</a>
+        <a href="{{ url_for('items.add_item') }}" class="btn btn-primary">+ Add First Item</a>
     </div>
     {% endif %}
 </div>
