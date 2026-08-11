@@ -189,8 +189,25 @@ def cmd_screenshots(args):
         print(f"✅ {price_text or 'no price'}")
 
     driver.quit()
-    print(f"\n✅ Screenshots saved to: {bill_dir}")
-    print(f"Run 'rclone copy {bill_dir} onedrive:OPS-1\\ Operations/FY27\\ Finances/screenshots/{bill_title}/' to upload")
+    print(f"\n✅ Screenshots saved locally to: {bill_dir}")
+    upload_screenshots_to_sharepoint(bill_title, bill_dir)
+
+
+def upload_screenshots_to_sharepoint(bill_title, bill_dir):
+    """Auto-upload newly captured local screenshots to SharePoint/OneDrive via rclone."""
+    remote_path = f"onedrive:OPS-1 Operations/FY27 Finances/screenshots/{bill_title}"
+    print(f"☁️ Syncing local screenshots to SharePoint ({remote_path})...")
+    try:
+        r = subprocess.run(
+            ["rclone", "copy", "--checksum", bill_dir, remote_path],
+            capture_output=True, text=True, timeout=60
+        )
+        if r.returncode == 0:
+            print(f"  ✅ Screenshots successfully synced to SharePoint!")
+        else:
+            print(f"  ℹ️ rclone upload notice: {r.stderr.strip()}")
+    except Exception as e:
+        print(f"  ℹ️ Screenshots saved locally. (SharePoint sync skipped: {e})")
 
 
 # ============================================================
