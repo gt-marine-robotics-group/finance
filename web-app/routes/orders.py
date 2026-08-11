@@ -173,6 +173,7 @@ def delete_order():
             if bill_item_id:
                 xlsx_manager.update_item(bill_item_id, {"Status": "bill approved"})
 
+    xlsx_manager.invalidate_orders_cache()
     flash(f"Deleted order '{order_id}' ({cleared} rows)", "success")
     return redirect(url_for("orders.view_orders"))
 
@@ -205,6 +206,7 @@ def delete_order_item():
         if bill_item_id:
             xlsx_manager.update_item(bill_item_id, {"Status": "bill approved"})
 
+        xlsx_manager.invalidate_orders_cache()
         flash("Item removed from order", "success")
     except Exception as e:
         flash(f"Failed to remove item: {e}", "error")

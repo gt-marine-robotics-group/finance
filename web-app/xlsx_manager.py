@@ -39,6 +39,8 @@ _cached_items: list[dict] = []
 _cached_items_time = 0
 _cached_queue: list[dict] = []
 _cached_queue_time = 0
+_cached_orders: list[dict] = []
+_cached_orders_time = 0
 ITEMS_CACHE_TTL = 300  # 5 minutes — hit Sync to force refresh
 
 
@@ -57,10 +59,18 @@ def invalidate_queue_cache():
     _cached_queue_time = 0
 
 
+def invalidate_orders_cache():
+    """Invalidate orders cache."""
+    global _cached_orders, _cached_orders_time
+    _cached_orders = []
+    _cached_orders_time = 0
+
+
 def invalidate_all_caches():
-    """Invalidate all cached items and queue data."""
+    """Invalidate all cached items, queue, and orders data."""
     invalidate_items_cache()
     invalidate_queue_cache()
+    invalidate_orders_cache()
 
 
 # Column mapping (xlsx columns in the Bills sheet)
@@ -803,7 +813,22 @@ def update_item(item_id: str, updates: dict) -> bool:
 
 
 def graph_get_order_rows() -> list[dict]:
-    """Read all rows from OrderT via Graph API. Returns list of dicts keyed by column name."""
+    """Read all rows from OrderT via Graph API. Cached for ITEMS_CACHE_TTL seconds."""
+    global _cached_orders, _cached_orders_time
+    import time as _time
+
+    now = _time.time()
+    if _cached_orders and (now - _cached_orders_time < ITEMS_CACHE_TTL):
+        return _cached_orders
+
+    result = _fetch_order_rows()
+    _cached_orders = result
+    _cached_orders_time = now
+    return result
+
+
+def _fetch_order_rows() -> list[dict]:
+    """Fetch order rows directly from Graph API."""
     import requests as _requests
 
     creds = _get_graph_token()
@@ -813,11 +838,9 @@ def graph_get_order_rows() -> list[dict]:
     access_token, drive_id, file_id = creds
     headers = {"Authorization": f"Bearer {access_token}"}
 
-    # Get columns
     cols_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/OrderT/columns"
     cols_resp = _requests.get(cols_url, headers=headers, timeout=10)
 
-    # Get rows
     rows_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/OrderT/rows"
     rows_resp = _requests.get(rows_url, headers=headers, timeout=15)
 
@@ -838,7 +861,6 @@ def graph_get_order_rows() -> list[dict]:
             else:
                 item[col] = ""
         item["_table_index"] = row["index"]
-        # Only include rows that have an Order ID or Bill Item ID
         order_id = str(item.get("Order ID (YYMMDD_vendor_gburdell3)", "") or item.get("Order ID", "")).strip()
         bill_item_id = str(item.get("Bill Item ID", "")).strip()
         if order_id or bill_item_id:
@@ -885,11 +907,10 @@ def graph_update_order_status(order_id_col_name: str, order_id: str, status: str
             sheet_row = row["index"] + 3  # +3 because row 1=TOTALS, row 2=header, index is 0-based
             col_letter = chr(65 + status_col_idx)
             url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{col_letter}{sheet_row}')"
-            r = _requests.patch(url, headers=headers, json={"values": [[status]]}, timeout=10)
-            if r.status_code == 200:
-                updated += 1
-
-    return updated > 0
+    if updated > 0:
+        invalidate_orders_cache()
+        return True
+    return False
 
 
 def graph_apply_spacer_formatting() -> bool:

@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}View Orders - MRG Purchasing{% endblock %}
+{% block title %}Current Orders - MRG Purchasing{% endblock %}
 
 {% block content %}
 <div class="form-page" style="max-width: 900px;">
     <div class="dashboard-header">
-        <h1>Orders</h1>
+        <h1>Current Orders</h1>
         <div style="display: flex; gap: 0.5rem;">
             <form method="POST" action="{{ url_for('force_pull') }}" style="display: inline;">
                 <button type="submit" class="btn btn-sm btn-ghost">Sync</button>
