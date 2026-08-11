@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Orders - MRG Purchasing{% endblock %}
+{% block title %}{% if filter_vendor or request.args.get('filter_vendor') %}Add Items to Order{% else %}Create New Order{% endif %} - MRG Purchasing{% endblock %}
 
 {% block content %}
 <div class="form-page" style="max-width: 900px;">
-    <h1>Orders</h1>
+    <h1>{% if filter_vendor or request.args.get('filter_vendor') %}Add Items to {{ filter_vendor or request.args.get('filter_vendor') }} Order{% else %}Create New Order{% endif %}</h1>
 
     <div class="toggle-group" style="margin-bottom: 1rem;">
         <a href="{{ url_for('create_order', group='vendor') }}" class="btn btn-sm {{ 'btn-primary' if group_by == 'vendor' else 'btn-ghost' }}">By Vendor</a>
