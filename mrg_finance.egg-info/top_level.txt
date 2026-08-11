@@ -1,0 +1,5 @@
+automation
+automation_purchase
+mrg
+price_scraper
+screenshot_worker
