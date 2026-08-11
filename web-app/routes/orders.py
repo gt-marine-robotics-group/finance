@@ -24,9 +24,13 @@ orders_bp = Blueprint("orders", __name__)
 @orders_bp.route("/orders")
 @login_required
 def view_orders():
-    """Show all orders from OrderT grouped by Order ID."""
+    """Show all orders from OrderT grouped by Order ID with fallback metadata lookups."""
     order_rows = xlsx_manager.graph_get_order_rows()
     order_columns = xlsx_manager.graph_get_table_columns("OrderT")
+
+    # Read items from Bills sheet for metadata cross-referencing
+    all_bill_items = xlsx_manager.read_items()
+    items_by_id = {str(i.get("Bill Item ID", "")).strip(): i for i in all_bill_items if i.get("Bill Item ID")}
 
     order_id_col = "Order ID"
     for col in order_columns:
@@ -36,6 +40,27 @@ def view_orders():
 
     orders = {}
     for row in order_rows:
+        b_id = str(row.get("Bill Item ID", "")).strip()
+        bill_item = items_by_id.get(b_id) if b_id else None
+
+        if bill_item:
+            if not row.get("Item Name") or str(row.get("Item Name")).startswith("#"):
+                row["Item Name"] = bill_item.get("Item Name", "")
+            if not row.get("Vendor") or str(row.get("Vendor")).startswith("#"):
+                row["Vendor"] = bill_item.get("Vendor", "")
+            if not row.get("Description"):
+                row["Description"] = bill_item.get("Description", "")
+
+            # Calculate allocation fallback if formula cell is empty/uncalculated
+            alloc_val = row.get("Allocation")
+            if not alloc_val or str(alloc_val).startswith("#") or str(alloc_val) in ("0", "0.0"):
+                try:
+                    unit_cost = float(str(bill_item.get("Cost", 0) or 0).replace("$", "").replace(",", "") or 0)
+                    qty = float(row.get("Quantity", 1) or 1)
+                    row["Allocation"] = unit_cost * qty
+                except (ValueError, TypeError):
+                    pass
+
         oid = str(row.get(order_id_col, "")).strip()
         if not oid:
             oid = f"ungrouped_{row.get('Bill Item ID', 'unknown')}"
@@ -369,32 +394,36 @@ def submit_order():
 
             sheet_row = first_empty + 3
 
-            row_data = [""] * len(order_columns)
-            for c_name, val in [
+            cells_to_patch = [
                 ("Order ID (YYMMDD_vendor_gburdell3)", order_id),
                 ("Order ID", order_id),
                 ("Bill Item ID", int(float(item_id)) if item_id else ""),
                 ("Purchaser", purchaser),
                 ("Status", "pending purchase"),
                 ("Quantity", add_qty),
-            ]:
+            ]
+            if not item_id:
+                cells_to_patch.append(("Item Name", item.get("Item Name", "")))
+                cells_to_patch.append(("Vendor", item.get("Vendor", "")))
+
+            item_written = False
+            for c_name, val in cells_to_patch:
                 if c_name in order_columns:
                     c_idx = order_columns.index(c_name)
-                    row_data[c_idx] = val
+                    if c_idx < len(col_letters):
+                        col_letter = col_letters[c_idx]
+                        cell_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{col_letter}{sheet_row}')"
+                        try:
+                            r = requests.patch(cell_url, headers=headers, json={"values": [[val]]}, timeout=10)
+                            if r.status_code == 200:
+                                item_written = True
+                        except Exception as e:
+                            print(f"[order] ⚠️ Error writing cell {col_letter}{sheet_row}: {e}")
 
-            start_col = col_letters[0]
-            end_col = col_letters[min(len(order_columns) - 1, len(col_letters) - 1)]
-            batch_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{start_col}{sheet_row}:{end_col}{sheet_row}')"
-            
-            try:
-                batch_resp = requests.patch(batch_url, headers=headers, json={"values": [row_data[:len(order_columns)]]}, timeout=30)
-                if batch_resp.status_code == 200:
-                    total_wrote += 1
+            if item_written:
+                total_wrote += 1
+                if item_id:
                     existing_bill_item_map[item_id] = (first_empty, add_qty)
-                else:
-                    print(f"[order] ⚠️ Batch row write status: {batch_resp.status_code}")
-            except Exception as e:
-                print(f"[order] ⚠️ Failed to write item {item_id}: {e}")
 
             first_empty += 1
 
