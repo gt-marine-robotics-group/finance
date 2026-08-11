@@ -22,8 +22,8 @@
                        value="{{ item.get('Vendor', '') }}">
             </div>
             <div class="form-group">
-                <label for="quantity">Quantity</label>
-                <input type="number" id="quantity" name="quantity" min="1" step="any" class="input"
+                <label for="quantity">Quantity *</label>
+                <input type="number" id="quantity" name="quantity" min="0.01" step="any" required class="input"
                        value="{{ item.get('Quantity', 1) }}">
             </div>
         </div>

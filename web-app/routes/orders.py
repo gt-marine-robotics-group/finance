@@ -420,10 +420,25 @@ def submit_order():
 
         for item in vendor_items:
             item_id = str(item.get("Bill Item ID", "")).strip()
-            try:
-                add_qty = float(item.get("Quantity", 1) or 1)
-            except (ValueError, TypeError):
-                add_qty = 1.0
+
+            # Read custom order quantity from form if provided
+            custom_qty_raw = request.form.get(f"quantity_{item_id}", "").strip()
+            if custom_qty_raw:
+                try:
+                    add_qty = float(custom_qty_raw)
+                    if add_qty <= 0:
+                        flash("Quantity must be greater than 0", "error")
+                        return redirect(url_for("orders.create_order"))
+                except ValueError:
+                    flash(f"Invalid quantity '{custom_qty_raw}'", "error")
+                    return redirect(url_for("orders.create_order"))
+            else:
+                try:
+                    add_qty = float(item.get("Quantity", 1) or 1)
+                    if add_qty <= 0:
+                        add_qty = 1.0
+                except (ValueError, TypeError):
+                    add_qty = 1.0
 
             # Deduplication: If item is ALREADY in an existing order on OrderT, update its quantity instead of creating a duplicate row!
             if item_id in existing_bill_item_map:
@@ -598,9 +613,14 @@ def edit_order_item(table_index):
 
         if "Quantity" in updates and updates["Quantity"]:
             try:
-                updates["Quantity"] = float(updates["Quantity"])
+                q_val = float(updates["Quantity"])
+                if q_val <= 0:
+                    flash("Quantity must be greater than 0", "error")
+                    return redirect(url_for("orders.edit_order_item", table_index=table_index))
+                updates["Quantity"] = q_val
             except ValueError:
-                pass
+                flash(f"Invalid quantity '{updates['Quantity']}'", "error")
+                return redirect(url_for("orders.edit_order_item", table_index=table_index))
 
         success = xlsx_manager.graph_update_order_item(table_index, updates)
 
@@ -643,32 +663,58 @@ def edit_order(order_id):
     current_status = order_items[0].get("Status", "") if order_items else ""
 
     if request.method == "POST":
-        new_vendor = request.form.get("vendor", "").strip()
-        new_purchaser = request.form.get("purchaser", "").strip()
-        new_status = request.form.get("status", "").strip()
-
-        updates = {}
-        if new_vendor:
-            updates["Vendor"] = new_vendor
-        if new_purchaser:
-            updates["Purchaser"] = new_purchaser
-        if new_status:
-            updates["Status"] = new_status
+        global_vendor = request.form.get("global_vendor", "").strip()
+        global_purchaser = request.form.get("global_purchaser", "").strip()
+        global_status = request.form.get("global_status", "").strip()
 
         updated_count = 0
-        for item in order_items:
+        for idx, item in enumerate(order_items):
             t_idx = item.get("_table_index")
-            if t_idx is not None:
-                if xlsx_manager.graph_update_order_item(t_idx, updates):
-                    updated_count += 1
-                    b_id = str(item.get("Bill Item ID", "")).strip()
-                    if b_id:
-                        b_up = {}
-                        if new_vendor: b_up["Vendor"] = new_vendor
-                        if new_status: b_up["Status"] = new_status
-                        xlsx_manager.update_item(b_id, b_up)
+            if t_idx is None:
+                continue
 
-        flash(f"Updated order '{order_id}' ({updated_count} items)", "success")
+            item_updates = {}
+            item_name = request.form.get(f"item_name_{idx}", "").strip()
+            item_vendor = request.form.get(f"vendor_{idx}", "").strip() or global_vendor
+            item_purchaser = request.form.get(f"purchaser_{idx}", "").strip() or global_purchaser
+            item_status = request.form.get(f"status_{idx}", "").strip() or global_status
+            item_notes = request.form.get(f"notes_{idx}", "").strip()
+            item_qty_raw = request.form.get(f"quantity_{idx}", "").strip()
+
+            if item_name:
+                item_updates["Item Name"] = item_name
+            if item_vendor:
+                item_updates["Vendor"] = item_vendor
+            if item_purchaser:
+                item_updates["Purchaser"] = item_purchaser
+            if item_status:
+                item_updates["Status"] = item_status
+            if item_notes:
+                item_updates["Notes"] = item_notes
+
+            if item_qty_raw:
+                try:
+                    q_val = float(item_qty_raw)
+                    if q_val <= 0:
+                        flash(f"Quantity for item '{item_name}' must be greater than 0", "error")
+                        return redirect(url_for("orders.edit_order", order_id=order_id))
+                    item_updates["Quantity"] = q_val
+                except ValueError:
+                    flash(f"Invalid quantity '{item_qty_raw}' for item '{item_name}'", "error")
+                    return redirect(url_for("orders.edit_order", order_id=order_id))
+
+            if item_updates and xlsx_manager.graph_update_order_item(t_idx, item_updates):
+                updated_count += 1
+                b_id = str(item.get("Bill Item ID", "")).strip()
+                if b_id:
+                    b_up = {}
+                    if "Item Name" in item_updates: b_up["Item Name"] = item_updates["Item Name"]
+                    if "Vendor" in item_updates: b_up["Vendor"] = item_updates["Vendor"]
+                    if "Quantity" in item_updates: b_up["Quantity"] = item_updates["Quantity"]
+                    if "Status" in item_updates: b_up["Status"] = item_updates["Status"]
+                    xlsx_manager.update_item(b_id, b_up)
+
+        flash(f"Updated order '{order_id}' ({updated_count} line items updated)", "success")
         return redirect(url_for("orders.view_orders"))
 
     return render_template("edit_order.html", order_id=order_id, items=order_items, vendor=current_vendor, purchaser=current_purchaser, status=current_status)
