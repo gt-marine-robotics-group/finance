@@ -283,7 +283,11 @@ def submit_order():
     rows_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/tables/OrderT/rows"
     last_data_idx = -1
     existing_order_ids = set()
+    existing_bill_item_map = {}  # bill_item_id -> (row_index, current_qty)
     max_order_num = 0
+
+    bill_item_col_idx = order_columns.index("Bill Item ID") if "Bill Item ID" in order_columns else 1
+    qty_col_idx = order_columns.index("Quantity") if "Quantity" in order_columns else 5
 
     try:
         resp = requests.get(rows_url, headers=headers, timeout=20)
@@ -295,6 +299,15 @@ def submit_order():
                     last_data_idx = row["index"]
                 if vals[0] and str(vals[0]).strip():
                     existing_order_ids.add(str(vals[0]).strip())
+                if len(vals) > bill_item_col_idx and vals[bill_item_col_idx]:
+                    b_id = str(vals[bill_item_col_idx]).strip()
+                    if b_id:
+                        try:
+                            q_val = float(vals[qty_col_idx]) if len(vals) > qty_col_idx and vals[qty_col_idx] else 1.0
+                        except (ValueError, TypeError):
+                            q_val = 1.0
+                        existing_bill_item_map[b_id] = (row["index"], q_val)
+
                 item_name = str(vals[3]).strip() if len(vals) > 3 and vals[3] else ""
                 if item_name.startswith("Order") and not vals[1]:
                     try:
@@ -332,11 +345,31 @@ def submit_order():
             first_empty += 1
 
         for item in vendor_items:
-            sheet_row = first_empty + 3
-            item_id = str(item.get("Bill Item ID", ""))
-            qty = item.get("Quantity", 1)
+            item_id = str(item.get("Bill Item ID", "")).strip()
+            try:
+                add_qty = float(item.get("Quantity", 1) or 1)
+            except (ValueError, TypeError):
+                add_qty = 1.0
 
-            # Optimization: Build single row range PATCH instead of 5 separate API calls per item
+            # Deduplication: If item is ALREADY in an existing order on OrderT, update its quantity instead of creating a duplicate row!
+            if item_id in existing_bill_item_map:
+                row_idx, current_qty = existing_bill_item_map[item_id]
+                new_qty = current_qty + add_qty
+                sheet_row = row_idx + 3
+                col_letter = col_letters[qty_col_idx] if qty_col_idx < len(col_letters) else "F"
+                update_qty_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/workbook/worksheets('Ordering')/range(address='{col_letter}{sheet_row}')"
+                try:
+                    patch_resp = requests.patch(update_qty_url, headers=headers, json={"values": [[new_qty]]}, timeout=15)
+                    if patch_resp.status_code == 200:
+                        total_wrote += 1
+                        existing_bill_item_map[item_id] = (row_idx, new_qty)
+                        print(f"[order] ✅ Updated quantity for item {item_id}: {current_qty} -> {new_qty}")
+                except Exception as e:
+                    print(f"[order] ⚠️ Failed to update quantity for item {item_id}: {e}")
+                continue
+
+            sheet_row = first_empty + 3
+
             row_data = [""] * len(order_columns)
             for c_name, val in [
                 ("Order ID (YYMMDD_vendor_gburdell3)", order_id),
@@ -344,7 +377,7 @@ def submit_order():
                 ("Bill Item ID", int(float(item_id)) if item_id else ""),
                 ("Purchaser", purchaser),
                 ("Status", "pending purchase"),
-                ("Quantity", qty),
+                ("Quantity", add_qty),
             ]:
                 if c_name in order_columns:
                     c_idx = order_columns.index(c_name)
@@ -358,6 +391,7 @@ def submit_order():
                 batch_resp = requests.patch(batch_url, headers=headers, json={"values": [row_data[:len(order_columns)]]}, timeout=30)
                 if batch_resp.status_code == 200:
                     total_wrote += 1
+                    existing_bill_item_map[item_id] = (first_empty, add_qty)
                 else:
                     print(f"[order] ⚠️ Batch row write status: {batch_resp.status_code}")
             except Exception as e:
