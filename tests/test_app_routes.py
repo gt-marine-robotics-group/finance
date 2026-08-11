@@ -52,13 +52,17 @@ def test_is_bill_locked_logic():
     assert is_bill_locked("NonExistentBillTitle1234") is False
 
 
+from unittest.mock import patch
+
+
 def test_quick_add_post_with_quantity(client):
     # Authenticate session
     client.post("/login", data={"password": "boats0519", "name": "Tester"})
-    response = client.post("/quick-add", data={
-        "item_name": "Pytest Test Motor",
-        "quantity": "5",
-        "link": "https://www.amazon.com/dp/B08N5WRWNW"
-    }, follow_redirects=True)
-    assert response.status_code == 200
+    with patch("xlsx_manager.add_item", return_value=True):
+        response = client.post("/quick-add", data={
+            "item_name": "Pytest Test Motor",
+            "quantity": "5",
+            "link": "https://www.amazon.com/dp/B08N5WRWNW"
+        }, follow_redirects=True)
+        assert response.status_code == 200
 
