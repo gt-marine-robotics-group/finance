@@ -64,28 +64,35 @@ The system combines a Flask web interface running on the team SIM PC with Micros
 
 ## 🤖 CLI Automation & Engage Submissions
 
-Officers running purchase automation from their laptops interface directly with CampusLabs Engage via CLI scripts:
+Officers running automation from their laptops interface directly with CampusLabs Engage via CLI scripts:
 
-### Submit Automated Purchase Request
+### 1. 🏆 Submit Automated Bill Request (Primary Officer Command)
+```bash
+python3 mrg.py bill-request --fresh
+```
+- **Automatic Bill Review Window**: Prompts for bill selection and **automatically launches the Web Bill Review window (`http://localhost:5000/review/<bill_title>`)** in your browser so officers can inspect pre-captured screenshots and line items before proceeding.
+- **CampusLabs Engage Automation**: Uses Selenium Chrome to log into GT Single Sign-On + Duo MFA, fill out budget sections, populate line items & costs, and upload the ground-truth screenshot image files to CampusLabs Engage.
+- **`--fresh` Flag**: Downloads the latest `FY27_Bills_Budget.xlsx` and screenshot directory from SharePoint via `rclone`.
+
+### 2. 🛒 Submit Automated Purchase Request
 ```bash
 python3 mrg.py purchase --fresh
 ```
-- Syncs fresh `FY27_Bills_Budget.xlsx` and screenshots from SharePoint.
-- Automatically launches the **Web Order Review window** in your browser for side-by-side audit.
-- Uses Selenium Chrome to populate line items, quantities, unit costs, and screenshots on CampusLabs Engage.
-- Waits for Duo MFA confirmation from the officer.
+- Syncs fresh data and populates purchase requests for approved bill items on CampusLabs Engage.
+- Auto-opens the **Side-by-Side Order Review** window (`/orders/review/<order_id>`) in your browser.
+- **Ground-Truth Preservation**: Strictly reads existing ground-truth screenshots taken during bill request — **never overwrites** original bill screenshots.
 
-### CLI Price Check
+### 3. 💰 CLI Price Check
 ```bash
 python3 mrg.py price-check
 ```
 - Performs a terminal price check comparing live online prices vs approved allocations.
 
-### Pre-capture Screenshots
+### 4. 📸 Pre-capture Screenshots
 ```bash
 python3 mrg.py screenshots
 ```
-- Captures item page screenshots into `screenshots/<bill_title>/`.
+- Pre-captures item page screenshots into `screenshots/<bill_title>/`.
 
 ---
 
