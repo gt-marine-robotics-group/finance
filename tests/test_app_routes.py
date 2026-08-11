@@ -66,3 +66,61 @@ def test_quick_add_post_with_quantity(client):
         }, follow_redirects=True)
         assert response.status_code == 200
 
+
+def test_locked_bill_protection(client):
+    """Ensure approved/submitted locked bills reject add/edit/delete mutations."""
+    client.post("/login", data={"password": "boats0519", "name": "Tester"})
+    with patch("routes.bills.is_bill_locked", return_value=True):
+        response = client.post("/bill/Request%201/add-item", data={
+            "item_name": "Test Item",
+            "cost": "100.00",
+            "quantity": "1"
+        }, follow_redirects=True)
+        assert response.status_code == 200
+        assert b"Cannot add items to an approved or submitted bill" in response.data
+
+
+def test_max_bill_qty_enforcement(client):
+    """Ensure ordering a quantity exceeding max approved bill quantity is rejected."""
+    client.post("/login", data={"password": "boats0519", "name": "Tester"})
+    mock_order_rows = [{
+        "_table_index": 2,
+        "Order ID": "260811_vendor_tester",
+        "Bill Item ID": "101",
+        "Item Name": "Sensor Probe",
+        "Quantity": 1,
+        "Vendor": "Amazon"
+    }]
+    mock_bill_items = [{
+        "Bill Item ID": "101",
+        "Item Name": "Sensor Probe",
+        "Quantity": 2.0  # Approved bill quantity max is 2.0
+    }]
+    with patch("xlsx_manager.graph_get_order_rows", return_value=mock_order_rows), \
+         patch("xlsx_manager.read_items", return_value=mock_bill_items):
+        response = client.post("/orders/edit-item/2", data={
+            "item_name": "Sensor Probe",
+            "quantity": "5.0",  # Exceeds max_bill_qty (2.0)
+            "vendor": "Amazon",
+            "purchaser": "Tester",
+            "status": "pending purchase",
+            "notes": ""
+        }, follow_redirects=True)
+        assert response.status_code == 200
+        assert b"cannot exceed approved bill quantity" in response.data
+
+
+def test_order_deletion_title_cleanup(client):
+    """Ensure deleting an order cleans up title header rows without mutating production spreadsheet."""
+    client.post("/login", data={"password": "boats0519", "name": "Tester"})
+    mock_order_rows = [
+        {"_table_index": 1, "Order ID": "Order 1", "Bill Item ID": "", "Item Name": "", "Vendor": "Order 1"},
+        {"_table_index": 2, "Order ID": "260811_amazon_tester", "Bill Item ID": "101", "Item Name": "Thruster", "Vendor": "Amazon"}
+    ]
+    with patch("xlsx_manager.graph_get_order_rows", return_value=mock_order_rows), \
+         patch("xlsx_manager.graph_update_order_item", return_value=True) as mock_update, \
+         patch("xlsx_manager.read_items", return_value=[]):
+        response = client.post("/orders/delete", data={"order_id": "260811_amazon_tester"}, follow_redirects=True)
+        assert response.status_code == 200
+        assert mock_update.called
+
