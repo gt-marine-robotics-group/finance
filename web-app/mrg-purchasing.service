@@ -12,9 +12,9 @@ RestartSec=5
 Environment=PYTHONUNBUFFERED=1
 
 # Resource limits - keep it lightweight for shared sim PC
-CPUQuota=50%
-MemoryMax=768M
-Nice=5
+CPUQuota=25%
+MemoryMax=512M
+Nice=10
 
 [Install]
 WantedBy=multi-user.target
