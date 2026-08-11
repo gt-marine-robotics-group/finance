@@ -94,14 +94,28 @@ def load_xlsx():
 
 
 def load_ordering():
-    """Load the Ordering sheet."""
+    """Load the Ordering sheet (fetches Graph API live cloud data if available, with xlsx fallback)."""
     import pandas as pd
     import warnings
     warnings.filterwarnings('ignore')
 
-    df = pd.read_excel(XLSX_PATH, sheet_name=ORDERING_SHEET, header=1).astype(object).fillna("")
-    df.columns = df.columns.str.strip()
-    return df
+    try:
+        sys.path.insert(0, os.path.join(SCRIPT_DIR, "web-app"))
+        import xlsx_manager
+        rows = xlsx_manager.graph_get_order_rows()
+        if rows:
+            df = pd.DataFrame(rows).astype(object).fillna("")
+            df.columns = df.columns.str.strip()
+            return df
+    except Exception:
+        pass
+
+    try:
+        df = pd.read_excel(XLSX_PATH, sheet_name=ORDERING_SHEET, header=1).astype(object).fillna("")
+        df.columns = df.columns.str.strip()
+        return df
+    except Exception:
+        return pd.DataFrame()
 
 
 def select_bill(df, bill_title=None):
@@ -112,59 +126,67 @@ def select_bill(df, bill_title=None):
         match = [t for t in titles if bill_title.lower() in t.lower()]
         if match:
             return match[0]
-        print(f"No bill matching '{bill_title}'")
-        sys.exit(1)
+        print(f"⚠️ Bill '{bill_title}' not found. Choose from list below:")
 
-    print("Available Bills:")
-    for i, t in enumerate(titles, 1):
-        count = (df["Bill Title"].astype(str).str.strip() == t).sum()
-        print(f"  {i}. {t} ({count} items)")
+    print("\nAvailable Bills:")
+    titles_list = list(titles)
+    for i, t in enumerate(titles_list, 1):
+        print(f"  {i}. {t}")
 
-    choice = input("\nSelect bill (number or name): ").strip()
-    if choice.isdigit() and 1 <= int(choice) <= len(titles):
-        return titles[int(choice) - 1]
-    return choice
+    while True:
+        try:
+            choice = input(f"\nSelect bill (1-{len(titles_list)}): ").strip()
+            idx = int(choice) - 1
+            if 0 <= idx < len(titles_list):
+                return titles_list[idx]
+        except (ValueError, KeyboardInterrupt):
+            pass
+        print("Invalid selection, try again.")
 
 
 # ============================================================
 # COMMAND: screenshots
 # ============================================================
 def cmd_screenshots(args):
-    """Scrape prices and take screenshots for items in a bill."""
-    import re
-    import time
-    from selenium import webdriver
-    from selenium.webdriver.chrome.options import Options
-    from selenium.webdriver.chrome.service import Service
-    from selenium.webdriver.common.by import By
-
+    """Scrape prices and capture full-page product screenshots for a bill."""
     df = load_xlsx()
-    bill_title = select_bill(df, args.bill)
-    items = df[df["Bill Title"].astype(str).str.strip() == bill_title]
+    bill_title = select_bill(df, getattr(args, "bill", None))
+    print(f"\n📸 Processing screenshots for: {bill_title}")
 
-    print(f"\n📸 Taking screenshots for: {bill_title} ({len(items)} items)\n")
+    bill_items = df[df["Bill Title"].astype(str).str.strip().str.lower() == bill_title.lower()]
+    print(f"Found {len(bill_items)} items")
 
-    # Setup Chrome
-    chrome_options = Options()
-    chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-
-    service = Service()
-    driver = webdriver.Chrome(service=service, options=chrome_options)
-    driver.set_page_load_timeout(20)
-
-    # Create output dir
     bill_dir = os.path.join(SCREENSHOT_DIR, bill_title)
     os.makedirs(bill_dir, exist_ok=True)
 
-    for _, row in items.iterrows():
+    driver = None
+    try:
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.chrome.service import Service
+
+        chrome_options = Options()
+        chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.binary_location = "/snap/chromium/current/usr/lib/chromium-browser/chrome"
+
+        service = Service("/snap/chromium/current/usr/lib/chromium-browser/chromedriver")
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        driver.set_page_load_timeout(20)
+    except Exception as e:
+        print(f"⚠️ Headless Chrome driver initialization warning: {e}")
+        driver = None
+
+    for _, row in bill_items.iterrows():
         item_name = str(row.get("Item Name", "")).strip()
         url = str(row.get("Link", "")).strip()
+        if not item_name or not url or not url.startswith("http"):
+            continue
 
-        if not url or not url.startswith("http"):
-            print(f"  ⚠️ {item_name}: no URL")
+        if not driver:
             continue
 
         print(f"  {item_name}...", end=" ", flush=True)
@@ -172,6 +194,7 @@ def cmd_screenshots(args):
             driver.get(url)
         except Exception:
             pass
+        import time
         time.sleep(4)
 
         # Screenshot
@@ -188,7 +211,8 @@ def cmd_screenshots(args):
         price_text = price_scraper.scrape_price_from_driver(driver)
         print(f"✅ {price_text or 'no price'}")
 
-    driver.quit()
+    if driver:
+        driver.quit()
     print(f"\n✅ Screenshots saved locally to: {bill_dir}")
     upload_screenshots_to_sharepoint(bill_title, bill_dir)
 
@@ -229,21 +253,30 @@ def cmd_purchase(args):
     """Create purchase requests on Engage from the Ordering sheet."""
     df_order = load_ordering()
 
+    if df_order.empty:
+        print("No pending orders found in the Ordering sheet.")
+        print("Use the web app to create orders first (Create New Order → select items → Submit)")
+        sys.exit(0)
+
+    oid_col = next((c for c in df_order.columns if "Order ID" in c), "Order ID")
+    status_col = next((c for c in df_order.columns if c.strip().lower() == "status"), "Status")
+
     # Filter to rows with Order IDs but not yet purchased
     df_pending = df_order[
-        (df_order["Order ID (YYMMDD_vendor_gburdell3)"].astype(str).str.strip() != "") &
-        (df_order["Status"].astype(str).str.strip().isin(["", "pending purchase"]))
+        (df_order[oid_col].astype(str).str.strip() != "") &
+        (~df_order[oid_col].astype(str).str.strip().str.startswith("ungrouped_")) &
+        (df_order[status_col].astype(str).str.strip().str.lower().isin(["", "pending purchase", "bill approved"]))
     ]
 
     if df_pending.empty:
         print("No pending orders found in the Ordering sheet.")
-        print("Use the web app to create orders first (Order page → select items → Create Order)")
+        print("Use the web app to create orders first (Create New Order → select items → Submit)")
         sys.exit(0)
 
     # Group by Order ID
     orders = {}
     for _, row in df_pending.iterrows():
-        oid = str(row["Order ID (YYMMDD_vendor_gburdell3)"]).strip()
+        oid = str(row[oid_col]).strip()
         if oid not in orders:
             orders[oid] = []
         orders[oid].append(row)
