@@ -93,6 +93,16 @@ if not BILL_NO:
     else:
         BILL_URL = input("Could not find Bill No. Enter URL manually: ").strip()
 
+    # Launch Bill Review HTML window in browser
+    import webbrowser
+    review_url = f"http://localhost:5000/review/{BILL_NO}"
+    print(f"\n🌐 Launching Bill Review Window in browser: {review_url}")
+    print("   Verify pre-captured screenshots and item details on review cards before proceeding.")
+    try:
+        webbrowser.open(review_url)
+    except Exception:
+        pass
+
     del _df_temp, _titles
 
 # === Utility functions ===
