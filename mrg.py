@@ -272,7 +272,7 @@ def cmd_purchase(args):
         print("Use the web app to create orders first (Create New Order → select items → Submit)")
         sys.exit(0)
 
-    oid_col = next((c for c in df_order.columns if "Order ID" in c), "Order ID")
+    oid_col = next((c for c in df_order.columns if isinstance(c, str) and "Order ID" in c), "Order ID")
     status_col = next((c for c in df_order.columns if c.strip().lower() == "status"), "Status")
 
     # Filter to rows with Order IDs but not yet purchased

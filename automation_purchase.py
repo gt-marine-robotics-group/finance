@@ -84,7 +84,7 @@ if "Ordering" in excel_file.sheet_names:
     df_orders.columns = df_orders.columns.str.strip()
 
 # Check for Order ID column name
-oid_col = next((c for c in df_orders.columns if "Order ID" in c), "Order ID") if not df_orders.empty else "Order ID"
+oid_col = next((c for c in df_orders.columns if isinstance(c, str) and "Order ID" in c), "Order ID") if not df_orders.empty else "Order ID"
 
 # Determine source mode
 print("\n📋 Purchase Request Source:")
