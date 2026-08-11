@@ -45,6 +45,29 @@ SCREENSHOT_DIR = os.path.join(SCRIPT_DIR, "screenshots")
 SKIP_TITLES = ("nan", "request", "liquid", "misc")
 
 
+def download_xlsx_via_graph_api(target_path):
+    """Download fresh FY27_Bills_Budget.xlsx directly from SharePoint via Graph API."""
+    import requests
+    try:
+        sys.path.insert(0, os.path.join(SCRIPT_DIR, "web-app"))
+        import xlsx_manager
+        creds = xlsx_manager._get_graph_token()
+        if not creds:
+            return False
+        access_token, drive_id, file_id = creds
+        url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/content"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        resp = requests.get(url, headers=headers, timeout=30)
+        if resp.status_code == 200:
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            with open(target_path, "wb") as f:
+                f.write(resp.content)
+            return True
+    except Exception as e:
+        print(f"  ⚠️ Graph API download failed: {e}")
+    return False
+
+
 def fresh_sync():
     """Download latest xlsx + screenshots from SharePoint."""
     print("Syncing from SharePoint...")
@@ -56,9 +79,14 @@ def fresh_sync():
         capture_output=True, text=True, timeout=30
     )
     if r1.returncode == 0:
-        print("  ✅ xlsx synced")
+        print("  ✅ xlsx synced via rclone")
     else:
-        print(f"  ⚠️ xlsx sync failed: {r1.stderr.strip()}")
+        err_brief = r1.stderr.strip().split("\n")[0] if r1.stderr else "rclone not configured"
+        print(f"  ℹ️ rclone ({err_brief}). Trying Graph API fallback...")
+        if download_xlsx_via_graph_api(XLSX_PATH):
+            print("  ✅ xlsx synced via Microsoft Graph API!")
+        else:
+            print("  ⚠️ Could not sync xlsx file")
 
     r2 = subprocess.run(
         ["rclone", "copy", "--checksum",
@@ -69,7 +97,7 @@ def fresh_sync():
     if r2.returncode == 0:
         print("  ✅ screenshots synced")
     else:
-        print(f"  ⚠️ screenshots sync failed")
+        print(f"  ℹ️ screenshots sync skipped (rclone not configured)")
     print()
 
 
