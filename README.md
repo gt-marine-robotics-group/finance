@@ -59,6 +59,22 @@ Open **`http://localhost:5000`** in your browser:
 
 ---
 
+### 📄 Working Offline with a Local Excel File
+
+If you prefer to manually download and edit the spreadsheet locally instead of using cloud sync:
+
+1. **Download Spreadsheet**: Download the master Excel file from SharePoint (`OPS-1 Operations/FY27 Finances`).
+2. **Repository Target Path & Name**: Save the file directly in the repository root directory:
+   - **Target Location**: `finance/FY27_Bills_Budget.xlsx`
+   - **Exact Filename**: **`FY27_Bills_Budget.xlsx`** *(case-sensitive)*
+3. **Execute Locally (Without `--fresh`)**:
+   ```bash
+   mrg-finance purchase      # Reads local FY27_Bills_Budget.xlsx file directly
+   mrg-finance price-check   # Reads local FY27_Bills_Budget.xlsx file directly
+   ```
+
+---
+
 ### 4. ☁️ SharePoint & Screenshot Sync Setup (`rclone`)
 
 Screenshots are synced directly with the team's shared **GT OneDrive / SharePoint** folder (and kept out of Git to keep the repository lightweight).
