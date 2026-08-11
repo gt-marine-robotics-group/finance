@@ -67,6 +67,12 @@
                 🛒 Open Amazon Multi-Item Cart
             </a>
         </div>
+        {% else %}
+        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--color-border);">
+            <div style="padding: 0.75rem 1rem; background: rgba(59, 130, 246, 0.1); border-left: 4px solid var(--color-primary); border-radius: 4px; font-size: 0.9rem; color: var(--color-text);">
+                ℹ️ <strong>Non-Amazon Vendor Items Detected:</strong> Please create a shopping cart directly on the vendor website and capture a cart screenshot before submitting your purchase request.
+            </div>
+        </div>
         {% endif %}
     </div>
 

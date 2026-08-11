@@ -203,7 +203,12 @@ if run_check in ("", "y", "yes"):
 else:
     print("  ⏩ Skipped live price check audit.")
 
-print(f"  📝 Each item will be a separate purchase request")
+non_amazon_count = sum(1 for r in requests_to_submit if "amazon" not in r.get("link", "").lower())
+if non_amazon_count > 0:
+    print(f"\nℹ️ Non-Amazon Vendor Items Detected ({non_amazon_count} item(s)):")
+    print("   Please create a shopping cart directly on the vendor website and take a cart screenshot before submitting your purchase request.")
+
+print(f"\n  📝 Each item will be a separate purchase request")
 print(f"  📝 Bill/Line reference auto-generated (e.g. '{requests_to_submit[0]['bill_line_ref']}')")
 
 # Ask about shipping/tax overflow
