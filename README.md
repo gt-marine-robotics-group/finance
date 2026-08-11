@@ -7,16 +7,19 @@ Bill request automation, order management, price checking, and purchasing workfl
 ## ⚡ Quick Start
 
 ```bash
-# 1. Install mrg-finance CLI globally via uv
+# 1. Navigate to the repository root directory
+cd ~/mrg/finance
+
+# 2. Install mrg-finance CLI globally via uv
 uv tool install .
 
-# 2. Or install in editable dev mode
+# 3. Or install in editable dev mode
 uv pip install -e .
 
-# 3. Primary Officer Command: Submit Bill Request to Engage
+# 4. Primary Officer Command: Submit Bill Request to Engage
 mrg-finance bill-request --fresh
 
-# 4. Submit Purchase Request to Engage
+# 5. Submit Purchase Request to Engage
 mrg-finance purchase --fresh
 ```
 
