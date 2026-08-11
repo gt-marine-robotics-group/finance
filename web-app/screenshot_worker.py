@@ -12,9 +12,14 @@ import time
 import threading
 from queue import Queue, Empty
 from pathlib import Path
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
+try:
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service
+except ImportError:
+    webdriver = None
+    Options = None
+    Service = None
 
 # Add parent directory for price_scraper import
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
