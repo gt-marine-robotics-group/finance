@@ -338,10 +338,8 @@ def cmd_purchase(args):
         print("Cancelled.")
         sys.exit(0)
 
-    # Run the Engage automation
-    cmd = [sys.executable, os.path.join(SCRIPT_DIR, "automation_purchase.py")]
-    if args.fresh:
-        cmd.append("--fresh")
+    # Run the Engage automation with the selected order
+    cmd = [sys.executable, os.path.join(SCRIPT_DIR, "automation_purchase.py"), "--order", selected_oid]
     os.execv(sys.executable, cmd)
 
 
