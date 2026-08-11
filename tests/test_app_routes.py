@@ -58,9 +58,10 @@ from unittest.mock import patch
 def test_quick_add_post_with_quantity(client):
     # Authenticate session
     client.post("/login", data={"password": "boats0519", "name": "Tester"})
-    with patch("xlsx_manager.add_item", return_value=True):
+    with patch("xlsx_manager.add_item", return_value=True), \
+         patch("threading.Thread"):
         response = client.post("/quick-add", data={
-            "item_name": "Pytest Test Motor",
+            "item_name": "Pytest Mock Item",
             "quantity": "5",
             "link": "https://www.amazon.com/dp/B08N5WRWNW"
         }, follow_redirects=True)
