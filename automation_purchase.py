@@ -249,29 +249,34 @@ print(f"{'='*60}")
 print(f"\n{'#':<4} {'Line':<6} {'Item Name':<35} {'Qty':<5} {'Cost':<10} {'Total'}")
 print("-" * 75)
 
-requests_to_submit = []
-for i, (_, row) in enumerate(bill_items.iterrows()):
-    item_name = str(row.get("Item Name", "")).strip()
-    bill_item_id = str(row.get("Bill Item ID", i+1)).replace(".0", "").strip()
-    cost = safe_float(row.get("Cost", 0))
-    qty = safe_int(row.get("Quantity", 1))
-    total = cost * qty
-    description = str(row.get("Description", "")).strip()
+if src_choice == "2":
+    requests_to_submit = []
+    for i, (_, row) in enumerate(bill_items.iterrows()):
+        item_name = str(row.get("Item Name", "")).strip()
+        bill_item_id = str(row.get("Bill Item ID", i+1)).replace(".0", "").strip()
+        cost = safe_float(row.get("Cost", 0))
+        qty = safe_int(row.get("Quantity", 1))
+        total = cost * qty
+        description = str(row.get("Description", "")).strip()
 
-    bill_line_ref = f"Bill {bill_no}, Line {bill_item_id}"
+        bill_line_ref = f"Bill {bill_no}, Line {bill_item_id}"
 
-    requests_to_submit.append({
-        "item_name": item_name,
-        "description": description,
-        "cost": cost,
-        "quantity": qty,
-        "total": total,
-        "bill_line_ref": bill_line_ref,
-        "bill_item_id": bill_item_id,
-        "link": str(row.get("Link", "")).strip(),
-    })
+        requests_to_submit.append({
+            "item_name": item_name,
+            "description": description,
+            "cost": cost,
+            "quantity": qty,
+            "total": total,
+            "bill_line_ref": bill_line_ref,
+            "bill_item_id": bill_item_id,
+            "link": str(row.get("Link", "")).strip(),
+        })
 
-    print(f"{i+1:<4} {bill_item_id:<6} {item_name:<35} {qty:<5} ${cost:<9.2f} ${total:.2f}")
+        print(f"{i+1:<4} {bill_item_id:<6} {item_name:<35} {qty:<5} ${cost:<9.2f} ${total:.2f}")
+else:
+    # Mode 1: already built requests_to_submit from order rows above
+    for i, r in enumerate(requests_to_submit):
+        print(f"{i+1:<4} {r['bill_item_id']:<6} {r['item_name']:<35} {r['quantity']:<5} ${r['cost']:<9.2f} ${r['total']:.2f}")
 
 grand_total = sum(r["total"] for r in requests_to_submit)
 print(f"\n  💰 Grand Total Allocation: ${grand_total:.2f}")
