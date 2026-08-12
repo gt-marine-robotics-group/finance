@@ -4,6 +4,8 @@ xlsx_manager.py - Read/write FY27_Bills_Budget.xlsx with rclone sync.
 Pull before read, push after write. The xlsx on SharePoint is the source of truth.
 """
 
+from __future__ import annotations
+
 import os
 import sys
 import subprocess

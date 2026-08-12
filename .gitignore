@@ -10,4 +10,7 @@ __pycache__/
 FY27_Bills_Budget.xlsx
 .pytest_cache/
 .agents/
+build/
+*.egg-info/
+
 
