@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 screenshot_worker.py - Background thread that takes headless Chrome screenshots of item URLs.
 
@@ -9,6 +10,7 @@ After capture, pushes to SharePoint via Graph API.
 import os
 import sys
 import time
+import re
 import threading
 from queue import Queue, Empty
 from pathlib import Path
@@ -28,7 +30,7 @@ if parent_dir not in sys.path:
 
 import price_scraper
 
-SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "screenshots")
+SCREENSHOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "screenshots"))
 DELAY = 5  # seconds to wait after page load
 
 # rclone remote for screenshots on SharePoint
@@ -394,20 +396,43 @@ def get_status(item_name: str) -> str:
 
 
 def get_screenshot_path(item_name: str, bill_title: str = "") -> str | None:
-    """Get the screenshot file path if it exists."""
-    safe_name = _safe_filename(item_name)
+    """Get the screenshot file path if it exists with flexible matching."""
+    if not item_name:
+        return None
 
+    dirs_to_check = []
     if bill_title:
-        safe_bill = _safe_dirname(bill_title)
-        filepath = os.path.join(SCREENSHOT_DIR, safe_bill, f"{safe_name}.png")
-        if os.path.exists(filepath):
-            return filepath
+        dirs_to_check.append(os.path.join(SCREENSHOT_DIR, _safe_dirname(bill_title)))
+        dirs_to_check.append(os.path.join(SCREENSHOT_DIR, bill_title))
 
-    # Check common folders directly (O(1) stat calls)
-    for folder in ("_queue", "_backlog"):
-        filepath = os.path.join(SCREENSHOT_DIR, folder, f"{safe_name}.png")
-        if os.path.exists(filepath):
-            return filepath
+    # Add all subdirectories in SCREENSHOT_DIR
+    if os.path.isdir(SCREENSHOT_DIR):
+        for sub in os.listdir(SCREENSHOT_DIR):
+            sp = os.path.join(SCREENSHOT_DIR, sub)
+            if os.path.isdir(sp) and sp not in dirs_to_check:
+                dirs_to_check.append(sp)
+
+    dirs_to_check.extend([
+        SCREENSHOT_DIR,
+        os.path.join(SCREENSHOT_DIR, "_queue"),
+        os.path.join(SCREENSHOT_DIR, "_backlog")
+    ])
+
+    safe_name = _safe_filename(item_name)
+    target_norm = re.sub(r'\s+', ' ', f"{safe_name}.png").lower()
+
+    for d in dirs_to_check:
+        if not os.path.isdir(d):
+            continue
+        exact = os.path.join(d, f"{safe_name}.png")
+        if os.path.exists(exact):
+            return exact
+        try:
+            for f in os.listdir(d):
+                if re.sub(r'\s+', ' ', f).lower() == target_norm:
+                    return os.path.join(d, f)
+        except Exception:
+            pass
 
     return None
 

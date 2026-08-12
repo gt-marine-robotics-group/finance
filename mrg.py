@@ -45,6 +45,17 @@ SCREENSHOT_DIR = os.path.join(SCRIPT_DIR, "screenshots")
 SKIP_TITLES = ("nan", "request", "liquid", "misc")
 
 
+def get_python_executable():
+    """Get the appropriate Python executable, preferring virtualenv if present."""
+    venv_python = os.path.join(SCRIPT_DIR, ".venv", "bin", "python")
+    if os.path.exists(venv_python):
+        return venv_python
+    venv_win = os.path.join(SCRIPT_DIR, ".venv", "Scripts", "python.exe")
+    if os.path.exists(venv_win):
+        return venv_win
+    return sys.executable
+
+
 def download_xlsx_via_graph_api(target_path):
     """Download fresh FY27_Bills_Budget.xlsx directly from SharePoint via Graph API."""
     import requests
@@ -184,10 +195,7 @@ def cmd_screenshots(args):
         chrome_options.add_argument("--window-size=1920,1080")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.binary_location = "/snap/chromium/current/usr/lib/chromium-browser/chrome"
-
-        service = Service("/snap/chromium/current/usr/lib/chromium-browser/chromedriver")
+        service = Service()
         driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.set_page_load_timeout(20)
     except Exception as e:
@@ -254,10 +262,11 @@ def upload_screenshots_to_sharepoint(bill_title, bill_dir):
 def cmd_bill_request(args):
     """Submit a bill to CampusLabs Engage."""
     # This wraps the existing automation.py
-    cmd = [sys.executable, os.path.join(SCRIPT_DIR, "automation.py")]
+    py_exe = get_python_executable()
+    cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation.py")]
     if args.fresh:
         cmd.append("--fresh")
-    os.execv(sys.executable, cmd)
+    os.execv(py_exe, cmd)
 
 
 # ============================================================
@@ -339,8 +348,9 @@ def cmd_purchase(args):
         sys.exit(0)
 
     # Run the Engage automation with the selected order
-    cmd = [sys.executable, os.path.join(SCRIPT_DIR, "automation_purchase.py"), "--order", selected_oid]
-    os.execv(sys.executable, cmd)
+    py_exe = get_python_executable()
+    cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation_purchase.py"), "--order", selected_oid]
+    os.execv(py_exe, cmd)
 
 
 # ============================================================
@@ -476,6 +486,15 @@ def cmd_price_check(args):
 # ============================================================
 # MAIN
 # ============================================================
+def cmd_review(args):
+    """Launch the side-by-side screenshot and price review GUI directly without scraping."""
+    py_exe = get_python_executable()
+    cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation_screenshots.py"), "--review-only"]
+    if getattr(args, "bill", None):
+        cmd.extend(["--bill", args.bill])
+    subprocess.run(cmd)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="MRG Finance CLI — bill requests, purchases, and price checking",
@@ -483,6 +502,7 @@ def main():
         epilog="""
 Examples:
   mrg.py screenshots --fresh --bill "FY27 Budget"
+  mrg.py review --bill "Marine Robotics Group RobotX Testing Equipment Bill"
   mrg.py bill-request --fresh
   mrg.py purchase --fresh
   mrg.py price-check --bill "FY27 Budget" --cart
@@ -494,6 +514,11 @@ Examples:
     p_ss = sub.add_parser("screenshots", help="Scrape prices + take screenshots")
     p_ss.add_argument("--fresh", "-f", action="store_true", help="Sync from SharePoint first")
     p_ss.add_argument("--bill", "-b", help="Bill title (skips interactive selection)")
+    p_ss.add_argument("--review-only", "-r", action="store_true", help="Launch review GUI without scraping")
+
+    # review
+    p_rv = sub.add_parser("review", help="Launch side-by-side screenshot & price review GUI")
+    p_rv.add_argument("--bill", "-b", help="Bill title (skips interactive selection)")
 
     # bill-request
     p_br = sub.add_parser("bill-request", help="Submit bill to CampusLabs Engage")
@@ -523,6 +548,7 @@ Examples:
     # Dispatch
     commands = {
         "screenshots": cmd_screenshots,
+        "review": cmd_review,
         "bill-request": cmd_bill_request,
         "purchase": cmd_purchase,
         "price-check": cmd_price_check,

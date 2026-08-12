@@ -1,4 +1,8 @@
 import os
+import sys
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
 import time
 import re
 import json
@@ -21,7 +25,8 @@ CSV_PATH = os.environ.get("FINANCE_XLSX_PATH", DEFAULT_XLSX)
 OUTPUT_CSV = "./FY27_Bills_Budget_Updated.csv"
 SHEET_NAME = "Bills"
 SAVE_FOLDER = "./screenshots"
-REVIEW_HTML = "./review.html"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REVIEW_HTML = os.path.join(SCRIPT_DIR, "review.html")
 DELAY = 5  # seconds to wait after page load
 MAX_RETRIES = 2  # retry failed page loads
 
@@ -300,203 +305,657 @@ def wait_for_page_ready(driver, timeout=15):
     time.sleep(2)  # Extra settle for JS content
 
 
+def _find_file_in_dir(dir_path, item_name):
+    """Find a screenshot file in dir_path using exact, space-normalized, or case-insensitive matching."""
+    if not dir_path or not os.path.isdir(dir_path):
+        return None
+
+    safe_name = re.sub(r'[<>:"/\\|?*]', '_', item_name) + ".png"
+    exact = os.path.join(dir_path, safe_name)
+    if os.path.exists(exact):
+        return exact
+
+    # Try space-normalized and case-insensitive matching
+    target_norm = re.sub(r'\s+', ' ', safe_name).lower()
+    try:
+        for f in os.listdir(dir_path):
+            if re.sub(r'\s+', ' ', f).lower() == target_norm:
+                return os.path.join(dir_path, f)
+    except Exception:
+        pass
+    return None
+
+
+def find_screenshots_for_item(bill_title, item_name, screenshot_file=None):
+    """Locate baseline (old) and newly scraped screenshot files for an item with flexible matching."""
+    bill_dir = os.path.join("screenshots", bill_title)
+    old_dir = os.path.join("screenshots", bill_title, "old")
+    root_old_dir = os.path.join("screenshots", "old")
+    root_dir = "screenshots"
+    new_dir = os.path.join("screenshots", bill_title, "new")
+    root_new_dir = os.path.join("screenshots", "new")
+
+    old_screenshot = None
+    for d in (old_dir, root_old_dir):
+        found = _find_file_in_dir(d, item_name)
+        if found:
+            old_screenshot = found
+            break
+
+    new_screenshot = None
+    if screenshot_file:
+        cand = os.path.join("screenshots", screenshot_file)
+        if os.path.exists(cand):
+            new_screenshot = cand
+
+    if not new_screenshot:
+        for d in (bill_dir, root_dir, new_dir, root_new_dir):
+            found = _find_file_in_dir(d, item_name)
+            if found:
+                new_screenshot = found
+                break
+
+    if old_screenshot and new_screenshot and os.path.abspath(old_screenshot) == os.path.abspath(new_screenshot):
+        old_screenshot = None
+
+    return old_screenshot, new_screenshot
+
+
 def generate_review_html(data, bill_title, output_path):
-    """Generate an interactive HTML review page with editable prices."""
+    """Generate an interactive HTML review page with side-by-side screenshot comparison and fast navigation."""
     ok_count = sum(1 for d in data if d["status"] == "ok")
     review_count = sum(1 for d in data if d["status"] == "needs_review")
     fail_count = sum(1 for d in data if d["status"] in ("failed", "error"))
     skip_count = sum(1 for d in data if d["status"] == "skipped")
 
-    rows_html = ""
-    for i, item in enumerate(data):
-        status_emoji = {"ok": "✅", "needs_review": "⚠️", "failed": "❌",
-                        "error": "💥", "skipped": "⏭️"}.get(item["status"], "❓")
-        status_class = item["status"]
-        current_price = f"{item['parsed_price']:.2f}" if item["parsed_price"] else ""
-        csv_price = item["csv_cost"]
-
-        screenshot_html = (
-            f'<a href="screenshots/{item["screenshot"]}" target="_blank">'
-            f'<img src="screenshots/{item["screenshot"]}" alt="{item["item_name"]}" loading="lazy" /></a>'
-            if item["screenshot"]
-            else '<div class="no-screenshot">No screenshot</div>'
-        )
-
-        rows_html += f'''
-        <div class="item-card {status_class}" data-status="{status_class}" data-index="{i}">
-            <div class="item-header">
-                <span class="status">{status_emoji}</span>
-                <span class="item-name">{item['item_name']}</span>
-                <span class="confidence badge-{item['confidence']}">{item['confidence']}</span>
-            </div>
-            <div class="item-body">
-                <div class="screenshot-col">{screenshot_html}</div>
-                <div class="details-col">
-                    <table>
-                        <tr><td>Spreadsheet:</td><td><strong>{csv_price}</strong></td></tr>
-                        <tr><td>Scraped:</td><td><code>{item['scraped_price']}</code></td></tr>
-                        <tr>
-                            <td>Final Price:</td>
-                            <td>
-                                <span class="price-input-wrap">$<input type="number" step="0.01" min="0"
-                                    class="price-input" data-index="{i}"
-                                    value="{current_price}"
-                                    placeholder="enter price" /></span>
-                            </td>
-                        </tr>
-                        <tr><td>URL:</td><td><a href="{item['url']}" target="_blank">Open Link ↗</a></td></tr>
-                    </table>
-                    <button class="use-csv-btn" onclick="useCsvPrice({i}, '{csv_price}')">Use spreadsheet price</button>
-                </div>
-            </div>
-        </div>'''
-
-    # Build JSON data for export
     import json as json_mod
-    items_json = json_mod.dumps([{
-        "item_name": d["item_name"],
-        "csv_cost": d["csv_cost"],
-        "parsed_price": d["parsed_price"],
-        "url": d["url"],
-    } for d in data])
+    import base64
+
+    def _image_to_data_uri(filepath):
+        if not filepath or not os.path.exists(filepath):
+            return None
+        try:
+            with open(filepath, "rb") as f:
+                encoded = base64.b64encode(f.read()).decode("utf-8")
+            ext = os.path.splitext(filepath)[1].lower().replace(".", "")
+            mime = "image/png" if ext == "png" else ("image/jpeg" if ext in ("jpg", "jpeg") else "image/png")
+            return f"data:{mime};base64,{encoded}"
+        except Exception:
+            return None
+
+    # Embed Base64 image data URIs directly into items data
+    for item in data:
+        old_path = item.get("old_screenshot")
+        new_path = item.get("new_screenshot") or item.get("screenshot")
+        if new_path and not os.path.exists(new_path) and os.path.exists(os.path.join("screenshots", os.path.basename(new_path))):
+            new_path = os.path.join("screenshots", os.path.basename(new_path))
+        item["old_screenshot_data"] = _image_to_data_uri(old_path)
+        item["new_screenshot_data"] = _image_to_data_uri(new_path)
+
+    items_json = json_mod.dumps(data)
 
     html = f'''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Price Review — {bill_title}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Side-by-Side Review — {bill_title}</title>
     <style>
-        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f5; padding: 20px; }}
-        h1 {{ margin-bottom: 10px; }}
-        .top-bar {{ display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }}
-        .summary {{ background: #fff; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
-        .summary span {{ margin-right: 20px; }}
-        .filters {{ margin-bottom: 15px; }}
-        .filters button {{ padding: 6px 14px; margin-right: 8px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; background: #fff; }}
-        .filters button.active {{ background: #333; color: #fff; border-color: #333; }}
-        .export-bar {{ background: #1976d2; color: #fff; padding: 12px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center; gap: 15px; }}
-        .export-bar button {{ padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 0.95em; }}
-        .export-bar .btn-export {{ background: #fff; color: #1976d2; }}
-        .export-bar .btn-export:hover {{ background: #e3f2fd; }}
-        .export-bar .btn-accept {{ background: #4caf50; color: #fff; }}
-        .export-bar .btn-accept:hover {{ background: #388e3c; }}
-        .item-card {{ background: #fff; border-radius: 8px; margin-bottom: 16px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid #ccc; }}
-        .item-card.ok {{ border-left-color: #4caf50; }}
-        .item-card.needs_review {{ border-left-color: #ff9800; }}
-        .item-card.failed {{ border-left-color: #f44336; }}
-        .item-card.error {{ border-left-color: #9c27b0; }}
-        .item-card.skipped {{ border-left-color: #9e9e9e; opacity: 0.7; }}
-        .item-header {{ display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }}
-        .item-name {{ font-weight: 600; font-size: 1.1em; }}
-        .confidence {{ font-size: 0.8em; padding: 2px 8px; border-radius: 3px; }}
-        .badge-high {{ background: #e8f5e9; color: #2e7d32; }}
-        .badge-medium {{ background: #fff3e0; color: #e65100; }}
-        .badge-low {{ background: #fce4ec; color: #c62828; }}
-        .badge-none {{ background: #f5f5f5; color: #616161; }}
-        .badge-skipped {{ background: #f5f5f5; color: #9e9e9e; }}
-        .badge-manual {{ background: #e3f2fd; color: #1565c0; }}
-        .item-body {{ display: flex; gap: 20px; align-items: flex-start; }}
-        .screenshot-col {{ flex: 0 0 450px; }}
-        .screenshot-col img {{ width: 100%; border: 1px solid #eee; border-radius: 4px; }}
-        .no-screenshot {{ width: 100%; height: 200px; display: flex; align-items: center; justify-content: center; background: #f5f5f5; border-radius: 4px; color: #999; }}
-        .details-col table {{ border-collapse: collapse; }}
-        .details-col td {{ padding: 6px 12px 6px 0; vertical-align: middle; }}
-        .details-col td:first-child {{ color: #666; }}
-        .price-input-wrap {{ display: flex; align-items: center; gap: 2px; font-weight: 600; font-size: 1.1em; }}
-        .price-input {{ width: 100px; padding: 4px 8px; border: 2px solid #ddd; border-radius: 4px; font-size: 1em; font-weight: 600; }}
-        .price-input:focus {{ border-color: #1976d2; outline: none; }}
-        .price-input.edited {{ border-color: #4caf50; background: #f1f8e9; }}
-        .use-csv-btn {{ margin-top: 8px; padding: 4px 10px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; background: #fff; font-size: 0.85em; }}
-        .use-csv-btn:hover {{ background: #f5f5f5; }}
-        code {{ background: #f0f0f0; padding: 2px 6px; border-radius: 3px; }}
-        a {{ color: #1976d2; }}
-        .hidden {{ display: none !important; }}
-        .toast {{ position: fixed; bottom: 20px; right: 20px; background: #333; color: #fff; padding: 12px 20px; border-radius: 8px; display: none; z-index: 999; }}
-        .toast.show {{ display: block; animation: fadeIn 0.3s; }}
-        @keyframes fadeIn {{ from {{ opacity: 0; }} to {{ opacity: 1; }} }}
+        :root {{
+            --bg-main: #f8fafc;
+            --bg-panel: #ffffff;
+            --bg-card: #ffffff;
+            --border-color: #e2e8f0;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --accent-blue: #2563eb;
+            --accent-green: #16a34a;
+            --accent-orange: #ca8a04;
+            --accent-red: #dc2626;
+            --radius: 8px;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+            --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }}
+
+        * {{ box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }}
+        body {{ background: var(--bg-main); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }}
+
+        /* Top Header */
+        header {{
+            background: var(--bg-panel);
+            border-bottom: 1px solid var(--border-color);
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+            box-shadow: var(--shadow-sm);
+        }}
+        .header-title {{ font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 10px; color: var(--text-main); }}
+        .header-subtitle {{ font-size: 0.85rem; color: var(--text-muted); font-weight: 400; }}
+        .header-actions {{ display: flex; align-items: center; gap: 10px; }}
+
+        .btn {{
+            background: #ffffff;
+            color: var(--text-main);
+            border: 1px solid #cbd5e1;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.85rem;
+            transition: all 0.15s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            text-decoration: none;
+        }}
+        .btn:hover {{ background: #f1f5f9; }}
+        .btn-primary {{ background: #2563eb; color: #ffffff; border-color: #1d4ed8; }}
+        .btn-primary:hover {{ background: #1d4ed8; }}
+        .btn-success {{ background: #16a34a; color: #ffffff; border-color: #15803d; }}
+        .btn-success:hover {{ background: #15803d; }}
+        .btn-active {{ background: #2563eb; color: #ffffff; font-weight: 700; }}
+
+        /* App Container */
+        .app-body {{ display: flex; flex: 1; overflow: hidden; }}
+
+        /* Sidebar Navigation Drawer */
+        .sidebar {{
+            width: 320px;
+            background: var(--bg-panel);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }}
+        .sidebar-tabs {{
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+            background: #f8fafc;
+        }}
+        .tab-btn {{
+            flex: 1;
+            padding: 10px;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+        }}
+        .tab-btn.active {{ color: var(--accent-blue); border-bottom-color: var(--accent-blue); background: var(--bg-panel); font-weight: 700; }}
+
+        .sidebar-list {{ overflow-y: auto; flex: 1; padding: 8px; }}
+        .sidebar-item {{
+            padding: 10px 12px;
+            border-radius: 8px;
+            margin-bottom: 6px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: background 0.15s ease;
+            color: var(--text-main);
+        }}
+        .sidebar-item:hover {{ background: #f1f5f9; }}
+        .sidebar-item.active {{ background: #2563eb; color: #ffffff; font-weight: 600; }}
+
+        .item-info {{ display: flex; flex-direction: column; gap: 2px; max-width: 200px; }}
+        .item-name {{ font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+        .item-sub {{ font-size: 0.75rem; opacity: 0.85; }}
+
+        .badge {{
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }}
+        .badge-ok {{ background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }}
+        .badge-review {{ background: #fef9c3; color: #854d0e; border: 1px solid #fef08a; }}
+        .badge-failed {{ background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }}
+
+        /* Main Workspace */
+        .workspace {{ flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg-main); }}
+
+        /* Fast Navigation Bar */
+        .nav-bar {{
+            background: var(--bg-panel);
+            padding: 12px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: var(--shadow-sm);
+        }}
+        .nav-info {{ display: flex; align-items: center; gap: 15px; }}
+        .item-title-large {{ font-size: 1.2rem; font-weight: 700; color: var(--text-main); }}
+
+        /* Side-by-Side Comparison Container */
+        .comparison-view {{
+            flex: 1;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            overflow-y: auto;
+        }}
+
+        .price-panel {{
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
+            box-shadow: var(--shadow-sm);
+        }}
+        .price-metric {{ display: flex; flex-direction: column; gap: 2px; }}
+        .metric-label {{ font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; }}
+        .metric-value {{ font-size: 1.2rem; font-weight: 700; color: var(--text-main); }}
+
+        .price-input-box {{
+            background: #ffffff;
+            border: 2px solid var(--accent-blue);
+            color: var(--text-main);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            width: 120px;
+        }}
+
+        /* Side by Side Split Grid */
+        .split-grid {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            flex: 1;
+            min-height: 450px;
+        }}
+
+        .shot-card {{
+            background: var(--bg-panel);
+            border-radius: var(--radius);
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+        }}
+        .shot-header {{
+            background: #f8fafc;
+            color: var(--text-main);
+            padding: 10px 14px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-color);
+        }}
+        .shot-body {{
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f1f5f9;
+            padding: 12px;
+            position: relative;
+        }}
+        .shot-body img {{
+            max-width: 100%;
+            max-height: 580px;
+            object-fit: contain;
+            border-radius: 6px;
+            cursor: zoom-in;
+            box-shadow: var(--shadow-md);
+            border: 1px solid #cbd5e1;
+        }}
+        .placeholder-box {{ color: var(--text-muted); font-size: 0.9rem; font-style: italic; text-align: center; }}
+
+        /* Cards List View Mode */
+        .cards-list-view {{ display: none; padding: 20px; overflow-y: auto; gap: 20px; flex-direction: column; }}
+        .cards-list-view.active {{ display: flex; }}
+        .card-row {{
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            box-shadow: var(--shadow-sm);
+        }}
+        .card-row-shots {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; height: 260px; }}
+        .card-row-shots img {{ width: 100%; height: 100%; object-fit: contain; background: #f1f5f9; border-radius: 4px; border: 1px solid #cbd5e1; }}
+
+        /* Footer Hints */
+        .footer-hints {{
+            background: var(--bg-panel);
+            border-top: 1px solid var(--border-color);
+            padding: 10px 20px;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }}
+        kbd {{ background: #e2e8f0; color: #1e293b; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.7rem; border: 1px solid #cbd5e1; }}
+
+        /* Toast */
+        .toast {{
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #0284c7;
+            color: #fff;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+            display: none;
+            z-index: 1000;
+        }}
+        .toast.show {{ display: block; }}
+
+        /* Lightbox Modal */
+        .lightbox {{
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.9);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }}
+        .lightbox.show {{ display: flex; }}
+        .lightbox img {{ max-width: 95vw; max-height: 95vh; object-fit: contain; border-radius: 8px; }}
     </style>
 </head>
 <body>
-    <h1>📋 Price Review — {bill_title}</h1>
-    <p style="color:#666; margin-bottom:15px;">Generated: {datetime.now().strftime("%Y-%m-%d %H:%M")} | Edit prices below, then export.</p>
+    <header>
+        <div>
+            <div class="header-title">📋 Side-by-Side Price & Screenshot Review</div>
+            <div class="header-subtitle">Bill: {bill_title} | Review & Edit Prices</div>
+        </div>
+        <div class="header-actions">
+            <button class="btn" id="toggle-view-btn" onclick="toggleViewMode()">☰ List View</button>
+            <button class="btn btn-success" onclick="acceptAllCsv()">Accept All Spreadsheet Prices</button>
+            <button class="btn btn-primary" onclick="saveToSpreadsheet()">💾 Save to Spreadsheet</button>
+        </div>
+    </header>
 
-    <div class="export-bar">
-        <span>✏️ Edit prices directly → then:</span>
-        <button class="btn-accept" onclick="acceptAllCsv()">Accept all spreadsheet prices</button>
-        <button class="btn-export" onclick="saveToSpreadsheet()">💾 Save to Spreadsheet</button>
-        <span id="export-status"></span>
+    <div class="app-body">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-tabs">
+                <button class="tab-btn active" onclick="setFilter('all')">All ({len(data)})</button>
+                <button class="tab-btn" onclick="setFilter('needs_review')">⚠️ Review ({review_count})</button>
+                <button class="tab-btn" onclick="setFilter('ok')">✅ OK ({ok_count})</button>
+            </div>
+            <div class="sidebar-list" id="sidebar-list"></div>
+        </div>
+
+        <!-- Main Workspace -->
+        <div class="workspace">
+            <!-- Inspector Mode -->
+            <div id="inspector-container" style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
+                <div class="nav-bar">
+                    <div class="nav-info">
+                        <span class="item-title-large" id="item-title-text">Item Name</span>
+                        <span id="item-status-badge" class="badge">STATUS</span>
+                        <a id="item-url-link" href="#" target="_blank" class="btn" style="padding: 4px 10px; font-size: 0.75rem;">Open Link ↗</a>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span id="item-count-text" style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">Item 1 of {len(data)}</span>
+                        <button class="btn" onclick="prevItem()">◀ Prev (←)</button>
+                        <button class="btn btn-primary" onclick="nextItem()">Next (→) ▶</button>
+                    </div>
+                </div>
+
+                <div class="comparison-view">
+                    <!-- Price Control Panel -->
+                    <div class="price-panel">
+                        <div class="price-metric">
+                            <span class="metric-label">Spreadsheet Price</span>
+                            <span class="metric-value" id="val-csv">$0.00</span>
+                        </div>
+                        <div class="price-metric">
+                            <span class="metric-label">Scraped Price</span>
+                            <span class="metric-value" id="val-scraped" style="color: var(--accent-blue);">$0.00</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <button class="btn" onclick="useSpreadsheetPriceCurrent()">Use Spreadsheet Price [1]</button>
+                            <button class="btn" onclick="useScrapedPriceCurrent()">Use Scraped Price [2]</button>
+                        </div>
+                        <div class="price-metric" style="align-items: flex-end;">
+                            <span class="metric-label">Final Price to Save</span>
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                <span style="font-weight: 700; font-size: 1.1rem;">$</span>
+                                <input type="number" step="0.01" min="0" class="price-input-box" id="final-price-input" oninput="onPriceInputChange(this.value)" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Side-by-Side / Single Screenshot Grid -->
+                    <div class="split-grid" id="split-grid-container">
+                        <div class="shot-card" id="old-shot-card">
+                            <div class="shot-header">
+                                <span>📜 Baseline / Old Screenshot</span>
+                                <span id="old-shot-status">Ground Truth</span>
+                            </div>
+                            <div class="shot-body" id="old-shot-container"></div>
+                        </div>
+                        <div class="shot-card" id="new-shot-card">
+                            <div class="shot-header">
+                                <span id="new-shot-card-title">📸 New / Scraped Screenshot</span>
+                                <span id="new-shot-status">Captured Verification</span>
+                            </div>
+                            <div class="shot-body" id="new-shot-container"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- List Mode Container -->
+            <div class="cards-list-view" id="cards-list-container"></div>
+
+            <div class="footer-hints">
+                <span><kbd>←</kbd> / <kbd>A</kbd> Previous Item</span>
+                <span><kbd>→</kbd> / <kbd>D</kbd> Next Item</span>
+                <span><kbd>1</kbd> Use Spreadsheet Price</span>
+                <span><kbd>2</kbd> Use Scraped Price</span>
+                <span><kbd>Enter</kbd> Save & Advance</span>
+            </div>
+        </div>
     </div>
 
-    <div class="summary">
-        <span>✅ OK: <strong>{ok_count}</strong></span>
-        <span>⚠️ Review: <strong>{review_count}</strong></span>
-        <span>❌ Failed: <strong>{fail_count}</strong></span>
-        <span>⏭️ Skipped: <strong>{skip_count}</strong></span>
-        <span>Total: <strong>{len(data)}</strong></span>
+    <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+        <img id="lightbox-img" src="" alt="Full view" />
     </div>
-
-    <div class="filters">
-        <button class="active" onclick="filterItems('all')">All ({len(data)})</button>
-        <button onclick="filterItems('needs_review')">⚠️ Review ({review_count})</button>
-        <button onclick="filterItems('failed')">❌ Failed ({fail_count})</button>
-        <button onclick="filterItems('ok')">✅ OK ({ok_count})</button>
-    </div>
-
-    <div id="items">{rows_html}</div>
 
     <div class="toast" id="toast"></div>
 
     <script>
         const itemsData = {items_json};
+        let currentIndex = 0;
+        let currentFilter = 'all';
+        let isListView = false;
 
-        // Track edits
-        document.querySelectorAll('.price-input').forEach(input => {{
-            input.addEventListener('input', function() {{
-                this.classList.add('edited');
-                const idx = parseInt(this.dataset.index);
-                itemsData[idx].final_price = parseFloat(this.value) || 0;
-            }});
-        }});
+        function escapeHtml(str) {{
+            if (!str) return '';
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }}
 
-        function useCsvPrice(idx, csvPrice) {{
-            const val = parseFloat(csvPrice.replace('$','').replace(',','')) || 0;
-            const input = document.querySelector(`.price-input[data-index="${{idx}}"]`);
-            input.value = val.toFixed(2);
-            input.classList.add('edited');
-            itemsData[idx].final_price = val;
-            showToast(`Set ${{itemsData[idx].item_name}} to $${{val.toFixed(2)}}`);
+        function getFilteredIndices() {{
+            return itemsData.map((item, idx) => {{
+                if (currentFilter === 'all') return idx;
+                if (currentFilter === 'needs_review') return item.status === 'needs_review' ? idx : -1;
+                if (currentFilter === 'ok') return item.status === 'ok' ? idx : -1;
+                return idx;
+            }}).filter(idx => idx !== -1);
+        }}
+
+        function setFilter(filter) {{
+            currentFilter = filter;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            if (event && event.target) event.target.classList.add('active');
+            const filtered = getFilteredIndices();
+            if (filtered.length > 0 && !filtered.includes(currentIndex)) {{
+                currentIndex = filtered[0];
+            }}
+            renderSidebar();
+            renderInspector();
+            if (isListView) renderListView();
+        }}
+
+        function renderSidebar() {{
+            const listEl = document.getElementById('sidebar-list');
+            const filtered = getFilteredIndices();
+
+            listEl.innerHTML = filtered.map(idx => {{
+                const item = itemsData[idx];
+                const activeClass = idx === currentIndex ? 'active' : '';
+                const badgeClass = item.status === 'ok' ? 'badge-ok' : (item.status === 'needs_review' ? 'badge-review' : 'badge-failed');
+                const badgeText = item.status === 'ok' ? 'OK' : (item.status === 'needs_review' ? 'Review' : 'Failed');
+
+                return `
+                    <div class="sidebar-item ${{activeClass}}" onclick="selectItem(${{idx}})">
+                        <div class="item-info">
+                            <span class="item-name">${{escapeHtml(item.item_name)}}</span>
+                            <span class="item-sub">Spreadsheet: $${{item.csv_cost}} | Scraped: ${{item.scraped_price || '$0.00'}}</span>
+                        </div>
+                        <span class="badge ${{badgeClass}}">${{badgeText}}</span>
+                    </div>
+                `;
+            }}).join('');
+        }}
+
+        function renderInspector() {{
+            if (itemsData.length === 0) return;
+            const item = itemsData[currentIndex];
+
+            document.getElementById('item-title-text').textContent = item.item_name;
+            document.getElementById('item-url-link').href = item.url || '#';
+            document.getElementById('item-count-text').textContent = `Item ${{currentIndex + 1}} of ${{itemsData.length}}`;
+
+            const badge = document.getElementById('item-status-badge');
+            if (item.status === 'ok') {{
+                badge.className = 'badge badge-ok';
+                badge.textContent = '✅ Matched';
+            }} else if (item.status === 'needs_review') {{
+                badge.className = 'badge badge-review';
+                badge.textContent = '⚠️ Price Mismatch';
+            }} else {{
+                badge.className = 'badge badge-failed';
+                badge.textContent = '❌ Failed / Skipped';
+            }}
+
+            const csvVal = parseFloat(String(item.csv_cost).replace('$','').replace(',','')) || 0;
+            document.getElementById('val-csv').textContent = `$${{csvVal.toFixed(2)}}`;
+            document.getElementById('val-scraped').textContent = item.scraped_price ? item.scraped_price : (item.parsed_price ? `$${{item.parsed_price.toFixed(2)}}` : 'N/A');
+
+            const curVal = item.final_price !== undefined ? item.final_price : (item.parsed_price || csvVal);
+            document.getElementById('final-price-input').value = parseFloat(curVal).toFixed(2);
+
+            // Images & Layout Adaptation
+            const oldContainer = document.getElementById('old-shot-container');
+            const newContainer = document.getElementById('new-shot-container');
+            const gridEl = document.getElementById('split-grid-container');
+            const oldCardEl = document.getElementById('old-shot-card');
+            const newCardTitleEl = document.getElementById('new-shot-card-title');
+
+            const oldSrc = item.old_screenshot_data || item.old_screenshot;
+            if (oldSrc) {{
+                oldCardEl.style.display = 'flex';
+                gridEl.style.gridTemplateColumns = '1fr 1fr';
+                newCardTitleEl.textContent = '📸 New / Scraped Screenshot';
+                oldContainer.innerHTML = `<img src="${{oldSrc}}" alt="Baseline Screenshot" onclick="openLightbox(this.src)" />`;
+            }} else {{
+                oldCardEl.style.display = 'none';
+                gridEl.style.gridTemplateColumns = '1fr';
+                newCardTitleEl.textContent = '📸 Captured Product Screenshot & Price Verification';
+                oldContainer.innerHTML = `<div class="placeholder-box">📷 Baseline screenshot not available</div>`;
+            }}
+
+            const newSrc = item.new_screenshot_data || item.new_screenshot || (item.screenshot ? `screenshots/${{item.screenshot}}` : null);
+            if (newSrc) {{
+                newContainer.innerHTML = `<img src="${{newSrc}}" alt="New Screenshot" onclick="openLightbox(this.src)" />`;
+            }} else {{
+                newContainer.innerHTML = `<div class="placeholder-box">📸 New screenshot not captured</div>`;
+            }}
+
+            renderSidebar();
+        }}
+
+        function selectItem(idx) {{
+            currentIndex = idx;
+            renderInspector();
+        }}
+
+        function nextItem() {{
+            const filtered = getFilteredIndices();
+            const pos = filtered.indexOf(currentIndex);
+            if (pos >= 0 && pos < filtered.length - 1) {{
+                selectItem(filtered[pos + 1]);
+            }}
+        }}
+
+        function prevItem() {{
+            const filtered = getFilteredIndices();
+            const pos = filtered.indexOf(currentIndex);
+            if (pos > 0) {{
+                selectItem(filtered[pos - 1]);
+            }}
+        }}
+
+        function useSpreadsheetPriceCurrent() {{
+            const item = itemsData[currentIndex];
+            const val = parseFloat(String(item.csv_cost).replace('$','').replace(',','')) || 0;
+            item.final_price = val;
+            document.getElementById('final-price-input').value = val.toFixed(2);
+            showToast(`Applied spreadsheet price: $${{val.toFixed(2)}}`);
+        }}
+
+        function useScrapedPriceCurrent() {{
+            const item = itemsData[currentIndex];
+            const val = item.parsed_price || 0;
+            if (val > 0) {{
+                item.final_price = val;
+                document.getElementById('final-price-input').value = val.toFixed(2);
+                showToast(`Applied scraped price: $${{val.toFixed(2)}}`);
+            }}
+        }}
+
+        function onPriceInputChange(val) {{
+            itemsData[currentIndex].final_price = parseFloat(val) || 0;
         }}
 
         function acceptAllCsv() {{
-            document.querySelectorAll('.price-input').forEach(input => {{
-                const idx = parseInt(input.dataset.index);
-                const csvPrice = itemsData[idx].csv_cost;
-                const val = parseFloat(String(csvPrice).replace('$','').replace(',','')) || 0;
-                if (val > 0) {{
-                    input.value = val.toFixed(2);
-                    input.classList.add('edited');
-                    itemsData[idx].final_price = val;
-                }}
+            itemsData.forEach(item => {{
+                const val = parseFloat(String(item.csv_cost).replace('$','').replace(',','')) || 0;
+                if (val > 0) item.final_price = val;
             }});
-            showToast('All prices set to spreadsheet values');
+            renderInspector();
+            showToast('Set all prices to spreadsheet values');
         }}
 
-        function exportCsv() {{
-            // Collect all edited prices
-            const prices = [];
-            document.querySelectorAll('.price-input').forEach(input => {{
-                const idx = parseInt(input.dataset.index);
-                const val = parseFloat(input.value);
-                if (val > 0) {{
-                    prices.push({{
-                        item_name: itemsData[idx].item_name,
-                        price: val
-                    }});
-                }}
-            }});
+        function saveToSpreadsheet() {{
+            const prices = itemsData.map(item => ({{
+                item_name: item.item_name,
+                price: item.final_price !== undefined ? item.final_price : (item.parsed_price || parseFloat(String(item.csv_cost).replace('$','').replace(',','')) || 0)
+            }})).filter(p => p.price > 0);
 
-            // Send to local server
             fetch('http://localhost:8321/save-prices', {{
                 method: 'POST',
                 headers: {{ 'Content-Type': 'application/json' }},
@@ -507,27 +966,67 @@ def generate_review_html(data, bill_title, output_path):
                 if (data.error) {{
                     showToast('❌ Error: ' + data.error);
                 }} else {{
-                    showToast(`✅ Saved ${{data.count}} prices to spreadsheet`);
+                    showToast(`✅ Saved ${{data.count}} prices to spreadsheet!`);
                 }}
             }})
             .catch(err => {{
-                showToast('❌ Server not running. Start with: python review_server.py');
+                showToast('❌ Save failed. Is review_server.py running?');
             }});
         }}
 
-        function saveToSpreadsheet() {{
-            exportCsv();
+        function toggleViewMode() {{
+            isListView = !isListView;
+            const insp = document.getElementById('inspector-container');
+            const cards = document.getElementById('cards-list-container');
+            const btn = document.getElementById('toggle-view-btn');
+
+            if (isListView) {{
+                insp.style.display = 'none';
+                cards.style.display = 'flex';
+                btn.textContent = '🔍 Inspector View';
+                renderListView();
+            }} else {{
+                insp.style.display = 'flex';
+                cards.style.display = 'none';
+                btn.textContent = '☰ List View';
+                renderInspector();
+            }}
         }}
 
-        function filterItems(status) {{
-            document.querySelectorAll('.filters button').forEach(b => b.classList.remove('active'));
-            event.target.classList.add('active');
-            document.querySelectorAll('.item-card').forEach(card => {{
-                const s = card.dataset.status;
-                if (status === 'all') card.classList.remove('hidden');
-                else if (status === 'failed') card.classList.toggle('hidden', s !== 'failed' && s !== 'error');
-                else card.classList.toggle('hidden', s !== status);
-            }});
+        function renderListView() {{
+            const cardsEl = document.getElementById('cards-list-container');
+            const filtered = getFilteredIndices();
+
+            cardsEl.innerHTML = filtered.map(idx => {{
+                const item = itemsData[idx];
+                const oldSrc = item.old_screenshot_data || item.old_screenshot;
+                const newSrc = item.new_screenshot_data || item.new_screenshot || (item.screenshot ? `screenshots/${{item.screenshot}}` : null);
+
+                return `
+                    <div class="card-row">
+                        <div style="display:flex; align-items:center; justify-content:space-between;">
+                            <span style="font-weight:700; font-size:1.1rem;">${{escapeHtml(item.item_name)}}</span>
+                            <div>
+                                <span style="margin-right:15px;">Spreadsheet: <strong>$${{item.csv_cost}}</strong></span>
+                                <span>Scraped: <strong>${{item.scraped_price || 'N/A'}}</strong></span>
+                            </div>
+                        </div>
+                        <div class="card-row-shots">
+                            <div>${{oldSrc ? `<img src="${{oldSrc}}" onclick="openLightbox(this.src)" />` : '<div class="placeholder-box">No baseline image</div>'}}</div>
+                            <div>${{newSrc ? `<img src="${{newSrc}}" onclick="openLightbox(this.src)" />` : '<div class="placeholder-box">No new image</div>'}}</div>
+                        </div>
+                    </div>
+                `;
+            }}).join('');
+        }}
+
+        function openLightbox(src) {{
+            document.getElementById('lightbox-img').src = src;
+            document.getElementById('lightbox').classList.add('show');
+        }}
+
+        function closeLightbox() {{
+            document.getElementById('lightbox').classList.remove('show');
         }}
 
         function showToast(msg) {{
@@ -536,18 +1035,42 @@ def generate_review_html(data, bill_title, output_path):
             toast.classList.add('show');
             setTimeout(() => toast.classList.remove('show'), 2500);
         }}
+
+        document.addEventListener('keydown', function(e) {{
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {{
+                prevItem();
+            }} else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {{
+                nextItem();
+            }} else if (e.key === '1') {{
+                useSpreadsheetPriceCurrent();
+            }} else if (e.key === '2') {{
+                useScrapedPriceCurrent();
+            }} else if (e.key === 'Enter') {{
+                nextItem();
+            }}
+        }});
+
+        renderInspector();
     </script>
 </body>
 </html>'''
+
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
 
 
 # === MAIN ===
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Automated price scraper & side-by-side screenshot review")
+    parser.add_argument("--bill", "-b", help="Bill title to process or review")
+    parser.add_argument("--review-only", "-r", action="store_true", help="Launch side-by-side review GUI directly without web scraping")
+    args, _ = parser.parse_known_args()
+
     # === CHECK FILE NOT LOCKED ===
     if CSV_PATH.endswith(".xlsx"):
-        # Check for Excel lock file (indicates file is open)
         lock_file = os.path.join(os.path.dirname(CSV_PATH), "~$" + os.path.basename(CSV_PATH))
         if os.path.exists(lock_file):
             print("⚠️  The spreadsheet appears to be open in Excel.")
@@ -569,20 +1092,22 @@ if __name__ == "__main__":
     if missing:
         raise ValueError(f"Missing columns in CSV: {missing}")
 
-    # Show available bills and prompt
     titles = df["Bill Title"].astype(str).str.strip().unique()
     SKIP_TITLES = ("nan", "request", "liquid", "misc")
     titles = [t for t in titles if t and not any(t.lower().startswith(s) for s in SKIP_TITLES)]
-    print("\nAvailable Bill Titles:")
-    for i, t in enumerate(titles, 1):
-        count = (df["Bill Title"].astype(str).str.strip().str.lower() == t.lower()).sum()
-        print(f"  {i}. {t} ({count} items)")
 
-    bill_title = input("\nEnter Bill Title (or number): ").strip()
-    if bill_title.isdigit() and 1 <= int(bill_title) <= len(titles):
-        bill_title = titles[int(bill_title) - 1]
+    bill_title = args.bill
+    if not bill_title:
+        print("\nAvailable Bill Titles:")
+        for i, t in enumerate(titles, 1):
+            count = (df["Bill Title"].astype(str).str.strip().str.lower() == t.lower()).sum()
+            print(f"  {i}. {t} ({count} items)")
+        choice = input("\nEnter Bill Title (or number): ").strip()
+        if choice.isdigit() and 1 <= int(choice) <= len(titles):
+            bill_title = titles[int(choice) - 1]
+        else:
+            bill_title = choice
 
-    # Filter
     mask = df["Bill Title"].astype(str).str.strip().str.lower() == bill_title.lower()
     df_filtered = df[mask].copy()
 
@@ -590,7 +1115,35 @@ if __name__ == "__main__":
         print(f"\n⚠️ No entries for '{bill_title}'")
         exit(0)
 
-    # === PRE-FLIGHT CHECK ===
+    # === REVIEW-ONLY MODE ===
+    if args.review_only:
+        print(f"\n📋 Launching Review GUI for: {bill_title} (no web scraping)")
+        review_data = []
+        for idx, row in df_filtered.iterrows():
+            item_name = str(row.get("Item Name", "")).strip()
+            url = str(row.get("Link", "")).strip()
+            csv_cost = str(row.get("Cost", "")).strip()
+
+            old_shot, new_shot = find_screenshots_for_item(bill_title, item_name)
+            parsed = parse_price(csv_cost)
+            status = "needs_review" if old_shot and new_shot else ("ok" if new_shot else "failed")
+
+            review_data.append({
+                "item_name": item_name, "url": url, "csv_cost": csv_cost,
+                "scraped_price": f"${parsed:.2f}" if parsed else "", "parsed_price": parsed,
+                "confidence": "high", "screenshot": os.path.basename(new_shot) if new_shot else None,
+                "old_screenshot": old_shot, "new_screenshot": new_shot, "status": status,
+            })
+
+        generate_review_html(review_data, bill_title, REVIEW_HTML)
+        print(f"📋 Review page generated: {os.path.abspath(REVIEW_HTML)}")
+        from review_server import launch_review_server_and_browser
+        launch_review_server_and_browser(REVIEW_HTML)
+        input("\n   Press Enter when done reviewing & saving prices on the review page → ")
+        print("   ✅ Review complete. Changes saved.")
+        exit(0)
+
+    # === REGULAR SCRAPING MODE ===
     print(f"\n{'='*60}")
     print(f"📋 Will screenshot {len(df_filtered)} items for '{bill_title}':")
     print(f"{'='*60}")
@@ -614,16 +1167,9 @@ if __name__ == "__main__":
         print("Cancelled.")
         exit(0)
 
-    # === PREPARE DIRECTORIES ===
-    if os.path.exists(SAVE_FOLDER):
-        for f in os.listdir(SAVE_FOLDER):
-            fp = os.path.join(SAVE_FOLDER, f)
-            if os.path.isfile(fp):
-                os.remove(fp)
-    else:
+    if not os.path.exists(SAVE_FOLDER):
         os.makedirs(SAVE_FOLDER)
 
-    # === SETUP SELENIUM ===
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--window-size=1920,1200")
@@ -643,7 +1189,6 @@ if __name__ == "__main__":
     })
     driver.set_page_load_timeout(30)
 
-    # === SCRAPE LOOP ===
     review_data = []
     processed = 0
 
@@ -656,7 +1201,8 @@ if __name__ == "__main__":
             review_data.append({
                 "item_name": item_name, "url": url, "csv_cost": csv_cost,
                 "scraped_price": "", "parsed_price": None,
-                "confidence": "skipped", "screenshot": None, "status": "skipped",
+                "confidence": "skipped", "screenshot": None,
+                "old_screenshot": None, "new_screenshot": None, "status": "skipped",
             })
             continue
 
@@ -672,23 +1218,21 @@ if __name__ == "__main__":
                 driver.get(url)
                 wait_for_page_ready(driver)
                 dismiss_popups(driver)
-                # Extra wait for Amazon (JS-heavy)
                 from urllib.parse import urlparse
                 domain = urlparse(url).netloc.lower()
                 if "amazon" in domain:
-                    time.sleep(DELAY)  # Amazon needs more time for price widgets
+                    time.sleep(DELAY)
                 else:
                     time.sleep(DELAY - 2)
 
                 scraped_text, confidence = extract_price_from_page(driver, url)
                 parsed = parse_price(scraped_text)
 
-                # Save screenshot with safe filename
                 safe_filename = re.sub(r'[<>:"/\\|?*]', '_', item_name) + ".png"
                 screenshot_path = os.path.join(SAVE_FOLDER, safe_filename)
                 driver.save_screenshot(screenshot_path)
                 screenshot_file = safe_filename
-                print(f"  📸 Saved")
+                print(f"  📸 Saved new screenshot")
                 break
 
             except TimeoutException:
@@ -704,11 +1248,11 @@ if __name__ == "__main__":
                 else:
                     print(f"  ❌ Failed: {e}")
 
+        old_shot, new_shot = find_screenshots_for_item(bill_title, item_name, screenshot_file)
+
         if parsed is not None and parsed > 0.0:
-            # Only overwrite cost if the spreadsheet has no cost for this item
             existing_cost = parse_price(csv_cost)
             if existing_cost and existing_cost > 0:
-                # Compare scraped vs existing — flag mismatch for review
                 if abs(parsed - existing_cost) > 0.01:
                     print(f"  💲 Scraped ${parsed:.2f} ≠ spreadsheet ${existing_cost:.2f} — keeping spreadsheet value")
                     status = "needs_review"
@@ -726,19 +1270,18 @@ if __name__ == "__main__":
         review_data.append({
             "item_name": item_name, "url": url, "csv_cost": csv_cost,
             "scraped_price": scraped_text, "parsed_price": parsed,
-            "confidence": confidence, "screenshot": screenshot_file, "status": status,
+            "confidence": confidence, "screenshot": screenshot_file,
+            "old_screenshot": old_shot, "new_screenshot": new_shot, "status": status,
         })
 
     driver.quit()
 
-    # === SAVE ===
     df.to_csv(OUTPUT_CSV, index=False, encoding="utf-8-sig")
     print(f"\n✅ Updated CSV: {OUTPUT_CSV}")
 
     generate_review_html(review_data, bill_title, REVIEW_HTML)
     print(f"📋 Review: {os.path.abspath(REVIEW_HTML)}")
 
-    # === SUMMARY ===
     ok = sum(1 for d in review_data if d["status"] == "ok")
     needs_review = sum(1 for d in review_data if d["status"] == "needs_review")
     failed = sum(1 for d in review_data if d["status"] in ("failed", "error"))
@@ -746,33 +1289,26 @@ if __name__ == "__main__":
     print(f"  ✅ OK: {ok}  |  ⚠️ Review: {needs_review}  |  ❌ Failed: {failed}")
     print(f"{'='*50}")
 
-    # === INTERACTIVE PRICE CORRECTION ===
-    flagged = [d for d in review_data if d["status"] in ("needs_review", "failed", "error")]
-    if flagged:
-        print(f"\n📝 {len(flagged)} item(s) need review.")
-        print(f"   Opening review.html with live editing...")
-        print(f"   Edit prices in your browser, click 'Save to Spreadsheet', then come back here.\n")
-
-        # Start local server in background thread
-        import threading
+def sync_screenshots_to_sharepoint():
+    """Automatically upload local screenshots to SharePoint via rclone."""
+    try:
         import subprocess
-        from http.server import HTTPServer
-        from review_server import ReviewHandler, PORT
+        print("☁️ Syncing screenshots up to SharePoint...")
+        result = subprocess.run(
+            ["rclone", "copy", "--checksum", SAVE_FOLDER, "onedrive:OPS-1 Operations/FY27 Finances/screenshots"],
+            capture_output=True, text=True, timeout=60
+        )
+        if result.returncode == 0:
+            print("  ✅ Screenshots synced to SharePoint!")
+        else:
+            print(f"  ⚠️ SharePoint sync notice: {result.stderr.strip()}")
+    except Exception as ex:
+        print(f"  ⚠️ SharePoint sync warning: {ex}")
 
-        server = HTTPServer(("localhost", PORT), ReviewHandler)
-        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        server_thread.start()
-        print(f"   ✅ Review server running on http://localhost:{PORT}")
 
-        # Open review.html
-        subprocess.run(["open", REVIEW_HTML])
+    sync_screenshots_to_sharepoint()
+    from review_server import launch_review_server_and_browser
+    launch_review_server_and_browser(REVIEW_HTML)
+    input("\n   Press Enter when done reviewing & saving prices on the review page → ")
+    print("   ✅ Server complete. Changes saved.")
 
-        input("   Press Enter when done editing → ")
-        server.shutdown()
-        print("   ✅ Server stopped. Changes saved to spreadsheet.")
-    else:
-        print(f"\n✅ All prices matched! No review needed.")
-        import subprocess
-        open_review = input(f"\nOpen review.html anyway? [y/N]: ").strip().lower()
-        if open_review == "y":
-            subprocess.run(["open", REVIEW_HTML])

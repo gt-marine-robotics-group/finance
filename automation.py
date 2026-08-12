@@ -1,5 +1,10 @@
 import os
+import sys
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
 import time
+import re
 import pandas as pd
 from dotenv import load_dotenv
 load_dotenv()
@@ -161,49 +166,35 @@ if not BILL_NO:
                     print(f"❌ Failed: {err}")
             
             c_driver.quit()
+            from automation_screenshots import sync_screenshots_to_sharepoint
+            sync_screenshots_to_sharepoint()
         except Exception as chrome_err:
             print(f"⚠️ Could not start Chrome for screenshots: {chrome_err}")
 
-    # Launch Bill Review HTML window in browser (auto-starts web server if not running)
-    def ensure_web_server_running(port=5001):
-        import urllib.request
-        try:
-            urllib.request.urlopen(f"http://127.0.0.1:{port}/status", timeout=1)
-            return
-        except Exception:
-            pass
-
-        import threading
-        web_app_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web-app")
-        if web_app_dir not in sys.path:
-            sys.path.insert(0, web_app_dir)
-        try:
-            from app import app as flask_app
-            import screenshot_worker
-            screenshot_worker.start_worker()
-
-            def _run_server():
-                import logging
-                logging.getLogger("werkzeug").setLevel(logging.ERROR)
-                flask_app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
-
-            server_thread = threading.Thread(target=_run_server, daemon=True)
-            server_thread.start()
-            time.sleep(1)
-            print(f"  🚀 Automatically started background Web Review GUI server on port {port}")
-        except Exception:
-            pass
-
-    import webbrowser
+    # Launch Side-by-Side Review GUI (auto-starts review_server on port 8321)
     try:
-        port = int(os.environ.get("PORT", 5001))
-        ensure_web_server_running(port=port)
-        review_url = f"http://localhost:{port}/review/{BILL_NO}"
-        webbrowser.open(review_url)
-        print(f"  🌐 Opened Review Page: {review_url}")
-    except Exception:
-        pass
-    print("   Verify pre-captured screenshots and item details on review cards before proceeding.")
+        from automation_screenshots import generate_review_html, find_screenshots_for_item, parse_price, REVIEW_HTML
+        review_data = []
+        for _, row in bill_items_df.iterrows():
+            item_name = str(row.get("Item Name", "")).strip()
+            url = str(row.get("Link", "")).strip()
+            csv_cost = str(row.get("Cost", "")).strip()
+            old_shot, new_shot = find_screenshots_for_item(BILL_NO, item_name)
+            parsed = parse_price(csv_cost)
+            status = "needs_review" if old_shot and new_shot else ("ok" if new_shot else "failed")
+            review_data.append({
+                "item_name": item_name, "url": url, "csv_cost": csv_cost,
+                "scraped_price": f"${parsed:.2f}" if parsed else "", "parsed_price": parsed,
+                "confidence": "high", "screenshot": os.path.basename(new_shot) if new_shot else None,
+                "old_screenshot": old_shot, "new_screenshot": new_shot, "status": status,
+            })
+        generate_review_html(review_data, BILL_NO, REVIEW_HTML)
+        from review_server import launch_review_server_and_browser
+        launch_review_server_and_browser(REVIEW_HTML)
+        input("\n   Press Enter after reviewing & saving prices on the review page → ")
+    except Exception as ex:
+        print(f"  ⚠️ Review GUI notice: {ex}")
+    print("   Verify screenshots and prices on side-by-side review cards before proceeding.")
 
     del _df_temp, _titles
 
@@ -304,28 +295,40 @@ def count_section_items(driver, section_name):
 
 
 def _find_screenshot(item_name, bill_title=""):
-    """Find screenshot file for an item. Checks bill_title subdir first, then flat, then all subdirs."""
-    for ext in [".png", ".jpg", ".jpeg", ".pdf"]:
-        # Check bill_title subdirectory first (new structure)
-        if bill_title:
-            candidate = os.path.join(SCREENSHOT_DIR, bill_title, f"{item_name}{ext}")
-            if os.path.exists(candidate):
-                return candidate
+    """Find screenshot file for an item using exact and space-normalized flexible matching."""
+    if not item_name:
+        return None
 
-        # Check flat structure (legacy)
-        candidate = os.path.join(SCREENSHOT_DIR, f"{item_name}{ext}")
-        if os.path.exists(candidate):
-            return candidate
+    import re
+    safe_name = re.sub(r'[<>:"/\\|?*]', '_', item_name)
+    dirs_to_check = []
+    if bill_title:
+        dirs_to_check.append(os.path.join(SCREENSHOT_DIR, bill_title))
+    dirs_to_check.append(SCREENSHOT_DIR)
 
-    # Search all subdirectories
     if os.path.isdir(SCREENSHOT_DIR):
-        for subdir in os.listdir(SCREENSHOT_DIR):
-            subdir_path = os.path.join(SCREENSHOT_DIR, subdir)
-            if os.path.isdir(subdir_path):
-                for ext in [".png", ".jpg", ".jpeg", ".pdf"]:
-                    candidate = os.path.join(subdir_path, f"{item_name}{ext}")
-                    if os.path.exists(candidate):
-                        return candidate
+        for sub in os.listdir(SCREENSHOT_DIR):
+            sp = os.path.join(SCREENSHOT_DIR, sub)
+            if os.path.isdir(sp) and sp not in dirs_to_check:
+                dirs_to_check.append(sp)
+
+    for d in dirs_to_check:
+        for ext in [".png", ".jpg", ".jpeg", ".pdf"]:
+            exact = os.path.join(d, f"{safe_name}{ext}")
+            if os.path.exists(exact):
+                return exact
+            exact_orig = os.path.join(d, f"{item_name}{ext}")
+            if os.path.exists(exact_orig):
+                return exact_orig
+
+            # Flexible whitespace/case match
+            norm_target = re.sub(r'\s+', ' ', f"{safe_name}{ext}").lower()
+            try:
+                for f in os.listdir(d):
+                    if re.sub(r'\s+', ' ', f).lower() == norm_target:
+                        return os.path.join(d, f)
+            except Exception:
+                pass
     return None
 
 

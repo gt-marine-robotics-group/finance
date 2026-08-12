@@ -1,268 +1,287 @@
 # ⚓ MRG Finance & Purchasing System
 
-Bill request automation, order management, price checking, and purchasing workflow for the **Georgia Tech Marine Robotics Group**.
+Automated bill request submission, live price scraping, evidence screenshot auditing, side-by-side price verification, and purchase management for the **Georgia Tech Marine Robotics Group**.
 
 ---
 
-## ⚡ Local Computer Setup & Quick Start (macOS / Linux / Windows)
+## 🛠️ Prerequisites & System Setup
 
-### 1. Install CLI Tool Globally (`mrg-finance`)
+Follow this step-by-step setup guide to configure your environment, install the CLI, and connect to SharePoint cloud sync.
 
-**Prerequisites**: Python 3.10+ and `uv`.
-- **macOS / Linux / WSL**: `curl -LsSf https://astral.sh/uv/install.sh | sh` *(or `brew install uv`)*
-- **Windows (PowerShell)**: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
+### 1. Python & UV Package Manager
+
+Ensure you have **Python 3.10+** installed. We recommend [`uv`](https://github.com/astral-sh/uv) for fast, reliable package and environment management.
+
+- **macOS / Linux**:
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  # Or via Homebrew: brew install uv
+  ```
+- **Windows (PowerShell)**:
+  ```powershell
+  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+  ```
+
+---
+
+### 2. Clone Repository & Install CLI
+
+Clone the repository and set up your virtual environment:
 
 ```bash
-# Clone the repository
+# 1. Clone the repository
 git clone git@github.com:gt-marine-robotics-group/finance.git
 cd finance
 
-# Install mrg-finance CLI globally via uv
-uv tool install .
-```
-
-### 2. Primary CLI Commands
-
-```bash
-# 1. Submit Bill Request to Engage (interactive)
-mrg-finance bill-request --fresh
-
-# 2. Submit Purchase Request to Engage (interactive)
-mrg-finance purchase --fresh
-
-# 3. Headless price check & budget overrun audit
-mrg-finance price-check --bill "FY27 Budget" --cart
-```
-
-### 3. Run Web App Dashboard Locally
-
-```bash
-# Create virtual environment
+# 2. Create virtual environment & activate
 uv venv
+source .venv/bin/activate    # On Windows: .\.venv\Scripts\Activate.ps1
 
-# Activate virtual environment:
-# - macOS / Linux / WSL:  source .venv/bin/activate
-# - Windows PowerShell:  .\.venv\Scripts\Activate.ps1
-# - Windows CMD:         .venv\Scripts\activate.bat
-source .venv/bin/activate
-
-# Install web app dependencies
-uv pip install -r requirements.txt
-
-# Start local web app server
-python3 web-app/app.py   # On Windows: python web-app/app.py
+# 3. Install dependencies and CLI tool in editable mode
+uv pip install -e .
 ```
 
-Open **`http://localhost:5000`** in your browser:
-- **Login Password**: `boats0519`
-- **User Name**: Your Name / GT ID *(e.g. `gburdell3`)*
+After installation, the CLI is available as `mrg-finance`.
 
 ---
 
-### 📄 Working Offline with a Local Excel File
+### 3. Browser & Selenium Setup
 
-If you prefer to manually download and edit the spreadsheet locally instead of using cloud sync:
+The system uses Chrome and Selenium for automated web scraping and CampusLabs Engage form submission.
 
-1. **Download Spreadsheet**: Download the master Excel file from SharePoint (`OPS-1 Operations/FY27 Finances`).
-2. **Repository Target Path & Name**: Save the file directly in the repository root directory:
-   - **Target Location**: `finance/FY27_Bills_Budget.xlsx`
-   - **Exact Filename**: **`FY27_Bills_Budget.xlsx`** *(case-sensitive)*
-3. **Execute Locally (Without `--fresh`)**:
-   ```bash
-   mrg-finance purchase      # Reads local FY27_Bills_Budget.xlsx file directly
-   mrg-finance price-check   # Reads local FY27_Bills_Budget.xlsx file directly
-   ```
+- **macOS**: Install Google Chrome (`brew install --cask google-chrome`).
+- **Linux**: Install Chromium/Chrome (`sudo apt install chromium-browser`).
+- **Windows**: Install Google Chrome.
 
 ---
 
-### 4. ☁️ SharePoint & Screenshot Sync Setup (`rclone`)
+### 4. ☁️ SharePoint & Cloud Sync Setup (`rclone`)
 
-Screenshots are synced directly with the team's shared **GT OneDrive / SharePoint** folder (and kept out of Git to keep the repository lightweight).
+Item screenshots and master budget files are synced directly with the team's shared **GT OneDrive / SharePoint** folder (`OPS-1 Operations/FY27 Finances`).
 
-To enable automatic screenshot & `.xlsx` syncing on your computer:
+#### Step 1: Install `rclone`
+- **macOS**: `brew install rclone`
+- **Linux**: `sudo apt install rclone`
+- **Windows**: `winget install rclone.rclone`
 
-1. **Install `rclone`**:
-   - **macOS**: `brew install rclone`
-   - **Linux**: `sudo apt install rclone`
-   - **Windows**: `winget install rclone.rclone` *(or in PowerShell: `choco install rclone`)*
+#### Step 2: Configure GT OneDrive Remote
+Run `rclone config` in your terminal and follow this exact key sequence:
 
-2. **Configure GT OneDrive Remote (Step-by-Step Prompt Walkthrough)**:
-   Run `rclone config` in your terminal and follow this exact key sequence:
-   - `e/n/d/r/c/s/q>` $\rightarrow$ Type **`n`** *(New remote)*
-   - `name>` $\rightarrow$ Type **`onedrive`** *(Must be exactly `onedrive` in lowercase!)*
-   - `Storage>` $\rightarrow$ Type **`42`** *(Microsoft OneDrive)*
-   - `client_id>` $\rightarrow$ Press **Enter** *(Leave blank)*
-   - `client_secret>` $\rightarrow$ Press **Enter** *(Leave blank)*
-   - `region>` $\rightarrow$ Press **Enter** *(Default `1 / global`)*
-   - `Edit advanced config?` $\rightarrow$ Type **`n`**
-   - `Use web browser to authenticate?` $\rightarrow$ Type **`y`**
-   - **Browser Pop-up**: Log in with your **Georgia Tech SSO (`<username>@gatech.edu`) + Duo MFA** and click Accept.
-   - `config_type>` $\rightarrow$ Type **`3`** *(SharePoint site name or URL)*
-   - `config_site_url>` $\rightarrow$ Type **`https://gtvault.sharepoint.com/sites/MarineRoboticsGroup`**
-   - `config_driveid>` $\rightarrow$ Type **`3`** *(Documents)*
-   - `Drive OK?` $\rightarrow$ Type **`y`**
-   - `Is that OK?` $\rightarrow$ Type **`y`**
-   - Main Menu $\rightarrow$ Type **`q`** to quit.
+1. Type **`n`** *(New remote)*
+2. Name: Type **`onedrive`** *(Must be exactly `onedrive` in lowercase)*
+3. Storage: Type **`42`** *(Microsoft OneDrive)*
+4. `client_id` & `client_secret`: Press **Enter** *(Leave blank)*
+5. `region`: Press **Enter** *(Default global)*
+6. `Edit advanced config?`: Type **`n`**
+7. `Use web browser to authenticate?`: Type **`y`**
+8. **Browser Authentication**: Log in with your **Georgia Tech SSO (`<username>@gatech.edu`) + Duo MFA**.
+9. `config_type`: Type **`3`** *(SharePoint site name or URL)*
+10. `config_site_url`: Type **`https://gtvault.sharepoint.com/sites/MarineRoboticsGroup`**
+11. `config_driveid`: Type **`3`** *(Documents)*
+12. Confirm with **`y`**, then type **`q`** to quit.
 
-3. **Verify Configuration**:
-   ```bash
-   rclone ls "onedrive:OPS-1 Operations/FY27 Finances"
-   ```
-
-4. **How Syncing Works**:
-   - **Download Sync**: `mrg-finance --fresh` downloads the latest `.xlsx` and team screenshots from SharePoint.
-   - **Upload Sync**: `mrg-finance screenshots` automatically uploads newly captured screenshots to SharePoint (`onedrive:OPS-1 Operations/FY27 Finances/screenshots/`).
+#### Step 3: Verify Remote Sync Access
+```bash
+rclone ls "onedrive:OPS-1 Operations/FY27 Finances"
+```
 
 ---
 
-## 🛡️ Built-In System Reliability & Safeguards
+## 🤖 CLI Usage & Workflows (`mrg-finance`)
 
-The system is designed with **5 strict technical safeguards** to prevent accidental mistakes or budget overruns:
+The `mrg-finance` CLI tool provides end-to-end automation for price scraping, side-by-side screenshot verification, bill submissions, and purchase tracking.
 
-1. **🚫 Zero File Deletions (`rclone copy`)**: Syncing strictly uses `rclone copy --checksum` (never `rclone sync`). It **only adds missing files** and never deletes existing remote or local screenshots.
-2. **🔒 Duplicate Order Protection**: Items marked `pending purchase` or listed on `OrderT` are strictly locked. The web UI disables selection and the backend rejects duplicate submissions.
-3. **🛡️ Ground-Truth Screenshot Protection**: Existing bill submission screenshots are permanently preserved and never overwritten automatically when taking screenshots.
-4. **🛑 Read-Only Instructions & Quantity Caps**: Order forms enforce maximum quantity caps based on SOFO approval, and vendor `Ordering Instructions` are read-only to prevent accidental edits.
-5. **🩹 Graceful `rclone` Fallback**: If `rclone` is not installed or configured, the system output displays a notice and operates locally without crashing.
+```
+Usage:
+    mrg-finance review [--bill TITLE]
+    mrg-finance screenshots [--fresh] [--bill TITLE] [--review-only]
+    mrg-finance bill-request [--fresh]
+    mrg-finance purchase [--fresh] [--order ORDER_ID]
+    mrg-finance price-check [--fresh] [--bill TITLE] [--cart]
 
----
-
-## 🤖 CLI Commands & Options Reference (`mrg-finance`)
-
-### 🛡️ Screenshot Overwrite Policy
-> **Does the `screenshots` command overwrite old screenshots?**  
-> **NO.** Original ground-truth bill screenshots stored in `screenshots/<bill_title>/<item_name>.png` are **permanently preserved** and never overwritten automatically.  
-> - **Bill Requests**: The script audits existing files and only captures screenshots for items that are missing images.  
-> - **Order Reviews**: Live price audit captures during `mrg-finance purchase` are isolated in `screenshots/_order_<order_id>/` so original bill submission evidence is never touched.  
-> - **Manual Re-take**: Officers can intentionally force re-capturing individual item screenshots via the web page **`📸`** buttons or `/bill/<bill_title>` header actions.
-
----
-
-### 📋 Full Command & Option Reference
-
-#### 1. `mrg-finance bill-request`
-Automates bill submission on CampusLabs Engage.
-- **Options**:
-  - `-f`, `--fresh`: Pull a fresh copy of the budget `.xlsx` from SharePoint/OneDrive via `rclone` before running.
-- **Workflow**:
-  1. Prompts for interactive bill selection.
-  2. Runs a missing screenshot audit. Prompts to capture any missing item screenshots via headless Chrome.
-  3. Launches the Web Review Page (`http://localhost:5000/review/<bill_title>`) in your default browser.
-  4. Pre-fills CampusLabs Engage form fields and pauses for officer inspection before final submission.
-- **Example**:
-  ```bash
-  mrg-finance bill-request --fresh
-  ```
-
-#### 2. `mrg-finance purchase`
-Automates purchase request submissions on CampusLabs Engage.
-- **Options**:
-  - `-f`, `--fresh`: Pull a fresh copy of the budget `.xlsx` from SharePoint/OneDrive via `rclone` before running.
-  - `-o`, `--order <ORDER_ID>`: Specify an Order ID directly (skips interactive order selection).
-- **Workflow**:
-  1. Prompts to select an Order ID from `OrderT` (or fallback by Bill Title).
-  2. Prompts to run a live price check audit.
-  3. Displays live price comparison table with budget overrun alerts (`+$XX.XX`).
-  4. Auto-generates 1-Click Amazon Multi-Item Cart link (or displays non-Amazon vendor cart warning).
-  5. Auto-opens Side-by-Side Order Review window (`http://localhost:5000/orders/review/<order_id>`).
-  6. Launches Engage purchase request pre-filling with GT SSO + Duo MFA.
-- **Example**:
-  ```bash
-  mrg-finance purchase --fresh --order "260811_amazon_awu335"
-  ```
-
-#### 3. `mrg-finance price-check`
-Runs a headless online price check against product links.
-- **Options**:
-  - `-f`, `--fresh`: Pull a fresh copy of the budget `.xlsx` from SharePoint/OneDrive via `rclone` before running.
-  - `-b`, `--bill <TITLE>`: Specify a Bill Title directly (skips interactive selection).
-  - `-c`, `--cart`: Automatically generate and prompt to open the 1-Click Amazon Multi-Item Cart URL.
-- **Workflow**:
-  1. Scrapes live prices from product links via headless Chrome.
-  2. Compares live price vs approved bill allocation cost in a terminal table.
-  3. Flags budget overruns (`+$XX.XX OVER BUDGET`) or savings.
-  4. Auto-builds 1-Click Amazon Cart link and offers to launch it in your browser.
-- **Example**:
-  ```bash
-  mrg-finance price-check --fresh --bill "FY27 Budget" --cart
-  ```
-
-#### 4. `mrg-finance screenshots`
-Scrapes live product prices and captures headless Chrome screenshots for bill items.
-- **Options**:
-  - `-f`, `--fresh`: Pull a fresh copy of the budget `.xlsx` from SharePoint/OneDrive via `rclone` before running.
-  - `-b`, `--bill <TITLE>`: Specify a Bill Title directly (skips interactive selection).
-- **Workflow**:
-  1. Scrapes current prices and takes full-page product screenshots.
-  2. Saves screenshots to `screenshots/<bill_title>/<item_name>.png`.
-  3. Existing screenshots are strictly preserved and **never overwritten**.
-- **Example**:
-  ```bash
-  mrg-finance screenshots --fresh --bill "FY27 Budget"
-  ```
+Commands:
+    review          Launch side-by-side screenshot & price review GUI
+    screenshots     Scrape prices + capture full-page screenshots for a bill
+    bill-request    Submit a bill request to CampusLabs Engage
+    purchase        Submit purchase requests to Engage (grouped by vendor)
+    price-check     Check live prices vs budget allocation & warn on overrun
+```
 
 ---
 
-## 📚 Advanced Documentation & Technical Reference
+### 1. `mrg review` — Instant Side-by-Side Review
 
-<details>
-<summary><strong>1. 👤 Team Member Guide (Adding Items)</strong></summary>
-
-1. Open Web App (`http://localhost:5000` or SIM PC IP). Log in with team credentials (`boats0519`).
-2. Use the **Quick-Add Bar** on the dashboard (`Item Name`, `Qty`, `Link`).
-3. Paste an item link — vendor and price auto-fill in the background.
-</details>
-
-<details>
-<summary><strong>2. 👮 Officer Guide (Bill Management & Immutability)</strong></summary>
-
-1. **Dashboard (`/`)**: View backlog items and active bill cards.
-2. **Review Bill (`/review/<bill_title>`)**: Swipe through item cards, verify links, and inspect pre-captured screenshots.
-3. **Inline Bill Editing (`/bill/<bill_title>`)**: Edit item names, costs, quantities, and vendors directly in the bill table, or click **`📸 Take All Screenshots`**.
-4. **🔒 Locked Bills**: Approved or submitted bills (`bill submitted`, `bill approved`, `purchased...`) are read-only to protect audit records.
-</details>
-
-<details>
-<summary><strong>3. 🛒 Purchasing Officer Guide (Order Creation & Review)</strong></summary>
-
-1. **Create Order (`/create-order`)**: Group approved bill items by vendor, select custom quantities (capped at approved bill max), and generate 1-click **Amazon Cart URLs**.
-2. **Side-by-Side Order Review (`/orders/review/<order_id>`)**: Compare original bill screenshots & allocated prices (left) against newly scraped live prices & screenshots (right) with budget overrun alert badges (`+$XX.XX`).
-3. **Order Management (`/orders`)**: Edit order line items or delete orders without leaving empty Excel title headers.
-</details>
-
-<details>
-<summary><strong>4. 📋 Status Lifecycle Reference</strong></summary>
-
-| Status | Meaning |
-| :--- | :--- |
-| `review requested` | Newly added item awaiting officer review |
-| `bill requested` | Grouped into a bill, waiting for submission |
-| `bill submitted` | Submitted to CampusLabs Engage (🔒 Bill Locked) |
-| `bill approved` | Approved by SOFO/CampusLabs — ready to order (🔒 Bill Locked) |
-| `pending purchase` | Added to an order on `OrderT` |
-| `purchased - SOFO` | Purchased using SOFO card |
-| `purchased - cash` | Purchased with personal funds |
-| `purchased - awaiting reimbursement` | Purchased, waiting for reimbursement |
-| `arrived` | Item received by team |
-</details>
-
-<details>
-<summary><strong>5. ⚙️ Systemd Service & Server Management</strong></summary>
-
-The production web app runs as `mrg-web-app.service` on SIM PC (`CPUQuota=25%`, `Nice=10`, `MemoryMax=512M`):
+Launches the interactive side-by-side screenshot & price review GUI in your default browser **without running web scraping or opening Chrome automation**.
 
 ```bash
-sudo systemctl status mrg-web-app   # Check status
-sudo systemctl restart mrg-web-app  # Restart service
-journalctl -u mrg-web-app -f        # View live logs
-```
-</details>
+# Prompt to select a bill:
+mrg review
 
-<details>
-<summary><strong>6. 🧪 Testing & Quality Assurance</strong></summary>
+# Or specify a bill directly:
+mrg review --bill "Marine Robotics Group RobotX Testing Equipment Bill"
+```
+
+---
+
+### 📸 Manual Screenshot Naming Guide
+
+If team members capture or upload screenshots manually, place them in:
+```
+screenshots/<Bill Title>/<Item Name>.png
+# OR on SharePoint:
+onedrive:OPS-1 Operations/FY27 Finances/screenshots/<Bill Title>/<Item Name>.png
+```
+
+#### How Naming & Recognition Works:
+The application uses a **flexible matching algorithm** (`_find_file_in_dir`), so manual screenshots are automatically recognized even with minor naming variations:
+
+1. **Item Name Matching**:
+   - Item `"wire cutters"` → `wire cutters.png` or `wire cutters.jpg`
+2. **Case & Whitespace Flexible**:
+   - Double spaces, trailing spaces, or UPPERCASE/lowercase differences are automatically normalized:
+     - Item: `"N type connector  replacement"` (double space)
+     - Filename: `N type connector replacement.png` or `N Type Connector Replacement.PNG` → **✅ 100% Recognized**
+3. **Special Character Sanitization**:
+   - Characters like slashes `/` or colons `:` can be replaced with spaces or underscores:
+     - Item: `"2m IP67 LED Strip (144LED/m)"`
+     - Filename: `2m IP67 LED Strip (144LED_m).png` or `2m IP67 LED Strip (144LED m).png` → **✅ 100% Recognized**
+4. **Supported Extensions**: `.png`, `.jpg`, `.jpeg`, `.webp`
+
+---
+
+### 2. `mrg screenshots` — Scrape Prices & Capture Evidence
+
+Scrapes current product prices via headless Chrome and captures full-page product screenshots. Upon completion, it automatically opens the side-by-side review GUI.
+
+```bash
+# Pull fresh spreadsheet & screenshots from SharePoint before running:
+mrg screenshots --fresh
+
+# Specify bill title directly:
+mrg screenshots --bill "FY27 Budget"
+
+# Launch review GUI directly using existing screenshots:
+mrg screenshots --review-only
+```
+
+- **Ground-Truth Safeguard**: Existing baseline bill screenshots stored in `screenshots/<bill_title>/<item_name>.png` are **never overwritten**. Newly captured screenshots are stored alongside them for side-by-side comparison.
+
+---
+
+### 3. `mrg bill-request` — Submit Bill to CampusLabs Engage
+
+Automates creating a official bill request on CampusLabs Engage.
+
+```bash
+mrg bill-request --fresh
+```
+
+**Workflow**:
+1. Prompts for GT SSO credentials + Duo MFA.
+2. Performs a missing screenshot audit and captures any missing item screenshots.
+3. Launches the side-by-side review GUI (`http://localhost:8321`) to verify prices and screenshots.
+4. Opens Engage in Chrome, fills out line items for each budget section, uploads screenshot evidence, and saves each item.
+
+---
+
+### 4. `mrg purchase` — Automated Purchase Requests
+
+Automates purchase request submissions on CampusLabs Engage grouped by vendor from `OrderT`.
+
+```bash
+# Interactive order selection:
+mrg purchase --fresh
+
+# Specify order ID directly:
+mrg purchase --fresh --order "260811_amazon_awu335"
+```
+
+**Workflow**:
+1. Prompts to select an Order ID.
+2. Runs a live price audit against vendor product links.
+3. Auto-generates a **1-Click Amazon Multi-Item Cart URL** (or warns for non-Amazon vendor items).
+4. Opens side-by-side order review window and populates Engage purchase request fields.
+
+---
+
+### 5. `mrg price-check` — Budget Overrun Audit
+
+Runs a headless price check against product links to verify live prices against approved budget allocations.
+
+```bash
+mrg price-check --fresh --bill "FY27 Budget" --cart
+```
+
+**Workflow**:
+1. Scrapes live prices from product pages.
+2. Prints a comparison table highlighting budget overruns (`+$XX.XX OVER BUDGET`) or savings.
+3. Generates a 1-Click Amazon Cart link for Amazon items.
+
+---
+
+## 🌐 Web Page & Review GUI Features
+
+### 1. Side-by-Side Review Inspector (`http://localhost:8321`)
+
+When running `mrg review`, `mrg screenshots`, or `automation.py`, the system starts a local review server on port `8321` and opens **`http://localhost:8321`** in your browser.
+
+```
++-------------------------------------------------------------------------------+
+|  📋 Side-by-Side Review  |  Bill: Testing Equipment Bill    [💾 Save to Excel] |
++------------------+------------------------------------------------------------+
+|  SIDEBAR DRAWER  |  ITEM INSPECTOR (Item 6 of 11: large rope)                 |
+|                  |  Spreadsheet: $13.99  |  Scraped: $0.25                    |
+|  [All (11)]      |  [Use Spreadsheet Price (1)]  [Use Scraped Price (2)]     |
+|  [⚠️ Review (2)] |                                                            |
+|  [✅ OK (9)]     |  +--------------------------+---------------------------+  |
+|                  |  | 📜 Baseline Screenshot    | 📸 New Scraped Screenshot |  |
+|  1. hose     ⚠️  |  |   (Ground Truth)         |   (Current Run)           |  |
+|  2. anchors  ✅  |  |                          |                           |  |
+| >3. large rope ⚠️|  |  [ Image Frame ]         |   [ Image Frame ]         |  |
+|  4. Pi Pico  ✅  |  +--------------------------+---------------------------+  |
++------------------+------------------------------------------------------------+
+|  Shortcuts: [←/A] Prev  |  [→/D] Next  |  [1] Spreadsheet  |  [2] Scraped     |
++-------------------------------------------------------------------------------+
+```
+
+#### Key Visualizer Features:
+- 🖼️ **Side-by-Side Split View**: Displays the **Baseline / Old Screenshot** (left) directly alongside the **New / Scraped Screenshot** (right).
+- ⚡ **Fast Click-Through Navigation**:
+  - `◀ Prev` and `Next ▶` buttons.
+  - Left thumbnail drawer sidebar for instant 1-click item selection.
+  - **Keyboard Shortcuts**:
+    - `←` / `A`: Move to Previous Item
+    - `→` / `D`: Move to Next Item
+    - `1`: Apply Spreadsheet Price
+    - `2`: Apply Scraped Price
+    - `Enter`: Save current price & advance to Next Item
+- ✏️ **Direct Spreadsheet Saving**: Clicking **`💾 Save to Spreadsheet`** updates `FY27_Bills_Budget.xlsx` directly via background HTTP POST—without popping open Excel application windows.
+- 🔍 **High-Res Lightbox**: Click any image to open a full-screen zoom modal.
+- ☰ **View Modes**: Toggle between **Focused Inspector View** (single item side-by-side) and **List View** (all cards scrollable list).
+
+---
+
+### 2. Web App Dashboard (`http://localhost:5000`)
+
+To start the full web management dashboard locally:
 
 ```bash
 source .venv/bin/activate
-pytest tests/ -v
+python3 web-app/app.py
 ```
-</details>
+
+Open **`http://localhost:5000`** in your browser (*Password: `boats0519`*):
+
+- **Quick-Add Bar**: Paste any product URL to auto-scrape vendor and price details.
+- **Bill Management (`/review/<bill_title>`)**: Review bill items, inspect pre-captured screenshots, and edit line items.
+- **Order Creation (`/create-order`)**: Group approved bill items by vendor, select custom quantities (capped at approved bill max), and generate 1-click Amazon Cart links.
+- **Side-by-Side Order Review (`/orders/review/<order_id>`)**: Compare baseline bill screenshots against live order prices with overrun badges.
+
+---
+
+## 🛡️ System Safeguards & Offline Mode
+
+1. **Ground-Truth Screenshot Protection**: Original bill evidence images in `screenshots/<bill_title>/<item_name>.png` are permanently preserved.
+2. **Zero File Deletions (`rclone copy`)**: SharePoint sync uses `rclone copy --checksum` (never `rclone sync`), preventing accidental file deletion.
+3. **No Excel Popups**: Saving edits in the review GUI updates the underlying `.xlsx` file cleanly and touches file timestamps for OneDrive sync without interrupting your workflow.
+4. **Offline Excel Mode**: If working offline, save your spreadsheet locally at `finance/FY27_Bills_Budget.xlsx` and run CLI commands without the `--fresh` flag.

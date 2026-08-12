@@ -8,9 +8,10 @@ It runs on http://localhost:8321 and accepts price updates from the browser.
 """
 
 import os
+import sys
 import json
+import webbrowser
 from http.server import HTTPServer, SimpleHTTPRequestHandler
-from urllib.parse import parse_qs
 import openpyxl
 
 XLSX_PATH = os.environ.get("FINANCE_XLSX_PATH", os.path.expanduser(
@@ -21,7 +22,51 @@ SHEET_NAME = "Bills"
 PORT = 8321
 
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
 class ReviewHandler(SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=SCRIPT_DIR, **kwargs)
+
+    def _normalize_path(self):
+        clean_path = self.path.split("?")[0].rstrip("/")
+        if (
+            not clean_path
+            or clean_path in ("", "/review", "/review.html")
+            or clean_path.startswith("/orders/review")
+            or clean_path.startswith("/review")
+        ):
+            self.path = "/review.html"
+            return
+
+        requested_file = os.path.join(SCRIPT_DIR, self.path.lstrip("/"))
+        if not os.path.isfile(requested_file):
+            self.path = "/review.html"
+
+    def do_GET(self):
+        self._normalize_path()
+        target_file = os.path.join(SCRIPT_DIR, self.path.lstrip("/"))
+        if self.path == "/review.html" and not os.path.isfile(target_file):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            fallback_html = """<!DOCTYPE html>
+<html>
+<head><title>Side-by-Side Review</title><meta http-equiv="refresh" content="2"></head>
+<body style="font-family:sans-serif; background:#f8fafc; padding:40px; text-align:center; color:#1e293b;">
+    <h2>📋 Preparing Side-by-Side Review Page...</h2>
+    <p>Please wait a moment while screenshots and prices are prepared.</p>
+</body>
+</html>"""
+            self.wfile.write(fallback_html.encode("utf-8"))
+            return
+        return super().do_GET()
+
+    def do_HEAD(self):
+        self._normalize_path()
+        return super().do_HEAD()
+
     def do_POST(self):
         if self.path == "/save-prices":
             content_length = int(self.headers["Content-Length"])
@@ -73,11 +118,6 @@ class ReviewHandler(SimpleHTTPRequestHandler):
                 # Touch the file to trigger OneDrive sync detection
                 os.utime(XLSX_PATH, None)
 
-                # Open the file in Excel so OneDrive syncs the changes
-                import subprocess
-                subprocess.run(["open", XLSX_PATH])
-                print(f"   📂 Opened in Excel — save (Cmd+S) and close to ensure sync")
-
                 self._respond(200, {"updated": updated, "count": len(updated)})
 
             except Exception as e:
@@ -108,12 +148,59 @@ class ReviewHandler(SimpleHTTPRequestHandler):
             super().log_message(format, *args)
 
 
+class ReusableHTTPServer(HTTPServer):
+    allow_reuse_address = True
+
+
+def launch_review_server_and_browser(html_path="review.html", port=PORT):
+    """Simple, 100% bulletproof review server & browser launcher."""
+    import time
+    import urllib.request
+    import threading
+    import subprocess
+    import webbrowser
+
+    # Ensure html_path is absolute
+    if not os.path.isabs(html_path):
+        html_path = os.path.join(SCRIPT_DIR, html_path)
+
+    # Start HTTP server thread in background for Excel POST syncing if needed
+    for test_port in (port, 8322, 8323):
+        url = f"http://127.0.0.1:{test_port}"
+        try:
+            urllib.request.urlopen(url, timeout=0.3)
+            break
+        except Exception:
+            try:
+                server = ReusableHTTPServer(("0.0.0.0", test_port), ReviewHandler)
+                server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+                server_thread.start()
+                time.sleep(0.2)
+                print(f"  🚀 Background sync server listening on {url}")
+                break
+            except Exception:
+                continue
+
+    file_uri = f"file://{os.path.abspath(html_path)}"
+    print(f"  🌐 Opening Review Page: {file_uri}")
+
+    if sys.platform == "darwin":
+        subprocess.run(["open", os.path.abspath(html_path)], check=False)
+    else:
+        webbrowser.open(file_uri)
+
+
 if __name__ == "__main__":
-    print(f"📝 Review server running on http://localhost:{PORT}")
+    print(f"📝 Review server running on http://127.0.0.1:{PORT}")
     print(f"   Saving to: {XLSX_PATH}")
-    print(f"   Press Ctrl+C to stop\n")
-    server = HTTPServer(("localhost", PORT), ReviewHandler)
+    url = f"http://127.0.0.1:{PORT}"
     try:
+        webbrowser.open(url)
+    except Exception:
+        pass
+    try:
+        server = ReusableHTTPServer(("0.0.0.0", PORT), ReviewHandler)
         server.serve_forever()
     except KeyboardInterrupt:
         print("\n👋 Server stopped")
+

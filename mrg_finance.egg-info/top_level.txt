@@ -1,5 +1,8 @@
 automation
 automation_purchase
+automation_screenshots
 mrg
 price_scraper
+review_server
 screenshot_worker
+web-app
