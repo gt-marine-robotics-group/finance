@@ -4,6 +4,8 @@ price_scraper.py - Shared module for price scraping, price parsing, and vendor n
 Used by web-app (app.py, screenshot_worker.py) and CLI tools (mrg.py).
 """
 
+from __future__ import annotations
+
 import re
 from urllib.parse import urlparse
 
@@ -221,3 +223,132 @@ def generate_amazon_cart_url(items: list[dict]) -> str:
         params.append(f"ASIN.{i}={asin}&Quantity.{i}={qty}")
 
     return "https://www.amazon.com/gp/aws/cart/add.html?" + "&".join(params)
+
+
+def scrape_item_price(url: str, timeout: int = 10) -> dict | None:
+    """
+    Fetch a product URL and attempt to extract current item price and vendor.
+    Returns dict with 'current_price' (float), 'raw_price' (str), 'vendor' (str)
+    or None if unparseable/failed.
+    """
+    if not isinstance(url, str) or not url.strip() or not url.startswith("http"):
+        return None
+
+    vendor = detect_vendor_from_url(url)
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+
+    # 1. Fast HTTP request strategy
+    try:
+        import requests
+        resp = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+        if resp.status_code == 200:
+            text = resp.text
+            # Try JSON-LD schema price
+            ld_matches = re.findall(
+                r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+                text,
+                re.DOTALL | re.IGNORECASE,
+            )
+            for ld in ld_matches:
+                try:
+                    import json
+                    data = json.loads(ld)
+                    if isinstance(data, list):
+                        data = data[0] if data else {}
+                    offers = data.get("offers", {})
+                    price_val = None
+                    if isinstance(offers, dict) and "price" in offers:
+                        price_val = offers["price"]
+                    elif isinstance(offers, list) and offers:
+                        price_val = offers[0].get("price")
+                    elif "price" in data:
+                        price_val = data["price"]
+
+                    if price_val is not None:
+                        p_float = parse_price(str(price_val))
+                        if p_float is not None:
+                            return {
+                                "current_price": p_float,
+                                "raw_price": f"${p_float:.2f}",
+                                "vendor": vendor,
+                            }
+                except Exception:
+                    continue
+
+            # Try common open graph / meta tags
+            meta_price = re.search(
+                r'<meta[^>]*property=["\'](?:og:price:amount|product:price:amount)["\'][^>]*content=["\']([^"\']+)["\']',
+                text,
+                re.IGNORECASE,
+            )
+            if not meta_price:
+                meta_price = re.search(
+                    r'<meta[^>]*content=["\']([^"\']+)["\'][^>]*property=["\'](?:og:price:amount|product:price:amount)["\']',
+                    text,
+                    re.IGNORECASE,
+                )
+            if meta_price:
+                p_float = parse_price(meta_price.group(1))
+                if p_float is not None:
+                    return {
+                        "current_price": p_float,
+                        "raw_price": f"${p_float:.2f}",
+                        "vendor": vendor,
+                    }
+
+            # Try regex page source patterns (priceAmount, etc.)
+            for pattern in [
+                r'"priceAmount"\s*:\s*"?([\d.]+)"?',
+                r'"price"\s*:\s*\{\s*"value"\s*:\s*"?([\d.]+)"?',
+                r'"buyingPrice"\s*:\s*"?([\d.]+)"?',
+            ]:
+                m = re.search(pattern, text)
+                if m:
+                    p_float = parse_price(m.group(1))
+                    if p_float is not None:
+                        return {
+                            "current_price": p_float,
+                            "raw_price": f"${p_float:.2f}",
+                            "vendor": vendor,
+                        }
+    except Exception:
+        pass
+
+    # 2. Fallback to Selenium headless driver if available
+    try:
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+
+        chrome_options = Options()
+        chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument(f"user-agent={headers['User-Agent']}")
+
+        driver = webdriver.Chrome(options=chrome_options)
+        try:
+            driver.set_page_load_timeout(timeout)
+            driver.get(url)
+            raw_str = scrape_price_from_driver(driver)
+            p_float = parse_price(raw_str)
+            if p_float is not None:
+                return {
+                    "current_price": p_float,
+                    "raw_price": raw_str,
+                    "vendor": vendor,
+                }
+        finally:
+            driver.quit()
+    except Exception:
+        pass
+
+    return None
+
