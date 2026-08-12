@@ -189,6 +189,15 @@ for i, r in enumerate(requests_to_submit):
 grand_total = sum(r["total"] for r in requests_to_submit)
 print(f"\n  💰 Grand Total Allocation: ${grand_total:.2f}")
 
+# Auto-open Side-by-Side Order Review Web GUI if server is running
+import webbrowser
+try:
+    review_url = f"http://localhost:5000/orders/review/{selected_order_id}"
+    webbrowser.open(review_url)
+    print(f"  🌐 Opened Order Review GUI: {review_url}")
+except Exception:
+    pass
+
 # === Live Price Check Audit (Interactive Option) ===
 has_scraped_data = False
 total_scraped_live = 0.0
