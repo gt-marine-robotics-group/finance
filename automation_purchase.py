@@ -93,146 +93,87 @@ if "--order" in sys.argv:
     if idx + 1 < len(sys.argv):
         pre_selected_order = sys.argv[idx + 1]
 
-# Determine source mode
-if pre_selected_order:
-    src_choice = "1"
-else:
-    print("\n📋 Purchase Request Source:")
-    print("  1. Read from Orders Table (Ordering sheet — OrderT)")
-    print("  2. Read from Bills Table (Bills sheet)")
-    src_choice = input("\nSelect source [1/2] (default 1): ").strip() or "1"
+# === Read from Ordering sheet (OrderT) ===
+if df_orders.empty:
+    print("No orders found in Ordering sheet.")
+    print("Use the web app to create orders first (Orders page → Create Order)")
+    exit(0)
 
 requests_to_submit = []
 bill_title = ""
 bill_no = ""
 
-if src_choice == "2" or df_orders.empty:
-    # Mode 2: Read from Bills
-    SKIP_TITLES = ("nan", "request", "liquid", "misc")
-    df_valid = df_bills[
-        (df_bills["Bill Title"].astype(str).str.strip() != "") &
-        (df_bills["Item Name"].astype(str).str.strip() != "")
-    ].copy()
-    df_valid = df_valid[~df_valid["Bill Title"].astype(str).str.strip().str.lower().apply(
-        lambda t: any(t.startswith(s) for s in SKIP_TITLES)
-    )]
+order_groups = {}
+for _, row in df_orders.iterrows():
+    order_id = str(row.get(oid_col, "")).strip()
+    item_name = str(row.get("Item Name", "")).strip()
+    bill_item_id = str(row.get("Bill Item ID", "")).replace(".0", "").strip()
 
-    titles = df_valid["Bill Title"].astype(str).str.strip().unique()
-    print("\nAvailable Bills:")
-    for i, t in enumerate(titles, 1):
-        bill_nos = df_valid[df_valid["Bill Title"].astype(str).str.strip() == t]["Bill No."].unique()
-        bill_no_str = str(bill_nos[0]).replace(".0", "") if len(bill_nos) > 0 and str(bill_nos[0]) else "?"
-        count = (df_valid["Bill Title"].astype(str).str.strip() == t).sum()
-        print(f"  {i}. {t} (Bill #{bill_no_str}, {count} items)")
+    # Skip header separators or empty rows
+    if not order_id or order_id.startswith("Order ") or not (bill_item_id or item_name):
+        continue
 
-    choice = input("\nSelect bill (number or name): ").strip()
-    if choice.isdigit() and 1 <= int(choice) <= len(titles):
-        bill_title = titles[int(choice) - 1]
-    else:
-        bill_title = choice
+    if order_id not in order_groups:
+        order_groups[order_id] = []
+    order_groups[order_id].append(row)
 
-    mask = df_valid["Bill Title"].astype(str).str.strip().str.lower() == bill_title.lower()
-    bill_items = df_valid[mask].copy()
+if not order_groups:
+    print("No active orders found in Ordering sheet.")
+    print("Use the web app to create orders first (Orders page → Create Order)")
+    exit(0)
 
-    if bill_items.empty:
-        print(f"No items found for '{bill_title}'")
-        exit(0)
+order_ids = list(order_groups.keys())
+print("\nAvailable Orders:")
+for i, oid in enumerate(order_ids, 1):
+    items_in_o = order_groups[oid]
+    v_name = items_in_o[0].get("Vendor", "Unknown") if items_in_o else "Unknown"
+    print(f"  {i}. {oid} ({v_name}, {len(items_in_o)} items)")
 
-    bill_no = str(bill_items["Bill No."].iloc[0]).replace(".0", "").strip()
-
-    for i, (_, row) in enumerate(bill_items.iterrows()):
-        item_name = str(row.get("Item Name", "")).strip()
-        bill_item_id = str(row.get("Bill Item ID", i+1)).replace(".0", "").strip()
-        cost = safe_float(row.get("Cost", 0))
-        qty = safe_int(row.get("Quantity", 1))
-        total = cost * qty
-        description = str(row.get("Description", "")).strip()
-        bill_line_ref = f"Bill {bill_no}, Line {bill_item_id}"
-
-        requests_to_submit.append({
-            "item_name": item_name,
-            "description": description,
-            "cost": cost,
-            "quantity": qty,
-            "total": total,
-            "bill_line_ref": bill_line_ref,
-            "bill_item_id": bill_item_id,
-            "link": str(row.get("Link", "")).strip(),
-        })
-
+if pre_selected_order:
+    selected_order_id = pre_selected_order
+    print(f"\nUsing order: {selected_order_id}")
 else:
-    # Mode 1: Read from Ordering sheet (OrderT)
-    order_groups = {}
-    for _, row in df_orders.iterrows():
-        order_id = str(row.get(oid_col, "")).strip()
-        item_name = str(row.get("Item Name", "")).strip()
-        bill_item_id = str(row.get("Bill Item ID", "")).replace(".0", "").strip()
-        vendor = str(row.get("Vendor", "")).strip()
-
-        # Skip header separators or empty rows
-        if not order_id or order_id.startswith("Order ") or not (bill_item_id or item_name):
-            continue
-
-        if order_id not in order_groups:
-            order_groups[order_id] = []
-        order_groups[order_id].append(row)
-
-    if not order_groups:
-        print("No active orders found in Ordering sheet.")
-        exit(0)
-
-    order_ids = list(order_groups.keys())
-    print("\nAvailable Orders:")
-    for i, oid in enumerate(order_ids, 1):
-        items_in_o = order_groups[oid]
-        v_name = items_in_o[0].get("Vendor", "Unknown") if items_in_o else "Unknown"
-        print(f"  {i}. {oid} ({v_name}, {len(items_in_o)} items)")
-
-    if pre_selected_order:
-        selected_order_id = pre_selected_order
-        print(f"\nUsing order: {selected_order_id}")
+    choice = input("\nSelect order (number or Order ID): ").strip()
+    if choice.isdigit() and 1 <= int(choice) <= len(order_ids):
+        selected_order_id = order_ids[int(choice) - 1]
     else:
-        choice = input("\nSelect order (number or Order ID): ").strip()
-        if choice.isdigit() and 1 <= int(choice) <= len(order_ids):
-            selected_order_id = order_ids[int(choice) - 1]
-        else:
-            selected_order_id = choice
+        selected_order_id = choice
 
-    order_rows = order_groups.get(selected_order_id, [])
-    if not order_rows:
-        print(f"No order found for '{selected_order_id}'")
-        exit(0)
+order_rows = order_groups.get(selected_order_id, [])
+if not order_rows:
+    print(f"No order found for '{selected_order_id}'")
+    exit(0)
 
-    bill_title = selected_order_id
+bill_title = selected_order_id
 
-    for i, row in enumerate(order_rows):
-        b_id = str(row.get("Bill Item ID", "")).replace(".0", "").strip()
-        b_row = bill_item_map.get(b_id, None)
-        has_bill_row = b_row is not None
+for i, row in enumerate(order_rows):
+    b_id = str(row.get("Bill Item ID", "")).replace(".0", "").strip()
+    b_row = bill_item_map.get(b_id, None)
+    has_bill_row = b_row is not None
 
-        item_name = str(row.get("Item Name", "") or (b_row.get("Item Name", "") if has_bill_row else "")).strip()
-        description = str(b_row.get("Description", "") if has_bill_row else "").strip()
-        link = str(b_row.get("Link", "") if has_bill_row else "").strip()
+    item_name = str(row.get("Item Name", "") or (b_row.get("Item Name", "") if has_bill_row else "")).strip()
+    description = str(b_row.get("Description", "") if has_bill_row else "").strip()
+    link = str(b_row.get("Link", "") if has_bill_row else "").strip()
 
-        cost = safe_float(b_row.get("Cost", 0) if has_bill_row else row.get("Allocation", 0))
-        qty = safe_int(row.get("Quantity", 1))
-        total = cost * qty
+    cost = safe_float(b_row.get("Cost", 0) if has_bill_row else row.get("Allocation", 0))
+    qty = safe_int(row.get("Quantity", 1))
+    total = cost * qty
 
-        if has_bill_row and not bill_no:
-            bill_no = str(b_row.get("Bill No.", "")).replace(".0", "").strip()
+    if has_bill_row and not bill_no:
+        bill_no = str(b_row.get("Bill No.", "")).replace(".0", "").strip()
 
-        bill_line_ref = f"Bill {bill_no or '?'}, Line {b_id or i+1}"
+    bill_line_ref = f"Bill {bill_no or '?'}, Line {b_id or i+1}"
 
-        requests_to_submit.append({
-            "item_name": item_name,
-            "description": description,
-            "cost": cost,
-            "quantity": qty,
-            "total": total,
-            "bill_line_ref": bill_line_ref,
-            "bill_item_id": b_id,
-            "link": link,
-        })
+    requests_to_submit.append({
+        "item_name": item_name,
+        "description": description,
+        "cost": cost,
+        "quantity": qty,
+        "total": total,
+        "bill_line_ref": bill_line_ref,
+        "bill_item_id": b_id,
+        "link": link,
+    })
 
 # === Build purchase request list ===
 import webbrowser
@@ -249,34 +190,8 @@ print(f"{'='*60}")
 print(f"\n{'#':<4} {'Line':<6} {'Item Name':<35} {'Qty':<5} {'Cost':<10} {'Total'}")
 print("-" * 75)
 
-if src_choice == "2":
-    requests_to_submit = []
-    for i, (_, row) in enumerate(bill_items.iterrows()):
-        item_name = str(row.get("Item Name", "")).strip()
-        bill_item_id = str(row.get("Bill Item ID", i+1)).replace(".0", "").strip()
-        cost = safe_float(row.get("Cost", 0))
-        qty = safe_int(row.get("Quantity", 1))
-        total = cost * qty
-        description = str(row.get("Description", "")).strip()
-
-        bill_line_ref = f"Bill {bill_no}, Line {bill_item_id}"
-
-        requests_to_submit.append({
-            "item_name": item_name,
-            "description": description,
-            "cost": cost,
-            "quantity": qty,
-            "total": total,
-            "bill_line_ref": bill_line_ref,
-            "bill_item_id": bill_item_id,
-            "link": str(row.get("Link", "")).strip(),
-        })
-
-        print(f"{i+1:<4} {bill_item_id:<6} {item_name:<35} {qty:<5} ${cost:<9.2f} ${total:.2f}")
-else:
-    # Mode 1: already built requests_to_submit from order rows above
-    for i, r in enumerate(requests_to_submit):
-        print(f"{i+1:<4} {r['bill_item_id']:<6} {r['item_name']:<35} {r['quantity']:<5} ${r['cost']:<9.2f} ${r['total']:.2f}")
+for i, r in enumerate(requests_to_submit):
+    print(f"{i+1:<4} {r['bill_item_id']:<6} {r['item_name']:<35} {r['quantity']:<5} ${r['cost']:<9.2f} ${r['total']:.2f}")
 
 grand_total = sum(r["total"] for r in requests_to_submit)
 print(f"\n  💰 Grand Total Allocation: ${grand_total:.2f}")
