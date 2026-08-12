@@ -166,13 +166,14 @@ if not BILL_NO:
 
     # Launch Bill Review HTML window in browser
     import webbrowser
-    review_url = f"http://localhost:5000/review/{BILL_NO}"
-    print(f"\n🌐 Launching Bill Review Window in browser: {review_url}")
-    print("   Verify pre-captured screenshots and item details on review cards before proceeding.")
     try:
+        port = os.environ.get("PORT", "5001")
+        review_url = f"http://localhost:{port}/review/{BILL_NO}"
         webbrowser.open(review_url)
+        print(f"  🌐 Opened Review Page: {review_url}")
     except Exception:
         pass
+    print("   Verify pre-captured screenshots and item details on review cards before proceeding.")
 
     del _df_temp, _titles
 
