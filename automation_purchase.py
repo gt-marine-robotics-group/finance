@@ -197,6 +197,8 @@ grand_total = sum(r["total"] for r in requests_to_submit)
 print(f"\n  💰 Grand Total Allocation: ${grand_total:.2f}")
 
 # === Live Price Check Audit (Interactive Option) ===
+has_scraped_data = False
+total_scraped_live = 0.0
 run_check = input("\nRun live price check audit against online product links? (Y/n): ").strip().lower()
 if run_check in ("", "y", "yes"):
     import price_scraper
@@ -322,127 +324,152 @@ print("✅ Logged in\n")
 # === Submit Purchase Requests ===
 results = {"success": [], "failed": []}
 
-for i, req in enumerate(requests_to_submit):
-    print(f"\n{'='*50}")
-    print(f"[{i+1}/{len(requests_to_submit)}] {req['item_name']}")
-    print(f"  Amount: ${req['total']:.2f} | Ref: {req['bill_line_ref']}")
-    print(f"{'='*50}")
+# Build a single purchase request with all items
+order_subject = f"Order: {bill_title}"
+order_description = "\n".join(
+    f"- {r['item_name']} (x{r['quantity']}) — ${r['total']:.2f} [{r['bill_line_ref']}]"
+    for r in requests_to_submit
+)
+order_amount = grand_total
+order_bill_refs = ", ".join(set(r['bill_line_ref'] for r in requests_to_submit))
 
+print(f"\n{'='*50}")
+print(f"Submitting 1 purchase request with {len(requests_to_submit)} line items")
+print(f"  Subject: {order_subject}")
+print(f"  Amount: ${order_amount:.2f}")
+print(f"  Bill refs: {order_bill_refs}")
+print(f"{'='*50}")
+
+try:
+    # Navigate to create purchase request page
+    driver.get(PURCHASE_URL)
+    time.sleep(3)
+
+    # Wait for form to load
+    WebDriverWait(driver, 15).until(
+        EC.presence_of_element_located((By.ID, "Subject"))
+    )
+
+    # Fill Subject
+    subject = driver.find_element(By.ID, "Subject")
+    subject.clear()
+    subject.send_keys(order_subject)
+
+    # Fill Description (all items listed)
     try:
-        # Navigate to create purchase request page
-        driver.get(PURCHASE_URL)
-        time.sleep(3)
+        desc_field = driver.find_element(By.ID, "Description")
+        desc_field.clear()
+        desc_field.send_keys(order_description)
+    except Exception:
+        pass
 
-        # Wait for form to load
-        WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.ID, "Subject"))
-        )
-
-        # Fill Subject
-        subject = driver.find_element(By.ID, "Subject")
-        subject.clear()
-        subject.send_keys(req["item_name"])
-
-        # Fill Description
+    # Fill Requested Amount (grand total)
+    try:
+        amount_field = driver.find_element(By.ID, "Amount")
+        amount_field.clear()
+        amount_field.send_keys(f"{order_amount:.2f}")
+    except Exception:
         try:
-            desc_field = driver.find_element(By.ID, "Description")
-            desc_field.clear()
-            desc_field.send_keys(req["description"] or req["item_name"])
-        except Exception:
-            pass
-
-        # Fill Requested Amount
-        try:
-            amount_field = driver.find_element(By.ID, "Amount")
+            amount_field = driver.find_element(By.CSS_SELECTOR, '[ng-model*="amount"], [ng-model*="Amount"]')
             amount_field.clear()
-            amount_field.send_keys(f"{req['total']:.2f}")
+            amount_field.send_keys(f"{order_amount:.2f}")
         except Exception:
-            try:
-                amount_field = driver.find_element(By.CSS_SELECTOR, '[ng-model*="amount"], [ng-model*="Amount"]')
-                amount_field.clear()
-                amount_field.send_keys(f"{req['total']:.2f}")
-            except Exception:
-                print("  ⚠️ Could not find Amount field")
+            print("  ⚠️ Could not find Amount field")
 
-        # Fill Bill # and Line # field
-        try:
-            # Look for the write-in answer field about Budget/Bill #
-            bill_line_fields = driver.find_elements(By.CSS_SELECTOR, 'input[type="text"], textarea')
-            for field in bill_line_fields:
-                placeholder = (field.get_attribute("placeholder") or "").lower()
-                label_for = field.get_attribute("id") or ""
-                # Find the field asking about Bill # and Line #
-                if "bill" in placeholder or "budget" in placeholder:
-                    field.clear()
-                    field.send_keys(req["bill_line_ref"])
-                    print(f"  ✅ Filled Bill/Line ref: {req['bill_line_ref']}")
-                    break
-            else:
-                # Try by looking for nearby label text
-                labels = driver.find_elements(By.XPATH, "//*[contains(text(), 'Budget/Bill')]")
-                if labels:
-                    # Find the next input after that label
-                    parent = labels[0].find_element(By.XPATH, "./ancestor::div[contains(@class,'form-group')]")
-                    inp = parent.find_element(By.CSS_SELECTOR, "input, textarea")
-                    inp.clear()
-                    inp.send_keys(req["bill_line_ref"])
-                    print(f"  ✅ Filled Bill/Line ref: {req['bill_line_ref']}")
-        except Exception as e:
-            print(f"  ⚠️ Could not fill Bill/Line field: {e}")
-
-        # Upload receipt/screenshot if available
-        local_path = None
-        safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in req['item_name'])
-        safe_bill = "".join(c if c.isalnum() or c in " -_" else "_" for c in bill_title)
-
-        candidates = [
-            os.path.join(os.path.dirname(__file__), "web-app", "screenshots", safe_bill, f"{safe_name}.png"),
-            os.path.join(os.path.dirname(__file__), "web-app", "screenshots", "_queue", f"{safe_name}.png"),
-            os.path.join(DOWNLOAD_DIR, f"{req['item_name']}.png"),
-        ]
-        for ext in ["", ".png", ".jpg", ".jpeg", ".pdf"]:
-            for candidate in candidates:
-                test_path = candidate + ext if not candidate.endswith(ext) else candidate
-                if os.path.exists(test_path):
-                    local_path = test_path
-                    break
-            if local_path:
+    # Fill Bill # and Line # field
+    try:
+        bill_line_fields = driver.find_elements(By.CSS_SELECTOR, 'input[type="text"], textarea')
+        for field in bill_line_fields:
+            placeholder = (field.get_attribute("placeholder") or "").lower()
+            if "bill" in placeholder or "budget" in placeholder:
+                field.clear()
+                field.send_keys(order_bill_refs)
+                print(f"  ✅ Filled Bill/Line ref: {order_bill_refs}")
                 break
-
-        if local_path:
-            try:
-                file_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
-                if file_inputs:
-                    driver.execute_script("arguments[0].style.display='block';", file_inputs[0])
-                    file_inputs[0].send_keys(os.path.abspath(local_path))
-                    print(f"  📎 Uploaded ground-truth screenshot: {os.path.basename(local_path)}")
-                    time.sleep(2)
-            except Exception as e:
-                print(f"  ⚠️ Upload failed: {e}")
         else:
-            print(f"  ⚠️ No ground-truth screenshot found for '{req['item_name']}' (run bill-request or web app screenshot first)")
-
-        # PAUSE — let user review and submit manually
-        print(f"\n  ⏸️  Form pre-filled. Review and fill remaining fields (Category, Account).")
-        print(f"     Fill in the SGA Bill section: Bill #{bill_no}, ${req['total']:.2f}")
-        input(f"     Press Enter after you submit this request → ")
-
-        results["success"].append(req["item_name"])
-        print(f"  ✅ Done")
-
+            labels = driver.find_elements(By.XPATH, "//*[contains(text(), 'Budget/Bill')]")
+            if labels:
+                parent = labels[0].find_element(By.XPATH, "./ancestor::div[contains(@class,'form-group')]")
+                inp = parent.find_element(By.CSS_SELECTOR, "input, textarea")
+                inp.clear()
+                inp.send_keys(order_bill_refs)
+                print(f"  ✅ Filled Bill/Line ref: {order_bill_refs}")
     except Exception as e:
-        print(f"  ❌ Error: {e}")
-        results["failed"].append(req["item_name"])
-        input("  Press Enter to continue to next item → ")
+        print(f"  ⚠️ Could not fill Bill/Line field: {e}")
+
+    # Upload cart screenshot if available
+    safe_bill = "".join(c if c.isalnum() or c in " -_" else "_" for c in bill_title)
+    cart_screenshot = os.path.join(os.path.dirname(__file__), "web-app", "screenshots", safe_bill, "cart.png")
+    if not os.path.exists(cart_screenshot):
+        cart_screenshot = os.path.join(DOWNLOAD_DIR, "cart.png")
+
+    if os.path.exists(cart_screenshot):
+        try:
+            file_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
+            if file_inputs:
+                driver.execute_script("arguments[0].style.display='block';", file_inputs[0])
+                file_inputs[0].send_keys(os.path.abspath(cart_screenshot))
+                print(f"  📎 Uploaded cart screenshot: {os.path.basename(cart_screenshot)}")
+                time.sleep(2)
+        except Exception as e:
+            print(f"  ⚠️ Upload failed: {e}")
+    else:
+        print(f"  ℹ️ No cart screenshot found. Take one of your Amazon cart before submitting.")
+
+    # PAUSE — let user review and submit manually
+    print(f"\n  ⏸️  Form pre-filled with {len(requests_to_submit)} items totaling ${order_amount:.2f}")
+    print(f"     Review and fill remaining fields (Category, Account, etc.)")
+    print(f"     Bill #{bill_no}")
+    input(f"     Press Enter after you submit this purchase request → ")
+    print(f"  ✅ Purchase request submitted")
+
+except Exception as e:
+    print(f"  ❌ Error: {e}")
+
+# === Overflow Request (if price check found overrun) ===
+if has_scraped_data and total_scraped_live > grand_total + 0.01:
+    overflow_amount = total_scraped_live - grand_total
+    print(f"\n{'='*50}")
+    print(f"⚠️ Cost overflow detected: +${overflow_amount:.2f}")
+    print(f"  Allocated: ${grand_total:.2f}")
+    print(f"  Live cost: ${total_scraped_live:.2f}")
+    create_overflow = input(f"\nCreate a separate overflow purchase request for ${overflow_amount:.2f}? [Y/n]: ").strip().lower()
+
+    if create_overflow in ("", "y", "yes"):
+        try:
+            driver.get(PURCHASE_URL)
+            time.sleep(3)
+            WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "Subject")))
+
+            subject = driver.find_element(By.ID, "Subject")
+            subject.clear()
+            subject.send_keys(f"Overflow: {bill_title}")
+
+            try:
+                desc_field = driver.find_element(By.ID, "Description")
+                desc_field.clear()
+                desc_field.send_keys(f"Price increase overflow for order {bill_title}. Original allocation: ${grand_total:.2f}, Current cost: ${total_scraped_live:.2f}")
+            except Exception:
+                pass
+
+            try:
+                amount_field = driver.find_element(By.ID, "Amount")
+                amount_field.clear()
+                amount_field.send_keys(f"{overflow_amount:.2f}")
+            except Exception:
+                pass
+
+            print(f"\n  ⏸️  Overflow request pre-filled: ${overflow_amount:.2f}")
+            input(f"     Press Enter after you submit the overflow request → ")
+            print(f"  ✅ Overflow request submitted")
+        except Exception as e:
+            print(f"  ❌ Overflow request error: {e}")
 
 # === Final Report ===
 print(f"\n{'='*60}")
-print(f"🎉 COMPLETED — Purchase Requests for Bill #{bill_no}")
+print(f"🎉 COMPLETED — Purchase Request for {bill_title}")
 print(f"{'='*60}")
-print(f"  ✅ Submitted: {len(results['success'])}")
-print(f"  ❌ Failed: {len(results['failed'])}")
-if results["failed"]:
-    print(f"\n  Failed items:")
-    for name in results["failed"]:
-        print(f"    - {name}")
+print(f"  Order: {bill_title}")
+print(f"  Items: {len(requests_to_submit)}")
+print(f"  Total: ${grand_total:.2f}")
 print()
