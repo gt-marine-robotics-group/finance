@@ -91,21 +91,65 @@ def scrape_price_from_driver(driver) -> str:
             txt = (element.get_attribute("content") or "").strip()
         return txt
 
-    # Strategy 1: Page source regex for unit price (most reliable for Amazon)
+    def is_unit_price(element) -> bool:
+        """Check if an element or its parent is a per-unit price rate (e.g. $0.25/ft)."""
+        try:
+            parent_cls = (element.get_attribute("class") or "") + " "
+            try:
+                parent_cls += (element.find_element(By.XPATH, "..").get_attribute("class") or "")
+            except Exception:
+                pass
+            parent_cls_lower = parent_cls.lower()
+            return any(k in parent_cls_lower for k in ("priceperunit", "unitprice", "per-unit", "basisprice"))
+        except Exception:
+            return False
+
+    # Strategy 1: Amazon Buybox whole + fraction (highest accuracy for Amazon items)
     try:
-        page_source = driver.page_source
-        for pattern in [
-            r'"priceAmount"\s*:\s*"?([\d.]+)"?',
-            r'"price"\s*:\s*\{\s*"value"\s*:\s*"?([\d.]+)"?',
-            r'"buyingPrice"\s*:\s*"?([\d.]+)"?',
-        ]:
-            match = re.search(pattern, page_source)
-            if match:
-                return f"${match.group(1)}"
+        price_containers = driver.find_elements(
+            By.CSS_SELECTOR,
+            ".priceToPay, #corePriceDisplay_desktop_feature_div .a-price:not(.a-text-price), #corePrice_desktop .a-price:not(.a-text-price)"
+        )
+        for container in price_containers:
+            if is_unit_price(container):
+                continue
+            wholes = container.find_elements(By.CSS_SELECTOR, ".a-price-whole")
+            fracs = container.find_elements(By.CSS_SELECTOR, ".a-price-fraction")
+            if wholes and fracs:
+                w_txt = wholes[0].text.replace(",", "").strip().rstrip(".")
+                f_txt = fracs[0].text.strip()
+                if w_txt.isdigit() and f_txt.isdigit():
+                    return f"${w_txt}.{f_txt}"
     except Exception:
         pass
 
-    # Strategy 2: JSON-LD schema price
+    # Strategy 2: Amazon-priority CSS selectors (ignoring unit prices)
+    amazon_selectors = [
+        ".priceToPay .a-offscreen",
+        "#corePriceDisplay_desktop_feature_div .a-price:not(.a-text-price) .a-offscreen",
+        "#corePrice_desktop .a-price:not(.a-text-price) .a-offscreen",
+        "#apex_desktop .priceToPay .a-offscreen",
+        "#priceblock_ourprice",
+        "#priceblock_dealprice",
+        "#sns-base-price",
+        "#newBuyBoxPrice",
+        "#price_inside_buybox",
+        "#buyNewSection .a-price .a-offscreen",
+    ]
+
+    for sel in amazon_selectors:
+        try:
+            elems = driver.find_elements(By.CSS_SELECTOR, sel)
+            for el in elems:
+                if is_unit_price(el):
+                    continue
+                text = first_nonempty_text(el)
+                if text and re.search(r"\d", text):
+                    return text
+        except Exception:
+            continue
+
+    # Strategy 3: JSON-LD schema price
     try:
         scripts = driver.find_elements(By.CSS_SELECTOR, 'script[type="application/ld+json"]')
         for script in scripts:
@@ -128,43 +172,6 @@ def scrape_price_from_driver(driver) -> str:
     except Exception:
         pass
 
-    # Strategy 3: Amazon-priority CSS selectors
-    amazon_selectors = [
-        "#corePriceDisplay_desktop_feature_div .a-offscreen",
-        "#apex_desktop .a-offscreen",
-        "#corePrice_desktop .a-offscreen",
-        "#priceblock_ourprice",
-        "#priceblock_dealprice",
-        "#sns-base-price",
-        "#newBuyBoxPrice",
-        "#price_inside_buybox",
-        "#buyNewSection .a-price .a-offscreen",
-        "span.a-price .a-offscreen",
-        ".a-price .a-offscreen",
-    ]
-
-    for sel in amazon_selectors:
-        try:
-            elems = driver.find_elements(By.CSS_SELECTOR, sel)
-            for el in elems:
-                text = first_nonempty_text(el)
-                if text and re.search(r"\d", text):
-                    return text
-        except Exception:
-            continue
-
-    # Amazon whole + fraction
-    try:
-        whole = driver.find_elements(By.CSS_SELECTOR, ".a-price-whole")
-        frac = driver.find_elements(By.CSS_SELECTOR, ".a-price-fraction")
-        if whole and frac:
-            w = whole[0].text.replace(",", "").strip().rstrip(".")
-            f = frac[0].text.strip()
-            if w.isdigit() and f.isdigit():
-                return f"{w}.{f}"
-    except Exception:
-        pass
-
     # Generic fallback selectors
     generic_selectors = [
         '[class*="price"]',
@@ -181,6 +188,8 @@ def scrape_price_from_driver(driver) -> str:
         try:
             elems = driver.find_elements(By.CSS_SELECTOR, sel)
             for el in elems:
+                if is_unit_price(el):
+                    continue
                 text = first_nonempty_text(el)
                 if text and re.search(r"\d", text):
                     return text
