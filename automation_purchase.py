@@ -176,16 +176,9 @@ for i, row in enumerate(order_rows):
     })
 
 # === Build purchase request list ===
-import webbrowser
-review_url = f"http://localhost:5000/bill/{bill_title}"
-print(f"🌐 Launching Review Window in browser: {review_url}")
-try:
-    webbrowser.open(review_url)
-except Exception:
-    pass
-
+# === Display summary ===
 print(f"\n{'='*60}")
-print(f"📋 Purchase Requests for: {bill_title} (Bill #{bill_no})")
+print(f"📋 Purchase Request for: {bill_title} (Bill #{bill_no})")
 print(f"{'='*60}")
 print(f"\n{'#':<4} {'Line':<6} {'Item Name':<35} {'Qty':<5} {'Cost':<10} {'Total'}")
 print("-" * 75)
@@ -257,8 +250,6 @@ if non_amazon_count > 0:
     print(f"\nℹ️ Non-Amazon Vendor Items Detected ({non_amazon_count} item(s)):")
     print("   Please create a shopping cart directly on the vendor website and take a cart screenshot before submitting your purchase request.")
 
-print(f"\n  📝 Each item will be a separate purchase request")
-print(f"  📝 Bill/Line reference auto-generated (e.g. '{requests_to_submit[0]['bill_line_ref']}')")
 
 # Ask about shipping/tax overflow
 print(f"\n  Do any items have shipping/tax overflow?")
@@ -288,7 +279,7 @@ if add_overflow == "y":
         except ValueError:
             print(f"    ⚠️ Invalid amount")
 
-confirm = input(f"\nSubmit {len(requests_to_submit)} purchase request(s)? [Y/n]: ").strip().lower()
+confirm = input(f"\nSubmit purchase request to Engage? ({len(requests_to_submit)} items, ${grand_total:.2f}) [Y/n]: ").strip().lower()
 if confirm == "n":
     print("Cancelled.")
     exit(0)
