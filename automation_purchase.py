@@ -189,10 +189,40 @@ for i, r in enumerate(requests_to_submit):
 grand_total = sum(r["total"] for r in requests_to_submit)
 print(f"\n  💰 Grand Total Allocation: ${grand_total:.2f}")
 
-# Auto-open Side-by-Side Order Review Web GUI if server is running
+# Auto-start Web Server in background thread if not running, then open Review GUI
+def ensure_web_server_running(port=5001):
+    import urllib.request
+    try:
+        urllib.request.urlopen(f"http://127.0.0.1:{port}/status", timeout=1)
+        return
+    except Exception:
+        pass
+
+    import threading
+    web_app_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web-app")
+    if web_app_dir not in sys.path:
+        sys.path.insert(0, web_app_dir)
+    try:
+        from app import app as flask_app
+        import screenshot_worker
+        screenshot_worker.start_worker()
+
+        def _run_server():
+            import logging
+            logging.getLogger("werkzeug").setLevel(logging.ERROR)
+            flask_app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+
+        server_thread = threading.Thread(target=_run_server, daemon=True)
+        server_thread.start()
+        time.sleep(1)
+        print(f"  🚀 Automatically started background Web Review GUI server on port {port}")
+    except Exception as e:
+        pass
+
 import webbrowser
 try:
-    port = os.environ.get("PORT", "5001")
+    port = int(os.environ.get("PORT", 5001))
+    ensure_web_server_running(port=port)
     review_url = f"http://localhost:{port}/orders/review/{selected_order_id}"
     webbrowser.open(review_url)
     print(f"  🌐 Opened Order Review GUI: {review_url}")

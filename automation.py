@@ -164,10 +164,40 @@ if not BILL_NO:
         except Exception as chrome_err:
             print(f"⚠️ Could not start Chrome for screenshots: {chrome_err}")
 
-    # Launch Bill Review HTML window in browser
+    # Launch Bill Review HTML window in browser (auto-starts web server if not running)
+    def ensure_web_server_running(port=5001):
+        import urllib.request
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/status", timeout=1)
+            return
+        except Exception:
+            pass
+
+        import threading
+        web_app_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web-app")
+        if web_app_dir not in sys.path:
+            sys.path.insert(0, web_app_dir)
+        try:
+            from app import app as flask_app
+            import screenshot_worker
+            screenshot_worker.start_worker()
+
+            def _run_server():
+                import logging
+                logging.getLogger("werkzeug").setLevel(logging.ERROR)
+                flask_app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+
+            server_thread = threading.Thread(target=_run_server, daemon=True)
+            server_thread.start()
+            time.sleep(1)
+            print(f"  🚀 Automatically started background Web Review GUI server on port {port}")
+        except Exception:
+            pass
+
     import webbrowser
     try:
-        port = os.environ.get("PORT", "5001")
+        port = int(os.environ.get("PORT", 5001))
+        ensure_web_server_running(port=port)
         review_url = f"http://localhost:{port}/review/{BILL_NO}"
         webbrowser.open(review_url)
         print(f"  🌐 Opened Review Page: {review_url}")
