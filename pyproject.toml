@@ -25,7 +25,10 @@ dependencies = [
 
 [project.scripts]
 mrg-finance = "mrg:main"
-mrg = "mrg:main"
 
 [tool.setuptools]
-py-modules = ["mrg", "automation", "automation_purchase", "price_scraper", "screenshot_worker"]
+py-modules = ["mrg", "automation", "automation_purchase", "automation_screenshots", "review_server", "price_scraper", "screenshot_worker"]
+packages = ["web-app", "web-app.routes"]
+
+[tool.setuptools.package-data]
+"web-app" = ["templates/*", "templates/**/*", "static/*", "static/**/*"]

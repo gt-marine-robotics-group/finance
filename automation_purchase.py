@@ -1,4 +1,8 @@
 import os
+import sys
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
 import time
 import pandas as pd
 from selenium import webdriver
@@ -180,71 +184,55 @@ for i, row in enumerate(order_rows):
 print(f"\n{'='*60}")
 print(f"📋 Purchase Request for: {bill_title} (Bill #{bill_no})")
 print(f"{'='*60}")
-print(f"\n{'#':<4} {'Line':<6} {'Item Name':<35} {'Qty':<5} {'Cost':<10} {'Total'}")
+print(f"\n{'Engage Line':<12} {'Item Name':<38} {'Qty':<5} {'Cost':<10} {'Total'}")
 print("-" * 75)
 
 for i, r in enumerate(requests_to_submit):
-    print(f"{i+1:<4} {r['bill_item_id']:<6} {r['item_name']:<35} {r['quantity']:<5} ${r['cost']:<9.2f} ${r['total']:.2f}")
+    engage_line = f"Line {i+1}"
+    print(f"{engage_line:<12} {r['item_name']:<38} {r['quantity']:<5} ${r['cost']:<9.2f} ${r['total']:.2f}")
 
 grand_total = sum(r["total"] for r in requests_to_submit)
 print(f"\n  💰 Grand Total Allocation: ${grand_total:.2f}")
 
-# Auto-start Web Server in background thread if not running, then open Review GUI
-def ensure_web_server_running(port=5001):
-    import urllib.request
-    try:
-        urllib.request.urlopen(f"http://127.0.0.1:{port}/status", timeout=1)
-        return
-    except Exception:
-        pass
-
-    import threading
-    web_app_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web-app")
-    if web_app_dir not in sys.path:
-        sys.path.insert(0, web_app_dir)
-    try:
-        from app import app as flask_app
-        import screenshot_worker
-        screenshot_worker.start_worker()
-
-        def _run_server():
-            import logging
-            logging.getLogger("werkzeug").setLevel(logging.ERROR)
-            flask_app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
-
-        server_thread = threading.Thread(target=_run_server, daemon=True)
-        server_thread.start()
-        time.sleep(1)
-        print(f"  🚀 Automatically started background Web Review GUI server on port {port}")
-    except Exception as e:
-        pass
-
-import webbrowser
-try:
-    port = int(os.environ.get("PORT", 5001))
-    ensure_web_server_running(port=port)
-    review_url = f"http://localhost:{port}/orders/review/{selected_order_id}"
-    webbrowser.open(review_url)
-    print(f"  🌐 Opened Order Review GUI: {review_url}")
-except Exception:
-    pass
-
-# === Live Price Check Audit (Interactive Option) ===
+# === Live Price Rescrape & Screenshot Capture (Interactive Option) ===
 has_scraped_data = False
 total_scraped_live = 0.0
-run_check = input("\nRun live price check audit against online product links? (Y/n): ").strip().lower()
+scraped_results = {}
+
+run_check = input("\n🔍 Rescrape current online prices & update screenshots for this order? (Y/n): ").strip().lower()
 if run_check in ("", "y", "yes"):
     import price_scraper
-    print(f"\n🔍 Running Live Price Check Audit against online product links...")
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service
+
+    print(f"\n🔍 Rescraping live online prices and capturing screenshots...")
     total_scraped_live = 0.0
     has_scraped_data = False
     has_overrun = False
+
+    c_opts = Options()
+    c_opts.add_argument("--headless=new")
+    c_opts.add_argument("--window-size=1920,1080")
+    c_opts.add_argument("--no-sandbox")
+    c_opts.add_argument("--disable-dev-shm-usage")
+
+    try:
+        c_driver = webdriver.Chrome(service=Service(), options=c_opts)
+        c_driver.set_page_load_timeout(20)
+    except Exception:
+        c_driver = None
+
+    safe_bill = "".join(c if c.isalnum() or c in " -_" else "_" for c in bill_title)
+    order_shot_dir = os.path.join("screenshots", safe_bill)
+    os.makedirs(order_shot_dir, exist_ok=True)
 
     print(f"\n{'Item Name':<35} {'Allocated':<12} {'Live Price':<12} {'Status'}")
     print("-" * 75)
 
     for r in requests_to_submit:
         url = r.get("link", "")
+        item_name = r["item_name"]
         alloc_unit = r["cost"]
         live_unit = None
 
@@ -254,8 +242,19 @@ if run_check in ("", "y", "yes"):
                 if scraped and scraped.get("current_price") is not None:
                     live_unit = float(scraped["current_price"])
                     has_scraped_data = True
+                    scraped_results[item_name] = live_unit
             except Exception:
                 pass
+
+            if c_driver:
+                try:
+                    safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in item_name)
+                    shot_path = os.path.join(order_shot_dir, f"{safe_name}.png")
+                    c_driver.get(url)
+                    time.sleep(3)
+                    c_driver.save_screenshot(shot_path)
+                except Exception:
+                    pass
 
         unit_delta = (live_unit - alloc_unit) if live_unit is not None else 0.0
 
@@ -273,6 +272,9 @@ if run_check in ("", "y", "yes"):
             total_scraped_live += r["total"]
             print(f"{r['item_name']:<35} ${alloc_unit:<11.2f} {'—':<11} ℹ️ Scrape unavailable")
 
+    if c_driver:
+        c_driver.quit()
+
     print("-" * 75)
     if has_scraped_data:
         total_delta = total_scraped_live - grand_total
@@ -283,7 +285,33 @@ if run_check in ("", "y", "yes"):
         else:
             print("✅ Live prices match approved bill allocations 100%.")
 else:
-    print("  ⏩ Skipped live price check audit.")
+    print("  ⏩ Skipped live price rescrape.")
+
+# === Launch Side-by-Side Order Review GUI ===
+try:
+    from automation_screenshots import generate_review_html, find_screenshots_for_item, parse_price, REVIEW_HTML
+    from review_server import launch_review_server_and_browser
+    review_data = []
+    for item in requests_to_submit:
+        item_name = str(item.get("item_name", "")).strip()
+        url = str(item.get("link", "")).strip()
+        cost = str(item.get("cost", "")).strip()
+        old_shot, new_shot = find_screenshots_for_item(bill_title, item_name)
+        live_price_val = scraped_results.get(item_name)
+        parsed = live_price_val if live_price_val is not None else parse_price(cost)
+        scraped_str = f"${parsed:.2f}" if parsed is not None else ""
+        review_data.append({
+            "item_name": item_name, "url": url, "csv_cost": cost,
+            "scraped_price": scraped_str, "parsed_price": parsed,
+            "confidence": "high", "screenshot": os.path.basename(new_shot) if new_shot else None,
+            "old_screenshot": old_shot, "new_screenshot": new_shot,
+            "status": "needs_review" if old_shot and new_shot else "ok",
+        })
+    generate_review_html(review_data, f"Order: {selected_order_id}", REVIEW_HTML)
+    launch_review_server_and_browser(REVIEW_HTML)
+    input("\n   Press Enter after reviewing & saving prices on the review page → ")
+except Exception as ex:
+    print(f"  ⚠️ Review GUI notice: {ex}")
 
 non_amazon_count = sum(1 for r in requests_to_submit if "amazon" not in r.get("link", "").lower())
 if non_amazon_count > 0:

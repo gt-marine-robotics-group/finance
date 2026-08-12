@@ -1,3 +1,2 @@
 [console_scripts]
-mrg = mrg:main
 mrg-finance = mrg:main
