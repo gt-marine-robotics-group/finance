@@ -59,7 +59,7 @@ if "--fresh" in sys.argv or "-f" in sys.argv:
 if not USERNAME:
     USERNAME = input("Enter your username: ")
 if not PASSWORD:
-    PASSWORD = getpass.getpass("Enter your password: ")
+    PASSWORD = getpass.getpass("Enter GT password (for CampusLabs + Duo MFA): ")
 if not BILL_NO:
     if CSV_FILE.endswith(".xlsx"):
         _df_temp = pd.read_excel(CSV_FILE, sheet_name=SHEET_NAME)
