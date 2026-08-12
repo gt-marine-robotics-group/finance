@@ -309,7 +309,11 @@ password_input.send_keys(PASSWORD)
 login_button = driver.find_element(By.NAME, "submitbutton")
 login_button.click()
 print("\nComplete Duo MFA if prompted...")
-WebDriverWait(driver, 60).until(EC.url_contains("gatech.campuslabs.com/engage"))
+try:
+    WebDriverWait(driver, 180).until(EC.url_contains("gatech.campuslabs.com/engage"))
+except TimeoutException:
+    print("  ⏳ Duo MFA wait timed out automatically.")
+    input("  Press Enter after completing Duo MFA in your browser window → ")
 print("✅ Logged in\n")
 
 # === Submit Purchase Requests ===
