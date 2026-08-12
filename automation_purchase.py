@@ -152,8 +152,8 @@ for i, row in enumerate(order_rows):
     has_bill_row = b_row is not None
 
     item_name = str(row.get("Item Name", "") or (b_row.get("Item Name", "") if has_bill_row else "")).strip()
-    description = str(b_row.get("Description", "") if has_bill_row else "").strip()
-    link = str(b_row.get("Link", "") if has_bill_row else "").strip()
+    description = str(row.get("Description", "") or (b_row.get("Description", "") if has_bill_row else "")).strip()
+    link = str(row.get("Link", "") or (b_row.get("Link", "") if has_bill_row else "")).strip()
 
     cost = safe_float(b_row.get("Cost", 0) if has_bill_row else row.get("Allocation", 0))
     qty = safe_int(row.get("Quantity", 1))
