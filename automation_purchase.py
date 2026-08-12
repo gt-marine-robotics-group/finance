@@ -71,12 +71,12 @@ excel_file = pd.ExcelFile(XLSX_PATH)
 df_bills = pd.read_excel(excel_file, sheet_name="Bills").astype(object).fillna("")
 df_bills.columns = df_bills.columns.str.strip()
 
-# Build mapping of Bill Item ID -> Bill Row info
+# Build mapping of Bill Item ID -> Bill Row info (as dict for reliable .get())
 bill_item_map = {}
 for _, row in df_bills.iterrows():
     b_id = str(row.get("Bill Item ID", "")).replace(".0", "").strip()
-    if b_id:
-        bill_item_map[b_id] = row
+    if b_id and b_id != "nan":
+        bill_item_map[b_id] = row.to_dict()
 
 df_orders = pd.DataFrame()
 if "Ordering" in excel_file.sheet_names:
