@@ -192,7 +192,8 @@ print(f"\n  💰 Grand Total Allocation: ${grand_total:.2f}")
 # Auto-open Side-by-Side Order Review Web GUI if server is running
 import webbrowser
 try:
-    review_url = f"http://localhost:5000/orders/review/{selected_order_id}"
+    port = os.environ.get("PORT", "5001")
+    review_url = f"http://localhost:{port}/orders/review/{selected_order_id}"
     webbrowser.open(review_url)
     print(f"  🌐 Opened Order Review GUI: {review_url}")
 except Exception:
