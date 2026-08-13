@@ -3,16 +3,22 @@
 mrg.py — MRG Finance CLI Tool
 
 Usage:
-    mrg.py screenshots [--fresh] [--bill TITLE]
-    mrg.py bill-request [--fresh] [--bill TITLE]
-    mrg.py purchase [--fresh] [--order ORDER_ID]
-    mrg.py price-check [--fresh] [--bill TITLE] [--cart]
+    mrg-finance report [--fresh] [--order ORDER_ID]
+    mrg-finance doctor [--fresh]
+    mrg-finance bill-request [--fresh] [--bill TITLE]
+    mrg-finance purchase [--fresh] [--order ORDER_ID]
+    mrg-finance review [--bill TITLE]
+    mrg-finance price-check [--fresh] [--bill TITLE] [--cart]
+    mrg-finance screenshots [--fresh] [--bill TITLE] [--review-only]
 
 Commands:
-    screenshots      Scrape prices + take screenshots for items in a bill
+    report           Generate Budget vs Quoted Full Detail Excel (.xlsx) & CSV reports
+    doctor           Run diagnostic health check on FY27_Bills_Budget.xlsx
     bill-request     Submit a bill to CampusLabs Engage
     purchase         Create purchase requests on Engage (grouped by vendor from OrderT)
+    review           Launch side-by-side screenshot & price review GUI
     price-check      Check current prices vs allocation, warn on overrun
+    screenshots      Scrape prices + take screenshots for items in a bill
 
 Options:
     --fresh          Download latest xlsx + screenshots from SharePoint before running
@@ -571,13 +577,13 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  mrg report --order 260811_amazon_awu335
-  mrg screenshots --fresh --bill "FY27 Budget"
-  mrg review --bill "Marine Robotics Group RobotX Testing Equipment Bill"
-  mrg bill-request --fresh
-  mrg purchase --fresh
-  mrg price-check --bill "FY27 Budget" --cart
-  mrg doctor --fresh
+  mrg-finance report --order 260811_amazon_awu335
+  mrg-finance screenshots --fresh --bill "FY27 Budget"
+  mrg-finance review --bill "Marine Robotics Group RobotX Testing Equipment Bill"
+  mrg-finance bill-request --fresh
+  mrg-finance purchase --fresh
+  mrg-finance price-check --bill "FY27 Budget" --cart
+  mrg-finance doctor --fresh
         """
     )
     sub = parser.add_subparsers(dest="command")

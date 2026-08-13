@@ -6,11 +6,11 @@ Welcome to the **Marine Robotics Group (MRG) Finance & Purchasing System**! This
 
 ## 🌟 The Two Core Priority Functions
 
-### 1️⃣ Priority 1: Submit Bill Requests (`mrg bill-request` / `automation.py`)
+### 1️⃣ Priority 1: Submit Bill Requests (`mrg-finance bill-request` / `automation.py`)
 - **Purpose**: Submits new draft budget bills to Georgia Tech CampusLabs Engage for SGA approval.
 - **Features**: Groups line items by budget section, verifies screenshot evidence for every item, and pre-fills the Engage bill form automatically.
 
-### 2️⃣ Priority 2: Submit Purchase Requests (`mrg purchase` / `automation_purchase.py`)
+### 2️⃣ Priority 2: Submit Purchase Requests (`mrg-finance purchase` / `automation_purchase.py`)
 - **Purpose**: Submits purchase requests to CampusLabs Engage for approved items ready to be ordered.
 - **Features**: Groups order items by vendor, checks live prices vs approved budget allocations, auto-adds items to Amazon carts, captures `cart.png` evidence, resolves exact live section & line numbers on Engage, and pre-fills the purchase request form.
 
@@ -26,13 +26,13 @@ Welcome to the **Marine Robotics Group (MRG) Finance & Purchasing System**! This
 
 ## 🌐 1-Step Global CLI Installation (Use Anywhere!)
 
-You can install `mrg` globally so the `mrg` command works from **any directory** in your terminal:
+You can install `mrg-finance` globally so the `mrg-finance` command works from **any directory** in your terminal:
 
 ### Option A: Via `pipx` (Recommended Global CLI)
 ```bash
 pipx install git+https://github.com/gt-marine-robotics-group/finance.git
 ```
-*Now typing `mrg purchase`, `mrg bill-request`, or `mrg doctor` works system-wide in any terminal window!*
+*Now typing `mrg-finance purchase`, `mrg-finance bill-request`, or `mrg-finance doctor` works system-wide in any terminal window!*
 
 ### Option B: Via `uv tool`
 ```bash
@@ -92,19 +92,19 @@ rclone ls "onedrive:OPS-1 Operations/FY27 Finances"
 
 ---
 
-## 🩺 Pre-Flight Spreadsheet Diagnostic (`mrg doctor`)
+## 🩺 Pre-Flight Spreadsheet Diagnostic (`mrg-finance doctor`)
 
-Before submitting bills or purchase requests, run **`mrg doctor`** to run a diagnostic health audit on `FY27_Bills_Budget.xlsx`:
+Before submitting bills or purchase requests, run **`mrg-finance doctor`** to run a diagnostic health audit on `FY27_Bills_Budget.xlsx`:
 
 ```bash
 # Audit local spreadsheet:
-mrg doctor
+mrg-finance doctor
 
 # Pull fresh copy from SharePoint & audit:
-mrg doctor --fresh
+mrg-finance doctor --fresh
 ```
 
-**What `mrg doctor` checks**:
+**What `mrg-finance doctor` checks**:
 - 🔍 **Duplicate Bill Item IDs**: Flags duplicate ID numbers that would cause item misalignments.
 - 🔗 **Broken / Unlinked References**: Identifies Order rows referencing non-existent Bill Item IDs.
 - 🌐 **Invalid Links**: Highlights items missing URLs or containing incomplete link strings (e.g. `jlcpcb.com` missing `https://`).
@@ -114,14 +114,14 @@ mrg doctor --fresh
 
 ## 🛒 Common Student Workflows
 
-All commands can be run via `mrg-finance` (or `mrg`):
+All commands are executed via the `mrg-finance` CLI executable:
 
-### 1. Submit a Purchase Request (`mrg purchase`)
+### 1. Submit a Purchase Request (`mrg-finance purchase`)
 Use this when you are placing an order for items approved on a bill.
 
 ```bash
 # Pull fresh spreadsheet from SharePoint & start purchase flow:
-mrg purchase --fresh
+mrg-finance purchase --fresh
 ```
 
 **What happens**:
@@ -137,11 +137,11 @@ mrg purchase --fresh
 
 ---
 
-### 2. Submit a New Bill to Engage (`mrg bill-request`)
+### 2. Submit a New Bill to Engage (`mrg-finance bill-request`)
 Use this when submitting a newly drafted bill to CampusLabs Engage for SGA approval.
 
 ```bash
-mrg bill-request --fresh
+mrg-finance bill-request --fresh
 ```
 
 **What happens**:
@@ -151,11 +151,11 @@ mrg bill-request --fresh
 
 ---
 
-### 3. Review Prices & Screenshots (`mrg review`)
+### 3. Review Prices & Screenshots (`mrg-finance review`)
 Use this to open the side-by-side review GUI without running browser automation.
 
 ```bash
-mrg review
+mrg-finance review
 ```
 
 Open **`http://127.0.0.1:8321`** in your browser to inspect line items, view baseline vs scraped screenshots, edit prices, and click **`💾 Save Prices`** to update the spreadsheet.
