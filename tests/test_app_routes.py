@@ -44,6 +44,46 @@ def test_404_handler(client):
     assert b"404" in response.data
 
 
+def test_resolve_review_screenshot_paths_prefers_source_bill(tmp_path, monkeypatch):
+    from automation_screenshots import resolve_review_screenshot_paths
+
+    screenshots_dir = tmp_path / "screenshots"
+    source_bill_dir = screenshots_dir / "Original Bill"
+    order_dir = screenshots_dir / "260811_amazon_awu335"
+    source_bill_dir.mkdir(parents=True)
+    order_dir.mkdir(parents=True)
+
+    source_file = source_bill_dir / "Widget.png"
+    order_file = order_dir / "Widget.png"
+    source_file.write_bytes(b"orig")
+    order_file.write_bytes(b"new")
+
+    monkeypatch.chdir(tmp_path)
+    old_path, new_path = resolve_review_screenshot_paths("Widget", "Original Bill", "260811_amazon_awu335")
+
+    assert old_path and os.path.samefile(old_path, source_file)
+    assert new_path and os.path.samefile(new_path, order_file)
+
+
+def test_calculate_review_status_ignores_screenshot_presence():
+    from automation_screenshots import calculate_review_status
+
+    assert calculate_review_status("10.99", 10.99, screenshot_file="foo.png") == "ok"
+    assert calculate_review_status("10.99", 11.49, screenshot_file="foo.png") == "needs_review"
+
+
+def test_find_file_in_dir_matches_sanitized_names(tmp_path):
+    from automation_screenshots import _find_file_in_dir
+
+    item_dir = tmp_path / "screenshots"
+    item_dir.mkdir()
+    saved_file = item_dir / "2m IP67 LED Strip _144LED_m_.png"
+    saved_file.write_bytes(b"img")
+
+    match = _find_file_in_dir(str(item_dir), "2m IP67 LED Strip (144LED/m)")
+    assert match and os.path.samefile(match, saved_file)
+
+
 def test_is_bill_locked_logic():
     from routes.bills import is_bill_locked, LOCKED_STATUSES
     assert "bill approved" in LOCKED_STATUSES
