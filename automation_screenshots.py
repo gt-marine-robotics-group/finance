@@ -1348,7 +1348,7 @@ def sync_screenshots_to_sharepoint():
         import subprocess
         print("☁️ Syncing screenshots up to SharePoint...")
         result = subprocess.run(
-            ["rclone", "copy", "--checksum", SAVE_FOLDER, "onedrive:OPS-1 Operations/FY27 Finances/screenshots"],
+            ["rclone", "copy", "--ignore-checksum", "--ignore-size", "--update", SAVE_FOLDER, "onedrive:OPS-1 Operations/FY27 Finances/screenshots"],
             capture_output=True, text=True, timeout=60
         )
         if result.returncode == 0:

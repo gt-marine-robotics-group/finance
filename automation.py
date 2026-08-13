@@ -39,7 +39,7 @@ if "--fresh" in sys.argv or "-f" in sys.argv:
     print("Downloading fresh xlsx from SharePoint...")
     import subprocess
     result = subprocess.run(
-        ["rclone", "copy", "--checksum",
+        ["rclone", "copy", "--ignore-checksum", "--ignore-size", "--update",
          "onedrive:OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx",
          os.path.dirname(CSV_FILE)],
         capture_output=True, text=True, timeout=30
@@ -51,7 +51,7 @@ if "--fresh" in sys.argv or "-f" in sys.argv:
         print("Continuing with local copy...")
     # Also sync screenshots
     result2 = subprocess.run(
-        ["rclone", "copy", "--checksum",
+        ["rclone", "copy", "--ignore-checksum", "--ignore-size", "--update",
          "onedrive:OPS-1 Operations/FY27 Finances/screenshots",
          SCREENSHOT_DIR],
         capture_output=True, text=True, timeout=60

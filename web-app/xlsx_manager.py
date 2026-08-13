@@ -129,10 +129,10 @@ def sync_pull(force: bool = False) -> bool:
     os.makedirs(local_dir, exist_ok=True)
 
     if force:
-        return _run_rclone(["copy", "--checksum", RCLONE_REMOTE, local_dir])
+        return _run_rclone(["copy", "--ignore-checksum", "--ignore-size", "--update", RCLONE_REMOTE, local_dir])
 
     def _do_pull():
-        _run_rclone(["copy", "--checksum", RCLONE_REMOTE, local_dir])
+        _run_rclone(["copy", "--ignore-checksum", "--ignore-size", "--update", RCLONE_REMOTE, local_dir])
 
     # Trigger pull in background thread so HTTP request does not wait on rclone
     threading.Thread(target=_do_pull, daemon=True).start()

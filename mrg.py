@@ -98,7 +98,7 @@ def fresh_sync():
     print("Syncing from SharePoint...")
     xlsx_dir = os.path.dirname(XLSX_PATH)
     r1 = subprocess.run(
-        ["rclone", "copy", "--checksum",
+        ["rclone", "copy", "--ignore-checksum", "--ignore-size", "--update",
          "onedrive:OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx",
          xlsx_dir],
         capture_output=True, text=True, timeout=30
@@ -114,7 +114,7 @@ def fresh_sync():
             print("  ⚠️ Could not sync xlsx file")
 
     r2 = subprocess.run(
-        ["rclone", "copy", "--checksum",
+        ["rclone", "copy", "--ignore-checksum", "--ignore-size", "--update",
          "onedrive:OPS-1 Operations/FY27 Finances/screenshots",
          SCREENSHOT_DIR],
         capture_output=True, text=True, timeout=60
@@ -259,7 +259,7 @@ def upload_screenshots_to_sharepoint(bill_title, bill_dir):
     print(f"☁️ Syncing local screenshots to SharePoint ({remote_path})...")
     try:
         r = subprocess.run(
-            ["rclone", "copy", "--checksum", bill_dir, remote_path],
+            ["rclone", "copy", "--ignore-checksum", "--ignore-size", "--update", bill_dir, remote_path],
             capture_output=True, text=True, timeout=60
         )
         if r.returncode == 0:
