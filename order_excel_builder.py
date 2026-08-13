@@ -228,22 +228,29 @@ def main():
     parser = argparse.ArgumentParser(description="Generate Budget vs Quoted Full Detail Excel and CSV comparison reports.")
     parser.add_argument("--order", required=True, help="Order ID (e.g. 260811_amazon_awu335)")
     parser.add_argument("--excel-path", default="FY27_Bills_Budget.xlsx", help="Path to master Excel file")
+    parser.add_argument("--scrape", action="store_true", help="Perform live web price scraping for order items")
     args = parser.parse_args()
 
     order_id = args.order
     excel_path = args.excel_path
     if not os.path.exists(excel_path):
-        excel_path = os.path.expanduser("~/mrg/finance/FY27_Bills_Budget.xlsx")
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        local_fallback = os.path.join(script_dir, "FY27_Bills_Budget.xlsx")
+        user_fallback = os.path.expanduser("~/mrg/finance/FY27_Bills_Budget.xlsx")
+        if os.path.exists(local_fallback):
+            excel_path = local_fallback
+        elif os.path.exists(user_fallback):
+            excel_path = user_fallback
 
     if not os.path.exists(excel_path):
         print(f"❌ Master spreadsheet not found at {excel_path}")
         return
 
-    ef = pd.ExcelFile(excel_path)
-    df_bills = spreadsheet_utils.read_sheet_robust(ef, ["Bills", "Bill", "Budget"])
+    wb_in = openpyxl.load_workbook(excel_path, data_only=True)
+    df_bills = spreadsheet_utils.read_sheet_robust(wb_in, ["Bills", "Bill", "Budget"])
     bill_item_map = {spreadsheet_utils.get_col_val(r.to_dict(), "bill_item_id"): r.to_dict() for _, r in df_bills.iterrows() if spreadsheet_utils.get_col_val(r.to_dict(), "bill_item_id")}
 
-    df_orders = spreadsheet_utils.read_sheet_robust(ef, ["Ordering", "Orders", "OrderT"])
+    df_orders = spreadsheet_utils.read_sheet_robust(wb_in, ["Ordering", "Orders", "OrderT"])
     oid_col = next((c for c in df_orders.columns if "order" in str(c).lower()), "Order ID")
 
     order_rows = [r for _, r in df_orders.iterrows() if str(r.get(oid_col, "")).strip() == order_id]
@@ -264,7 +271,7 @@ def main():
         cost = spreadsheet_utils.safe_float(b_row.get("Cost", row.to_dict().get("Allocation", 0)))
         qty = spreadsheet_utils.safe_int(row.to_dict().get("Quantity", 1))
 
-        if link and link.startswith("http"):
+        if args.scrape and link and link.startswith("http"):
             res = price_scraper.scrape_item_price(link)
             if res and res.get("current_price") is not None:
                 scraped_results[item_name] = res["current_price"]
