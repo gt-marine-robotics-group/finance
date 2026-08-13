@@ -100,8 +100,7 @@ def generate_order_budget_vs_quoted_excel(
             ws.merge_cells(start_row=curr_row, start_column=1, end_row=curr_row, end_column=11)
             curr_row += 1
 
-        sec_budget_sub = 0.0
-        sec_quoted_sub = 0.0
+        sec_start_row = curr_row
 
         for r in sec_items:
             item_name = r.get("item_name", "")
@@ -113,21 +112,22 @@ def generate_order_budget_vs_quoted_excel(
             sec_name = str(loc.get("section") or r.get("source_bill_title") or "B03 - General Inventoried Goods").strip() if loc else "B03 - General Inventoried Goods"
             qty = int(r.get("quantity", 1))
             alloc_cost = float(r.get("cost", 0.0))
-            alloc_total = alloc_cost * qty
 
             live_val = scraped_results.get(item_name) if scraped_results else None
             quoted_cost = float(live_val) if live_val is not None else alloc_cost
-            quoted_total = quoted_cost * qty
-            variance = quoted_total - alloc_total
 
-            sec_budget_sub += alloc_total
-            sec_quoted_sub += quoted_total
+            r_idx = curr_row
+
+            # Use live Excel formulas for totals and variance
+            formula_alloc_total = f"=E{r_idx}*F{r_idx}"
+            formula_quoted_total = f"=H{r_idx}*I{r_idx}"
+            formula_variance = f"=J{r_idx}-G{r_idx}"
 
             row_vals = [
                 line_str, f"Bill {sec_bill}", item_name, sec_name,
-                qty, alloc_cost, alloc_total,
-                qty, quoted_cost, quoted_total,
-                variance
+                qty, alloc_cost, formula_alloc_total,
+                qty, quoted_cost, formula_quoted_total,
+                formula_variance
             ]
 
             for col_idx, val in enumerate(row_vals, start=1):
@@ -144,32 +144,49 @@ def generate_order_budget_vs_quoted_excel(
 
             curr_row += 1
 
-        total_budget_grand += sec_budget_sub
-        total_quoted_grand += sec_quoted_sub
+        sec_end_row = curr_row - 1
 
-        # Subtotal Row per Bill
-        sub_var = sec_quoted_sub - sec_budget_sub
-        sub_row_vals = ["", "", "", "", "", f"Subtotal (Bill {sec_bill}):", sec_budget_sub, "", "", sec_quoted_sub, sub_var]
+        # Subtotal Row per Bill with live Excel SUM formulas
+        sub_row_idx = curr_row
+        formula_sub_budget = f"=SUM(G{sec_start_row}:G{sec_end_row})"
+        formula_sub_quoted = f"=SUM(J{sec_start_row}:J{sec_end_row})"
+        formula_sub_variance = f"=J{sub_row_idx}-G{sub_row_idx}"
+
+        sub_row_vals = ["", "", "", "", "", f"Subtotal (Bill {sec_bill}):", formula_sub_budget, "", "", formula_sub_quoted, formula_sub_variance]
         for col_idx, val in enumerate(sub_row_vals, start=1):
             cell = ws.cell(row=curr_row, column=col_idx, value=val)
             cell.font = font_bold
             cell.border = total_border
             if col_idx in (6, 7, 9, 10, 11):
-                if isinstance(val, (int, float)):
+                if isinstance(val, str) and val.startswith("="):
                     cell.number_format = "$#,##0.00"
                 cell.alignment = Alignment(horizontal="right")
         curr_row += 1
 
-    # Grand Total Row
+    # Grand Total Row with live Excel SUM formulas across all item rows
     curr_row += 1
-    grand_var = total_quoted_grand - total_budget_grand
-    grand_row_vals = ["", "", "", "", "", "Grand Total:", total_budget_grand, "", "", total_quoted_grand, grand_var]
+    grand_row_idx = curr_row
+
+    # Grand total sums all item totals (ignoring subtotal text rows)
+    item_rows = [r for r in range(5, curr_row - 1) if isinstance(ws.cell(row=r, column=1).value, str) and ws.cell(row=r, column=1).value.startswith("Line")]
+    if item_rows:
+        first_item_r = item_rows[0]
+        last_item_r = item_rows[-1]
+        formula_grand_budget = f"=SUM(G{first_item_r}:G{last_item_r})"
+        formula_grand_quoted = f"=SUM(J{first_item_r}:J{last_item_r})"
+    else:
+        formula_grand_budget = "=0"
+        formula_grand_quoted = "=0"
+
+    formula_grand_variance = f"=J{grand_row_idx}-G{grand_row_idx}"
+
+    grand_row_vals = ["", "", "", "", "", "Grand Total:", formula_grand_budget, "", "", formula_grand_quoted, formula_grand_variance]
     for col_idx, val in enumerate(grand_row_vals, start=1):
         cell = ws.cell(row=curr_row, column=col_idx, value=val)
         cell.font = font_bold
         cell.border = total_border
         if col_idx in (6, 7, 9, 10, 11):
-            if isinstance(val, (int, float)):
+            if isinstance(val, str) and val.startswith("="):
                 cell.number_format = "$#,##0.00"
             cell.alignment = Alignment(horizontal="right")
 
