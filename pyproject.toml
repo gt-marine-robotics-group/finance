@@ -25,7 +25,6 @@ dependencies = [
 
 [project.scripts]
 mrg-finance = "mrg:main"
-mrg = "mrg:main"
 
 [tool.setuptools]
 py-modules = [

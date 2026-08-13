@@ -119,7 +119,7 @@ uv tool install git+https://github.com/gt-marine-robotics-group/finance.git
 ```
 
 > **💡 What is the difference between `pipx` and `uv tool`?**
-> - **Global Terminal Access**: Both tools install `mrg` inside an isolated Python virtual environment and link the `mrg` executable globally so it runs from **any terminal directory**.
+> - **Global Terminal Access**: Both tools install `mrg-finance` inside an isolated Python virtual environment and link the `mrg-finance` executable globally so it runs from **any terminal directory**.
 > - **`pipx install`**: The traditional standard tool for installing Python CLI applications (`brew install pipx`). It uses standard `pip` underneath.
 > - **`uv tool install`**: The modern alternative powered by Astral's `uv` (written in Rust). It completes package installation in **milliseconds** (10-50x faster than pipx) and handles dependency resolution ultra-fast.
 
@@ -137,7 +137,7 @@ source .venv/bin/activate    # On Windows: .\.venv\Scripts\Activate.ps1
 uv pip install -e .
 ```
 
-After installation, the CLI is available as `mrg` (or `mrg-finance`).
+After installation, the CLI is available globally as `mrg-finance`.
 
 ---
 
@@ -183,19 +183,19 @@ rclone ls "onedrive:OPS-1 Operations/FY27 Finances"
 
 ---
 
-## 🤖 CLI Usage & Workflows (`mrg` / `mrg-finance`)
+## 🤖 CLI Usage & Workflows (`mrg-finance`)
 
-The `mrg` CLI tool provides end-to-end automation for price scraping, side-by-side screenshot verification, bill submissions, and purchase tracking.
+The `mrg-finance` CLI tool provides end-to-end automation for price scraping, side-by-side screenshot verification, bill submissions, and purchase tracking.
 
 ```
 Usage:
-    mrg report [--fresh] [--order ORDER_ID]
-    mrg doctor [--fresh]
-    mrg bill-request [--fresh]
-    mrg purchase [--fresh] [--order ORDER_ID]
-    mrg review [--bill TITLE]
-    mrg price-check [--fresh] [--bill TITLE]
-    mrg screenshots [--fresh] [--bill TITLE] [--review-only]
+    mrg-finance report [--fresh] [--order ORDER_ID]
+    mrg-finance doctor [--fresh]
+    mrg-finance bill-request [--fresh]
+    mrg-finance purchase [--fresh] [--order ORDER_ID]
+    mrg-finance review [--bill TITLE]
+    mrg-finance price-check [--fresh] [--bill TITLE]
+    mrg-finance screenshots [--fresh] [--bill TITLE] [--review-only]
 
 Commands:
     report          Generate Budget vs Quoted Full Detail Excel (.xlsx) & CSV reports
@@ -209,38 +209,38 @@ Commands:
 
 ---
 
-### 1. `mrg report` — Generate Budget vs Quoted Excel & CSV Reports
+### 1. `mrg-finance report` — Generate Budget vs Quoted Excel & CSV Reports
 
 Generates a side-by-side **Budget Request vs Quoted Line Items** comparison report containing live Excel formulas (`=E*F`, `=H*I`, `=SUM(...)`), subtotal rows, and grand totals for attachment to Engage purchase requests.
 
 ```bash
 # Generate report for specific order:
-mrg report --order 260811_amazon_awu335
+mrg-finance report --order 260811_amazon_awu335
 
 # Sync fresh spreadsheet from SharePoint first, then generate report:
-mrg report --fresh --order 260811_amazon_awu335
+mrg-finance report --fresh --order 260811_amazon_awu335
 
 # Interactive order selection (shows a numbered list of all available orders):
-mrg report
+mrg-finance report
 ```
 
 *Output files are saved to `screenshots/<order_id>/Budget_vs_Quoted_Detail_<order_id>.xlsx` and `.csv`.*
 
 ---
 
-### 🩺 `mrg doctor` — Pre-Flight Spreadsheet Health Audit
+### 🩺 `mrg-finance doctor` — Pre-Flight Spreadsheet Health Audit
 
-`mrg doctor` runs a pre-flight health diagnostic audit on `FY27_Bills_Budget.xlsx` before running bill or purchase request submissions. It protects automation scripts from spreadsheet edits, missing links, and broken row references.
+`mrg-finance doctor` runs a pre-flight health diagnostic audit on `FY27_Bills_Budget.xlsx` before running bill or purchase request submissions. It protects automation scripts from spreadsheet edits, missing links, and broken row references.
 
 ```bash
 # Run spreadsheet diagnostic check on local file:
-mrg doctor
+mrg-finance doctor
 
 # Sync latest file from SharePoint first, then run diagnostic check:
-mrg doctor --fresh
+mrg-finance doctor --fresh
 ```
 
-#### What `mrg doctor` actually checks:
+#### What `mrg-finance doctor` actually checks:
 
 | Diagnostic Check | Description | Action Required if Flagged |
 | :--- | :--- | :--- |
@@ -251,20 +251,20 @@ mrg doctor --fresh
 | 📄 **Sheet & Header Offsets** | Scans top 10 rows to detect header shifts and verifies required sheets (`Bills`, `Ordering`). | Auto-resolved by `spreadsheet_utils` fuzzy parser. |
 
 > **💡 Row-Level Reporting**:
-> When errors or warnings are detected, `mrg doctor` reports the **exact Excel row numbers** so team members can fix them directly in Excel before submitting requests!
+> When errors or warnings are detected, `mrg-finance doctor` reports the **exact Excel row numbers** so team members can fix them directly in Excel before submitting requests!
 
 ---
 
-### 2. `mrg review` — Instant Side-by-Side Review
+### 2. `mrg-finance review` — Instant Side-by-Side Review
 
 Launches the interactive side-by-side screenshot & price review GUI in your default browser **without running web scraping or opening Chrome automation**.
 
 ```bash
 # Prompt to select a bill:
-mrg review
+mrg-finance review
 
 # Or specify a bill directly:
-mrg review --bill "Marine Robotics Group RobotX Testing Equipment Bill"
+mrg-finance review --bill "Marine Robotics Group RobotX Testing Equipment Bill"
 ```
 
 ---
