@@ -178,6 +178,7 @@ The `mrg` CLI tool provides end-to-end automation for price scraping, side-by-si
 
 ```
 Usage:
+    mrg report [--fresh] [--order ORDER_ID]
     mrg doctor [--fresh]
     mrg bill-request [--fresh]
     mrg purchase [--fresh] [--order ORDER_ID]
@@ -186,6 +187,7 @@ Usage:
     mrg screenshots [--fresh] [--bill TITLE] [--review-only]
 
 Commands:
+    report          Generate Budget vs Quoted Full Detail Excel (.xlsx) & CSV reports
     doctor          Run pre-flight health audit on FY27_Bills_Budget.xlsx
     bill-request    Submit a bill request to CampusLabs Engage (Priority 1)
     purchase        Submit purchase requests to Engage (Priority 2)
@@ -196,7 +198,26 @@ Commands:
 
 ---
 
-### 1. `mrg review` — Instant Side-by-Side Review
+### 1. `mrg report` — Generate Budget vs Quoted Excel & CSV Reports
+
+Generates a side-by-side **Budget Request vs Quoted Line Items** comparison report containing live Excel formulas (`=E*F`, `=H*I`, `=SUM(...)`), subtotal rows, and grand totals for attachment to Engage purchase requests.
+
+```bash
+# Generate report for specific order:
+mrg report --order 260811_amazon_awu335
+
+# Sync fresh spreadsheet from SharePoint first, then generate report:
+mrg report --fresh --order 260811_amazon_awu335
+
+# Interactive order selection (shows a numbered list of all available orders):
+mrg report
+```
+
+*Output files are saved to `screenshots/<order_id>/Budget_vs_Quoted_Detail_<order_id>.xlsx` and `.csv`.*
+
+---
+
+### 2. `mrg review` — Instant Side-by-Side Review
 
 Launches the interactive side-by-side screenshot & price review GUI in your default browser **without running web scraping or opening Chrome automation**.
 
