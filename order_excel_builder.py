@@ -1,0 +1,193 @@
+"""
+order_excel_builder.py - Side-by-side Budget vs Quoted Full Detail report generator.
+
+Generates beautifully formatted Excel (.xlsx) and CSV (.csv) comparison reports matching the
+PR26968_Budget_vs_Quoted_Full_Detail standard format for attachment to Engage purchase requests.
+"""
+
+from __future__ import annotations
+
+import os
+import csv
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+
+
+def generate_order_budget_vs_quoted_excel(
+    order_id: str,
+    requests_to_submit: list[dict],
+    bill_line_cache: dict = None,
+    scraped_results: dict = None,
+    output_dir: str = None
+) -> tuple[str, str]:
+    """
+    Generate side-by-side Budget vs Quoted Excel (.xlsx) and CSV (.csv) comparison reports.
+    Returns (xlsx_path, csv_path).
+    """
+    if not output_dir:
+        output_dir = os.path.join("screenshots", order_id)
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Group items by bill_no
+    bills_grouped = {}
+    for r in requests_to_submit:
+        b_no = str(r.get("bill_no") or "376851").strip()
+        bills_grouped.setdefault(b_no, []).append(r)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Budget vs Quoted Detail"
+
+    # Styling definitions
+    font_title = Font(name="Calibri", size=14, bold=True, color="1F4E78")
+    font_subtitle = Font(name="Calibri", size=10, italic=True, color="595959")
+    font_section_hdr = Font(name="Calibri", size=11, bold=True, color="1F4E78")
+    font_hdr = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
+    font_bold = Font(name="Calibri", size=10, bold=True)
+    font_regular = Font(name="Calibri", size=10)
+
+    fill_hdr = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+    fill_zebra = PatternFill(start_color="F9FAFB", end_color="F9FAFB", fill_type="solid")
+
+    thin_border = Border(
+        left=Side(style="thin", color="D9D9D9"),
+        right=Side(style="thin", color="D9D9D9"),
+        top=Side(style="thin", color="D9D9D9"),
+        bottom=Side(style="thin", color="D9D9D9")
+    )
+    total_border = Border(
+        top=Side(style="thin", color="000000"),
+        bottom=Side(style="double", color="000000")
+    )
+
+    # Title Block
+    all_bill_nos = " & ".join(f"Bill {b}" for b in bills_grouped.keys())
+    ws.cell(row=1, column=1, value="Budget Request & Quoted Line Items Comparison").font = font_title
+    ws.cell(row=2, column=1, value=f"Complete side-by-side mapping of Budget Request items with all Quoted Bill Line Items ({all_bill_nos})").font = font_subtitle
+
+    # Table Headers (Row 4)
+    headers = [
+        "Budget Line #", "Quoted Bill #", "Budget Item Description", "Category",
+        "Budget Qty", "Budget Unit Cost", "Budget Total",
+        "Quoted Quantity", "Quoted Unit Cost", "Quoted Total", "Variance (Quoted - Budget)"
+    ]
+
+    header_row_num = 4
+    for col_idx, h in enumerate(headers, start=1):
+        cell = ws.cell(row=header_row_num, column=col_idx, value=h)
+        cell.font = font_hdr
+        cell.fill = fill_hdr
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    curr_row = 5
+    global_line_counter = 1
+    total_budget_grand = 0.0
+    total_quoted_grand = 0.0
+
+    bill_keys = list(bills_grouped.keys())
+
+    for b_idx, sec_bill in enumerate(bill_keys):
+        sec_items = bills_grouped.get(sec_bill, [])
+        if not sec_items:
+            continue
+
+        if b_idx > 0:
+            curr_row += 1
+            sec_title = f"Additional Quoted Line Items (Bill {sec_bill})"
+            cell_sec = ws.cell(row=curr_row, column=1, value=sec_title)
+            cell_sec.font = font_section_hdr
+            ws.merge_cells(start_row=curr_row, start_column=1, end_row=curr_row, end_column=11)
+            curr_row += 1
+
+        sec_budget_sub = 0.0
+        sec_quoted_sub = 0.0
+
+        for r in sec_items:
+            item_name = r.get("item_name", "")
+            loc = (bill_line_cache.get(sec_bill) or {}).get(item_name) if bill_line_cache else None
+            sec_line = loc.get("section_line_number") if loc else None
+            line_str = f"Line {sec_line or global_line_counter}"
+            global_line_counter += 1
+
+            sec_name = str(loc.get("section") or r.get("source_bill_title") or "B03 - General Inventoried Goods").strip() if loc else "B03 - General Inventoried Goods"
+            qty = int(r.get("quantity", 1))
+            alloc_cost = float(r.get("cost", 0.0))
+            alloc_total = alloc_cost * qty
+
+            live_val = scraped_results.get(item_name) if scraped_results else None
+            quoted_cost = float(live_val) if live_val is not None else alloc_cost
+            quoted_total = quoted_cost * qty
+            variance = quoted_total - alloc_total
+
+            sec_budget_sub += alloc_total
+            sec_quoted_sub += quoted_total
+
+            row_vals = [
+                line_str, f"Bill {sec_bill}", item_name, sec_name,
+                qty, alloc_cost, alloc_total,
+                qty, quoted_cost, quoted_total,
+                variance
+            ]
+
+            for col_idx, val in enumerate(row_vals, start=1):
+                cell = ws.cell(row=curr_row, column=col_idx, value=val)
+                cell.font = font_regular
+                cell.border = thin_border
+                if curr_row % 2 == 1:
+                    cell.fill = fill_zebra
+                if col_idx in (6, 7, 9, 10, 11):
+                    cell.number_format = "$#,##0.00"
+                    cell.alignment = Alignment(horizontal="right")
+                elif col_idx in (1, 2, 5, 8):
+                    cell.alignment = Alignment(horizontal="center")
+
+            curr_row += 1
+
+        total_budget_grand += sec_budget_sub
+        total_quoted_grand += sec_quoted_sub
+
+        # Subtotal Row per Bill
+        sub_var = sec_quoted_sub - sec_budget_sub
+        sub_row_vals = ["", "", "", "", "", f"Subtotal (Bill {sec_bill}):", sec_budget_sub, "", "", sec_quoted_sub, sub_var]
+        for col_idx, val in enumerate(sub_row_vals, start=1):
+            cell = ws.cell(row=curr_row, column=col_idx, value=val)
+            cell.font = font_bold
+            cell.border = total_border
+            if col_idx in (6, 7, 9, 10, 11):
+                if isinstance(val, (int, float)):
+                    cell.number_format = "$#,##0.00"
+                cell.alignment = Alignment(horizontal="right")
+        curr_row += 1
+
+    # Grand Total Row
+    curr_row += 1
+    grand_var = total_quoted_grand - total_budget_grand
+    grand_row_vals = ["", "", "", "", "", "Grand Total:", total_budget_grand, "", "", total_quoted_grand, grand_var]
+    for col_idx, val in enumerate(grand_row_vals, start=1):
+        cell = ws.cell(row=curr_row, column=col_idx, value=val)
+        cell.font = font_bold
+        cell.border = total_border
+        if col_idx in (6, 7, 9, 10, 11):
+            if isinstance(val, (int, float)):
+                cell.number_format = "$#,##0.00"
+            cell.alignment = Alignment(horizontal="right")
+
+    # Auto-adjust column widths
+    for col in ws.columns:
+        max_len = max(len(str(cell.value or "")) for cell in col)
+        col_letter = get_column_letter(col[0].column)
+        ws.column_dimensions[col_letter].width = max(max_len + 3, 14)
+
+    xlsx_path = os.path.join(output_dir, f"Budget_vs_Quoted_Detail_{order_id}.xlsx")
+    csv_path = os.path.join(output_dir, f"Budget_vs_Quoted_Detail_{order_id}.csv")
+
+    wb.save(xlsx_path)
+
+    # Save CSV version
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        for row in ws.iter_rows(values_only=True):
+            writer.writerow([v if v is not None else "" for v in row])
+
+    return xlsx_path, csv_path
