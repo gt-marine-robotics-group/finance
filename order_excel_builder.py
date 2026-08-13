@@ -228,7 +228,7 @@ def main():
     parser = argparse.ArgumentParser(description="Generate Budget vs Quoted Full Detail Excel and CSV comparison reports.")
     parser.add_argument("--order", required=True, help="Order ID (e.g. 260811_amazon_awu335)")
     parser.add_argument("--excel-path", default="FY27_Bills_Budget.xlsx", help="Path to master Excel file")
-    parser.add_argument("--scrape", action="store_true", help="Perform live web price scraping for order items")
+    parser.add_argument("--skip-scrape", action="store_true", help="Skip live web price scraping and use spreadsheet allocations")
     args = parser.parse_args()
 
     order_id = args.order
@@ -269,10 +269,12 @@ def main():
         cost = spreadsheet_utils.safe_float(b_row.get("Cost", row.to_dict().get("Allocation", 0)))
         qty = spreadsheet_utils.safe_int(row.to_dict().get("Quantity", 1))
 
-        if args.scrape and link and link.startswith("http"):
+        if not args.skip_scrape and link and link.startswith("http"):
             res = price_scraper.scrape_item_price(link)
             if res and res.get("current_price") is not None:
-                scraped_results[item_name] = res["current_price"]
+                scraped_results[item_name] = float(res["current_price"])
+                if float(res["current_price"]) != cost:
+                    print(f"  💰 Live price scraped for '{item_name}': ${float(res['current_price']):.2f} (Allocated: ${cost:.2f})")
 
         requests_to_submit.append({
             "item_name": item_name,
