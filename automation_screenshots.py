@@ -306,59 +306,119 @@ def wait_for_page_ready(driver, timeout=15):
 
 
 def _find_file_in_dir(dir_path, item_name):
-    """Find a screenshot file in dir_path using exact, space-normalized, or case-insensitive matching."""
+    """Find a screenshot file in dir_path using exact, sanitized, space-normalized, or case-insensitive matching."""
     if not dir_path or not os.path.isdir(dir_path):
         return None
 
-    safe_name = re.sub(r'[<>:"/\\|?*]', '_', item_name) + ".png"
+    # Match the same filename sanitization used when screenshots are saved.
+    def _sanitize_for_filename(name):
+        return "".join(c if c.isalnum() or c in " -_" else "_" for c in str(name or "")).strip()
+
+    safe_name = _sanitize_for_filename(item_name) + ".png"
     exact = os.path.join(dir_path, safe_name)
     if os.path.exists(exact):
         return exact
 
-    # Try space-normalized and case-insensitive matching
+    # Try exact match after removing punctuation differences that often appear between the UI label and saved filename.
+    alias_candidates = {
+        re.sub(r'[<>:"/\\|?*]', '_', str(item_name or "")) + ".png",
+        safe_name,
+        re.sub(r'\s+', ' ', str(item_name or "")).strip() + ".png",
+    }
+    for candidate in alias_candidates:
+        alt = os.path.join(dir_path, candidate)
+        if os.path.exists(alt):
+            return alt
+
     target_norm = re.sub(r'\s+', ' ', safe_name).lower()
     try:
         for f in os.listdir(dir_path):
-            if re.sub(r'\s+', ' ', f).lower() == target_norm:
+            file_norm = re.sub(r'\s+', ' ', f).lower()
+            if file_norm == target_norm:
+                return os.path.join(dir_path, f)
+            # Also match when punctuation differences exist between item labels and saved filenames.
+            cleaned_f = "".join(c if c.isalnum() or c in " -_" else "_" for c in f).lower()
+            cleaned_target = "".join(c if c.isalnum() or c in " -_" else "_" for c in safe_name).lower()
+            if cleaned_f == cleaned_target:
                 return os.path.join(dir_path, f)
     except Exception:
         pass
     return None
 
 
-def find_screenshots_for_item(bill_title, item_name, screenshot_file=None):
+def find_screenshots_for_item(bill_title, item_name, screenshot_file=None, order_id=None):
     """Locate baseline (old) and newly scraped screenshot files for an item with flexible matching."""
-    bill_dir = os.path.join("screenshots", bill_title)
-    old_dir = os.path.join("screenshots", bill_title, "old")
+    bill_dir = os.path.join("screenshots", bill_title) if bill_title else None
+    order_dir = os.path.join("screenshots", order_id) if order_id else None
+    old_dir = os.path.join("screenshots", bill_title, "old") if bill_title else None
     root_old_dir = os.path.join("screenshots", "old")
     root_dir = "screenshots"
-    new_dir = os.path.join("screenshots", bill_title, "new")
+    new_dir = os.path.join("screenshots", bill_title, "new") if bill_title else None
     root_new_dir = os.path.join("screenshots", "new")
 
     old_screenshot = None
-    for d in (old_dir, root_old_dir):
-        found = _find_file_in_dir(d, item_name)
-        if found:
-            old_screenshot = found
-            break
-
     new_screenshot = None
-    if screenshot_file:
-        cand = os.path.join("screenshots", screenshot_file)
-        if os.path.exists(cand):
-            new_screenshot = cand
 
-    if not new_screenshot:
-        for d in (bill_dir, root_dir, new_dir, root_new_dir):
-            found = _find_file_in_dir(d, item_name)
-            if found:
-                new_screenshot = found
-                break
+    if order_dir and os.path.isdir(order_dir):
+        # Purchase Order Review Mode: new_shot is in order_dir, old_shot is in bill_dir or root_dir
+        new_screenshot = _find_file_in_dir(order_dir, item_name)
+        for d in (bill_dir, old_dir, root_old_dir, root_dir):
+            if d:
+                found = _find_file_in_dir(d, item_name)
+                if found and (not new_screenshot or os.path.abspath(found) != os.path.abspath(new_screenshot)):
+                    old_screenshot = found
+                    break
+    else:
+        # Standard Bill Request / Review Mode
+        for d in (old_dir, root_old_dir):
+            if d:
+                found = _find_file_in_dir(d, item_name)
+                if found:
+                    old_screenshot = found
+                    break
+
+        if screenshot_file:
+            cand = os.path.join("screenshots", screenshot_file)
+            if os.path.exists(cand):
+                new_screenshot = cand
+
+        if not new_screenshot:
+            for d in (bill_dir, root_dir, new_dir, root_new_dir):
+                if d:
+                    found = _find_file_in_dir(d, item_name)
+                    if found:
+                        new_screenshot = found
+                        break
 
     if old_screenshot and new_screenshot and os.path.abspath(old_screenshot) == os.path.abspath(new_screenshot):
         old_screenshot = None
 
     return old_screenshot, new_screenshot
+
+
+def resolve_review_screenshot_paths(item_name, source_bill_title="", order_id=""):
+    """Resolve the original source-bill screenshot and the current order screenshot for a review item."""
+    source_bill_title = (source_bill_title or "").strip()
+    old_shot, new_shot = find_screenshots_for_item(source_bill_title, item_name, order_id=order_id)
+    if not old_shot and source_bill_title:
+        bill_dir = os.path.join("screenshots", source_bill_title)
+        old_shot = _find_file_in_dir(bill_dir, item_name)
+    return old_shot, new_shot
+
+
+def calculate_review_status(csv_cost, parsed_price, screenshot_file=None):
+    """Return review status based on actual price delta, not screenshot presence alone."""
+    if parsed_price is None:
+        return "failed" if screenshot_file else "error"
+
+    try:
+        csv_value = float(str(csv_cost).replace("$", "").replace(",", "").strip())
+    except Exception:
+        return "ok" if parsed_price > 0 else "failed"
+
+    if abs(parsed_price - csv_value) > 0.01:
+        return "needs_review"
+    return "ok"
 
 
 def generate_review_html(data, bill_title, output_path):
@@ -868,31 +928,29 @@ def generate_review_html(data, bill_title, output_path):
             const curVal = item.final_price !== undefined ? item.final_price : (item.parsed_price || csvVal);
             document.getElementById('final-price-input').value = parseFloat(curVal).toFixed(2);
 
-            // Images & Layout Adaptation
+            // Always display 2-column side-by-side comparison layout
             const oldContainer = document.getElementById('old-shot-container');
             const newContainer = document.getElementById('new-shot-container');
             const gridEl = document.getElementById('split-grid-container');
             const oldCardEl = document.getElementById('old-shot-card');
             const newCardTitleEl = document.getElementById('new-shot-card-title');
 
+            oldCardEl.style.display = 'flex';
+            gridEl.style.gridTemplateColumns = '1fr 1fr';
+            newCardTitleEl.textContent = '📸 Current Live / Scraped Screenshot';
+
             const oldSrc = item.old_screenshot_data || item.old_screenshot;
             if (oldSrc) {{
-                oldCardEl.style.display = 'flex';
-                gridEl.style.gridTemplateColumns = '1fr 1fr';
-                newCardTitleEl.textContent = '📸 New / Scraped Screenshot';
                 oldContainer.innerHTML = `<img src="${{oldSrc}}" alt="Baseline Screenshot" onclick="openLightbox(this.src)" />`;
             }} else {{
-                oldCardEl.style.display = 'none';
-                gridEl.style.gridTemplateColumns = '1fr';
-                newCardTitleEl.textContent = '📸 Captured Product Screenshot & Price Verification';
-                oldContainer.innerHTML = `<div class="placeholder-box">📷 Baseline screenshot not available</div>`;
+                oldContainer.innerHTML = `<div class="placeholder-box">📷 Approved bill screenshot not available</div>`;
             }}
 
             const newSrc = item.new_screenshot_data || item.new_screenshot || (item.screenshot ? `screenshots/${{item.screenshot}}` : null);
             if (newSrc) {{
                 newContainer.innerHTML = `<img src="${{newSrc}}" alt="New Screenshot" onclick="openLightbox(this.src)" />`;
             }} else {{
-                newContainer.innerHTML = `<div class="placeholder-box">📸 New screenshot not captured</div>`;
+                newContainer.innerHTML = `<div class="placeholder-box">📸 Current online screenshot not captured</div>`;
             }}
 
             renderSidebar();
@@ -1126,7 +1184,7 @@ if __name__ == "__main__":
 
             old_shot, new_shot = find_screenshots_for_item(bill_title, item_name)
             parsed = parse_price(csv_cost)
-            status = "needs_review" if old_shot and new_shot else ("ok" if new_shot else "failed")
+            status = calculate_review_status(csv_cost, parsed, screenshot_file=new_shot)
 
             review_data.append({
                 "item_name": item_name, "url": url, "csv_cost": csv_cost,
@@ -1251,18 +1309,13 @@ if __name__ == "__main__":
         old_shot, new_shot = find_screenshots_for_item(bill_title, item_name, screenshot_file)
 
         if parsed is not None and parsed > 0.0:
-            existing_cost = parse_price(csv_cost)
-            if existing_cost and existing_cost > 0:
-                if abs(parsed - existing_cost) > 0.01:
-                    print(f"  💲 Scraped ${parsed:.2f} ≠ spreadsheet ${existing_cost:.2f} — keeping spreadsheet value")
-                    status = "needs_review"
-                else:
-                    print(f"  💲 ${parsed:.2f} ✓ matches spreadsheet")
-                    status = "ok"
+            status = calculate_review_status(csv_cost, parsed, screenshot_file=screenshot_file)
+            if status == "needs_review":
+                print(f"  💲 Scraped ${parsed:.2f} ≠ spreadsheet ${parse_price(csv_cost):.2f} — keeping spreadsheet value")
+            elif status == "ok":
+                print(f"  💲 ${parsed:.2f} ✓ matches spreadsheet")
             else:
-                df.at[idx, "Cost"] = f"${parsed:.2f}"
                 print(f"  💲 ${parsed:.2f} (confidence: {confidence})")
-                status = "ok" if confidence in ("high", "medium") else "needs_review"
         else:
             print(f"  ⚠️ No price scraped (raw: '{scraped_text}')")
             status = "failed" if screenshot_file else "error"
