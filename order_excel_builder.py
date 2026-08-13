@@ -194,11 +194,16 @@ def generate_order_budget_vs_quoted_excel(
                 cell.number_format = "$#,##0.00"
             cell.alignment = Alignment(horizontal="right")
 
-    # Auto-adjust column widths
+    # Auto-adjust column widths (skip title rows 1-3 when measuring text lengths)
     for col in ws.columns:
-        max_len = max(len(str(cell.value or "")) for cell in col)
         col_letter = get_column_letter(col[0].column)
-        ws.column_dimensions[col_letter].width = max(max_len + 3, 14)
+        if col_letter == "A":
+            ws.column_dimensions["A"].width = 16
+        else:
+            # Measure text length starting from row 4 (table header), ignoring long merged title lines
+            lengths = [len(str(cell.value or "")) for cell in col[3:] if "Additional Quoted" not in str(cell.value or "")]
+            max_len = max(lengths) if lengths else 12
+            ws.column_dimensions[col_letter].width = max(max_len + 3, 14)
 
     xlsx_path = os.path.join(output_dir, f"Budget_vs_Quoted_Detail_{order_id}.xlsx")
     csv_path = os.path.join(output_dir, f"Budget_vs_Quoted_Detail_{order_id}.csv")
