@@ -203,3 +203,15 @@ mrg-finance screenshots --bill "FY27 Budget"
 For detailed student instructions, see [`USAGE_GUIDE.md`](USAGE_GUIDE.md). For developer architecture details, see [`DEVELOPMENT.md`](DEVELOPMENT.md).
 
 </details>
+
+---
+
+## 📚 Complete Documentation Index
+
+| Guide | Description |
+| :--- | :--- |
+| 🚀 [**README.md**](README.md) | Quick start, installation, Chrome/rclone setup, Excel SharePoint links, and CLI command summary. |
+| 📊 [**SPREADSHEET_GUIDE.md**](SPREADSHEET_GUIDE.md) | Deep-dive guide on `FY27_Bills_Budget.xlsx`, `Bills` vs `Ordering` schema, formula rules, and `mrg-finance doctor` audit rules. |
+| 📘 [**USAGE_GUIDE.md**](USAGE_GUIDE.md) | Student & officer usage guide for bill requests, purchase requests, Amazon multi-cart links, and Engage forms. |
+| 🔍 [**TROUBLESHOOTING.md**](TROUBLESHOOTING.md) | Troubleshooting & FAQ guide for `rclone` sync errors, Chrome/Selenium issues, Duo MFA, and CLI setup. |
+| 💻 [**DEVELOPMENT.md**](DEVELOPMENT.md) | Developer architecture guide, Flask blueprints, database schemas, and unit test suite documentation. |
