@@ -43,7 +43,7 @@ if "--fresh" in sys.argv or "-f" in sys.argv:
     print("Downloading fresh xlsx from SharePoint...")
     import subprocess
     result = subprocess.run(
-        ["rclone", "copy", "--checksum",
+        ["rclone", "copy", "--ignore-checksum", "--ignore-size", "--update",
          "onedrive:OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx",
          os.path.dirname(XLSX_PATH)],
         capture_output=True, text=True, timeout=30
