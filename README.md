@@ -183,6 +183,58 @@ rclone ls "onedrive:OPS-1 Operations/FY27 Finances"
 
 ---
 
+## 📊 Master Budget Spreadsheet Workflow (`FY27_Bills_Budget.xlsx`)
+
+The entire purchasing and bill submission pipeline is driven by the team's shared **FY27 Master Budget Spreadsheet** on SharePoint.
+
+🔗 **Direct SharePoint Link**: [FY27_Bills_Budget.xlsx (SharePoint Web View)](https://gtvault.sharepoint.com/:x:/r/sites/MarineRoboticsGroup/Shared%20Documents/OPS-1%20Operations/FY27%20Finances/FY27_Bills_Budget.xlsx?d=w89396907686c491395b64a5ef042181c&csf=1&web=1&e=b5knap)
+
+---
+
+### 📑 Key Sheets & Structure
+
+| Sheet Name | Role & Purpose | Key Columns & Requirements |
+| :--- | :--- | :--- |
+| 📜 **`Bills`** | **Master Approved Line Items**<br>Defines all approved SGA bill line items. Every item gets a unique `Bill Item ID`. | • **`Bill Item ID`**: Unique item identifier (e.g., `376851_1`)<br>• **`Bill No.`**: SGA Bill Number (e.g., `376851`)<br>• **`Item Name`**: Item description<br>• **`Budget Section`**: Category (e.g., `B03 - General Inventoried Goods`)<br>• **`Cost`**: Approved unit allocation price<br>• **`Link`**: Direct product URL (Amazon, McMaster, DigiKey) |
+| 🛒 **`Ordering`** | **Order Groupings (`OrderT`)**<br>Groups line items from `Bills` into actionable vendor purchase orders under an `Order ID`. | • **`Order ID`**: Unique order grouping string (e.g., `260811_amazon_awu335`)<br>• **`Bill Item ID`**: References target line item in `Bills` sheet<br>• **`Quantity`**: Number of units to order<br>• **`Vendor`**: Supplier name (e.g., `Amazon`, `McMaster-Carr`) |
+
+---
+
+### 🔄 End-to-End Tandem Workflow (How Team Members Interface with Excel)
+
+```mermaid
+flowchart TD
+    A["1️⃣ Team Member edits FY27_Bills_Budget.xlsx on SharePoint"] --> B["2️⃣ mrg-finance CLI syncs latest xlsx via rclone / Graph API (--fresh)"]
+    B --> C["3️⃣ Pre-Flight Audit (mrg-finance doctor) validates row integrity & links"]
+    C --> D{"Choose Action"}
+    D -->|"Submit Bill"| E["mrg-finance bill-request"]
+    D -->|"Place Order"| F["mrg-finance purchase --order ID"]
+    D -->|"Gen Report"| G["mrg-finance report --order ID"]
+    F --> H["Auto-generates Amazon cart, captures cart.png, and generates Budget vs Quoted .xlsx report"]
+    H --> I["Pre-fills Engage Purchase Request form & attaches reports"]
+```
+
+#### Step-by-Step Interface Guide:
+
+1. **Adding New Bill Line Items**:
+   - Open [FY27_Bills_Budget.xlsx on SharePoint](https://gtvault.sharepoint.com/:x:/r/sites/MarineRoboticsGroup/Shared%20Documents/OPS-1%20Operations/FY27%20Finances/FY27_Bills_Budget.xlsx?d=w89396907686c491395b64a5ef042181c&csf=1&web=1&e=b5knap).
+   - Navigate to the **`Bills`** sheet. Add a new row with a unique `Bill Item ID`, item name, budget section, approved unit cost, and product link.
+
+2. **Creating a New Vendor Order**:
+   - Navigate to the **`Ordering`** sheet.
+   - Create a new `Order ID` (format: `YYMMDD_<vendor>_<gt_username>`, e.g., `260811_amazon_awu335`).
+   - List the `Bill Item ID`s and quantities to order.
+
+3. **Running `mrg-finance` with Excel**:
+   - Run `mrg-finance doctor --fresh` to pull the latest SharePoint Excel edits and verify that all `Bill Item ID` references, product URLs, and prices are valid.
+   - Run `mrg-finance report --fresh --order <ORDER_ID>` to generate the side-by-side **Budget vs Quoted** report.
+   - Run `mrg-finance purchase --fresh --order <ORDER_ID>` to perform price auditing, auto-build Amazon carts, capture evidence, and pre-fill CampusLabs Engage purchase forms.
+
+4. **Web GUI Alternative**:
+   - Alternatively, launch the Web Dashboard (`http://localhost:5000`) or Side-by-Side Review Inspector (`http://localhost:8321`). Any price adjustments or item edits saved through the GUI automatically write back to `FY27_Bills_Budget.xlsx` using openpyxl while preserving all existing Excel formulas (`SUM`, `IFERROR`) and formatting.
+
+---
+
 ## 🤖 CLI Usage & Workflows (`mrg-finance`)
 
 The `mrg-finance` CLI tool provides end-to-end automation for price scraping, side-by-side screenshot verification, bill submissions, and purchase tracking.
