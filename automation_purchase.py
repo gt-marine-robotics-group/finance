@@ -590,6 +590,20 @@ for r in requests_to_submit:
 sga_bill_box_text = "\n".join(sga_box_lines)
 order_bill_refs = ", ".join(ref_list)
 
+# === Generate Budget vs Quoted Full Detail Excel & CSV Comparison Reports ===
+import order_excel_builder
+order_shot_dir = os.path.join("screenshots", selected_order_id)
+os.makedirs(order_shot_dir, exist_ok=True)
+
+excel_detail_path, csv_detail_path = order_excel_builder.generate_order_budget_vs_quoted_excel(
+    order_id=selected_order_id,
+    requests_to_submit=requests_to_submit,
+    bill_line_cache=bill_line_cache,
+    scraped_results=scraped_results,
+    output_dir=order_shot_dir
+)
+print(f"  📊 Generated Excel comparison report -> {excel_detail_path}")
+
 print(f"\n{'='*60}")
 print(f"Submitting 1 purchase request with {len(requests_to_submit)} line items")
 print(f"  Subject: {order_subject}")
@@ -709,7 +723,7 @@ try:
         except Exception:
             pass
 
-    # Upload cart screenshot if available
+    # Upload documentation files (Cart Screenshot & Budget vs Quoted Detail Excel)
     cart_screenshot = os.path.join("screenshots", selected_order_id, "cart.png")
     if not os.path.exists(cart_screenshot):
         safe_bill = "".join(c if c.isalnum() or c in " -_" else "_" for c in bill_title)
@@ -717,18 +731,29 @@ try:
     if not os.path.exists(cart_screenshot):
         cart_screenshot = os.path.join(DOWNLOAD_DIR, "cart.png")
 
-    if os.path.exists(cart_screenshot):
-        try:
-            file_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
-            if file_inputs:
+    file_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
+    if file_inputs:
+        # Upload #1: Cart screenshot
+        if os.path.exists(cart_screenshot):
+            try:
                 driver.execute_script("arguments[0].style.display='block';", file_inputs[0])
                 file_inputs[0].send_keys(os.path.abspath(cart_screenshot))
-                print(f"  📎 Uploaded cart screenshot: {os.path.basename(cart_screenshot)}")
-                time.sleep(2)
-        except Exception as e:
-            print(f"  ⚠️ Upload failed: {e}")
+                print(f"  📎 Upload #1: Uploaded cart screenshot ({os.path.basename(cart_screenshot)})")
+                time.sleep(1.5)
+            except Exception as e:
+                print(f"  ⚠️ Upload #1 failed: {e}")
+
+        # Upload #2: Budget vs Quoted Detail Excel file
+        if len(file_inputs) > 1 and excel_detail_path and os.path.exists(excel_detail_path):
+            try:
+                driver.execute_script("arguments[0].style.display='block';", file_inputs[1])
+                file_inputs[1].send_keys(os.path.abspath(excel_detail_path))
+                print(f"  📎 Upload #2: Uploaded Budget vs Quoted Excel detail ({os.path.basename(excel_detail_path)})")
+                time.sleep(1.5)
+            except Exception as e:
+                print(f"  ⚠️ Upload #2 failed: {e}")
     else:
-        print(f"  ℹ️ No cart screenshot found. Take one of your Amazon cart before submitting.")
+        print("  ℹ️ File upload inputs not found on current form page.")
 
     # PAUSE — let user review and submit manually
     print(f"\n  ⏸️  Form pre-filled with {len(requests_to_submit)} items totaling ${order_amount:.2f}")
