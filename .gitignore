@@ -1,0 +1,16 @@
+.env
+.token_cache.bin
+.venv/
+.DS_Store
+screenshots/
+review.html
+__pycache__/
+*.pyc
+*.csv
+FY27_Bills_Budget.xlsx
+.pytest_cache/
+.agents/
+build/
+*.egg-info/
+
+

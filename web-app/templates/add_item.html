@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Add Item - MRG Purchasing{% endblock %}
+
+{% block content %}
+<div class="form-page">
+    <h1>Add Item</h1>
+
+    <form method="POST" action="{{ url_for('add_item') }}" class="item-form">
+        <div class="form-group">
+            <label for="link">Link (URL)</label>
+            <div class="input-with-button">
+                <input type="text" id="link" name="link" class="input"
+                       placeholder="https://amazon.com/...">
+                <button type="button" id="fetch-btn" class="btn btn-sm btn-ghost" onclick="fetchLink()">Fetch</button>
+            </div>
+            <small id="fetch-status" class="text-muted"></small>
+        </div>
+
+        <div class="form-group">
+            <label for="item_name">Item Name *</label>
+            <input type="text" id="item_name" name="item_name" required class="input"
+                   placeholder="e.g. Arduino Mega 2560">
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="cost">Cost ($)</label>
+                <input type="number" id="cost" name="cost" step="0.01" min="0" class="input"
+                       placeholder="29.99">
+            </div>
+            <div class="form-group">
+                <label for="quantity">Quantity</label>
+                <input type="number" id="quantity" name="quantity" value="1" min="1" class="input">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="vendor">Vendor</label>
+            <input type="text" id="vendor" name="vendor" class="input"
+                   placeholder="e.g. Amazon, McMaster-Carr">
+        </div>
+
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" rows="3" class="input"
+                      placeholder="Brief description of what this is for..."></textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="budget_section">Budget Section</label>
+            <select id="budget_section" name="budget_section" class="input">
+                <option value="">-- Select --</option>
+                <option value="B01 - Advertising/Promotion">B01 - Advertising/Promotion</option>
+                <option value="B02 - Equipment Rental">B02 - Equipment Rental</option>
+                <option value="B03 - General Inventoried Goods">B03 - General Inventoried Goods</option>
+                <option value="B04 - Food/Beverage">B04 - Food/Beverage</option>
+                <option value="B05 - Lodging">B05 - Lodging</option>
+                <option value="B06 - Decorations">B06 - Decorations</option>
+                <option value="B07 - Clothing/Awards">B07 - Clothing/Awards</option>
+                <option value="B08 - Printing/Copies">B08 - Printing/Copies</option>
+                <option value="B09 - Professional Services">B09 - Professional Services</option>
+                <option value="B10 - Supplies/Materials">B10 - Supplies/Materials</option>
+                <option value="B11 - Transportation">B11 - Transportation</option>
+                <option value="B12 - Conference Registration">B12 - Conference Registration</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="bill_title">Assign to Bill (optional)</label>
+            <select id="bill_title" name="bill_title" class="input">
+                <option value="">-- Backlog (no bill) --</option>
+                {% for bill in bills %}
+                <option value="{{ bill }}">{{ bill }}</option>
+                {% endfor %}
+            </select>
+            <input type="text" name="bill_title_new" class="input mt-1"
+                   placeholder="Or type a new bill title...">
+        </div>
+
+        <div class="form-group">
+            <label for="person_requesting">Your Name</label>
+            <input type="text" id="person_requesting" name="person_requesting" class="input"
+                   placeholder="e.g. George Burdell">
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-block">Add Item</button>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-ghost btn-block">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<script>
+function fetchLink() {
+    const url = document.getElementById('link').value.trim();
+    if (!url) return;
+
+    const status = document.getElementById('fetch-status');
+    const btn = document.getElementById('fetch-btn');
+    status.textContent = 'Fetching...';
+    btn.disabled = true;
+
+    const formData = new FormData();
+    formData.append('url', url);
+
+    fetch('{{ url_for("scrape_link") }}', { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                status.textContent = 'Failed: ' + data.error;
+            } else {
+                if (data.title && !document.getElementById('item_name').value) {
+                    document.getElementById('item_name').value = data.title;
+                }
+                if (data.price && !document.getElementById('cost').value) {
+                    document.getElementById('cost').value = data.price;
+                }
+                if (data.vendor && !document.getElementById('vendor').value) {
+                    document.getElementById('vendor').value = data.vendor;
+                }
+                status.textContent = 'Auto-filled from page';
+            }
+        })
+        .catch(e => { status.textContent = 'Error: ' + e; })
+        .finally(() => { btn.disabled = false; });
+}
+</script>
+{% endblock %}

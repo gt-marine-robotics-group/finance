@@ -1,0 +1,56 @@
+{# _item_card.html - reusable item card partial #}
+<div class="item-card">
+    <div class="item-card-header">
+        <h3 class="item-name">{{ item.get('Item Name', 'Unnamed') }}</h3>
+        {% if item.get('Status') %}
+        <span class="status-badge status-{{ item.get('Status', '')|lower|replace(' ', '-') }}">
+            {{ item.get('Status', '') }}
+        </span>
+        {% endif %}
+    </div>
+
+    <div class="item-card-body">
+        <div class="item-details">
+            {% set cost_str = item.get('Cost', '')|string|replace('$','')|replace(',','') %}
+            {% if cost_str and cost_str != '0' %}
+            <span class="item-price">${{ "%.2f"|format(cost_str|float(0)) }}</span>
+            {% if item.get('Quantity') and item.get('Quantity')|string != '1' %}
+            <span class="item-qty">× {{ item.get('Quantity') }}</span>
+            {% endif %}
+            {% endif %}
+
+            {% if item.get('Vendor') %}
+            <span class="item-vendor">{{ item.get('Vendor') }}</span>
+            {% endif %}
+        </div>
+
+        {% if item.get('_screenshot_path') %}
+        <div class="item-thumbnail">
+            <a href="{{ url_for('serve_screenshot', filename=item.get('_screenshot_path')) }}" target="_blank">
+                <img src="{{ url_for('serve_screenshot', filename=item.get('_screenshot_path')) }}"
+                     alt="Screenshot" loading="lazy">
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="item-card-footer">
+        {% if item.get('Link') %}
+        <a href="{{ item.get('Link') }}" target="_blank" rel="noopener" class="btn btn-sm btn-ghost">Link</a>
+        {% endif %}
+        {% if item.get('_table_index') is not none and item.get('Bill Item ID', '') == '' %}
+        {# Queue item - use table index #}
+        <form method="POST" action="{{ url_for('items.delete_queue_item_route', table_index=item.get('_table_index', '')) }}" style="display:inline"
+              onsubmit="return confirm('Delete from backlog?')">
+            <button type="submit" class="btn btn-sm btn-ghost btn-danger-text">Delete</button>
+        </form>
+        {% endif %}
+        {% if not item.get('_has_screenshot') and item.get('Link') %}
+        {% if item.get('Bill Item ID') %}
+        <form method="POST" action="{{ url_for('queue_screenshot', item_id=item.get('Bill Item ID', '')) }}" style="display:inline">
+            <button type="submit" class="btn btn-sm btn-ghost">Screenshot</button>
+        </form>
+        {% endif %}
+        {% endif %}
+    </div>
+</div>

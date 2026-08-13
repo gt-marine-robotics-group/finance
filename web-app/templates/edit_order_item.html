@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Edit Order Item - MRG Purchasing{% endblock %}
+
+{% block content %}
+<div class="form-page">
+    <h1>Edit Order Item</h1>
+    <p class="text-muted" style="margin-bottom: 1.5rem;">
+        Table Index: {{ table_index }} {% if item.get('Bill Item ID') %}(Bill Item ID: {{ item.get('Bill Item ID') }}){% endif %}
+    </p>
+
+    <form method="POST" action="{{ url_for('orders.edit_order_item', table_index=table_index) }}" class="item-form">
+        <div class="form-group">
+            <label for="item_name">Item Name *</label>
+            <input type="text" id="item_name" name="item_name" required class="input"
+                   value="{{ item.get('Item Name', '') }}">
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="vendor">Vendor</label>
+                <input type="text" id="vendor" name="vendor" class="input"
+                       value="{{ item.get('Vendor', '') }}">
+            </div>
+            <div class="form-group">
+                <label for="quantity">Quantity * {% if max_bill_qty %}(Max: {{ max_bill_qty }}){% endif %}</label>
+                <input type="number" id="quantity" name="quantity" min="0.01" {% if max_bill_qty %}max="{{ max_bill_qty }}"{% endif %} step="any" required class="input"
+                       value="{{ item.get('Quantity', 1) }}">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="purchaser">Purchaser</label>
+            <input type="text" id="purchaser" name="purchaser" class="input"
+                   value="{{ item.get('Purchaser', '') }}">
+        </div>
+
+        <div class="form-group">
+            <label for="status">Status</label>
+            {% set current_status = item.get('Status', '')|string|trim %}
+            <select id="status" name="status" class="input">
+                <option value="">-- None --</option>
+                {% for status_opt in [
+                    'pending purchase', 'purchased - SOFO', 'purchased - cash',
+                    'purchased - awaiting reimbursement', 'arrived', 'bill approved',
+                    'review requested', 'canceled'
+                ] %}
+                <option value="{{ status_opt }}" {{ 'selected' if status_opt == current_status }}>{{ status_opt }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="ordering_instructions">Ordering Instructions (Read-Only from Bills Table)</label>
+            <textarea id="ordering_instructions" rows="2" class="input" readonly style="background: rgba(0,0,0,0.03); color: var(--color-text-muted); cursor: not-allowed;">{{ ordering_instructions or item.get('Description', '') }}</textarea>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-block">Save Changes</button>
+            <a href="{{ url_for('orders.view_orders') }}" class="btn btn-ghost btn-block">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mrg-finance"
+version = "0.1.0"
+description = "MRG Finance CLI — bill requests, purchase automation, and price auditing"
+readme = "README.md"
+authors = [
+    { name = "Georgia Tech Marine Robotics Group", email = "ops@marinerobotics.gatech.edu" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "flask>=3.1.0",
+    "gunicorn>=23.0.0",
+    "msal>=1.31.0",
+    "openpyxl>=3.1.5",
+    "pandas>=2.2.3",
+    "python-dotenv>=1.0.1",
+    "requests>=2.32.3",
+    "selenium>=4.27.1",
+    "pytest>=9.0.0"
+]
+
+[project.scripts]
+mrg-finance = "mrg:main"
+
+[tool.setuptools]
+py-modules = [
+    "mrg",
+    "automation",
+    "automation_purchase",
+    "automation_screenshots",
+    "review_server",
+    "price_scraper",
+    "screenshot_worker",
+    "engage_bill_lookup",
+    "spreadsheet_utils",
+    "order_excel_builder",
+]
+packages = ["web-app", "web-app.routes"]
+
+[tool.setuptools.package-data]
+"web-app" = ["templates/*", "templates/**/*", "static/*", "static/**/*"]

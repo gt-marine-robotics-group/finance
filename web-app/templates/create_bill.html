@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Create Bill - MRG Purchasing{% endblock %}
+
+{% block content %}
+<div class="form-page">
+    <h1>Create Bill</h1>
+    <p class="text-muted">Select items from the queue and assign them to a new bill.</p>
+
+    {% if not backlog %}
+    <div class="empty-state">
+        <p>No items in the queue. Add items first, then create a bill.</p>
+        <a href="{{ url_for('add_item') }}" class="btn btn-primary">+ Add Item</a>
+    </div>
+    {% else %}
+    <form method="POST" action="{{ url_for('create_bill') }}" class="item-form">
+        <div class="form-group">
+            <label for="bill_title">Bill Title *</label>
+            <select id="existing_bill" name="existing_bill" class="input">
+                <option value="">-- Create new bill --</option>
+                {% for bill in bills %}
+                <option value="{{ bill }}">{{ bill }}</option>
+                {% endfor %}
+            </select>
+            <input type="text" id="bill_title" name="bill_title" class="input" style="margin-top: 0.5rem;"
+                   placeholder="New bill title (if not selecting above)">
+        </div>
+
+        <div class="form-group">
+            <label>Select Items <span class="text-muted">({{ backlog|length }} in queue)</span></label>
+            <div class="select-all-row">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="select-all"> <strong>Select All</strong>
+                </label>
+            </div>
+            <div class="item-checklist">
+                {% for item in backlog %}
+                <label class="checkbox-card">
+                    <input type="checkbox" name="item_ids" value="{{ item.get('_table_index', '') }}">
+                    <div class="checkbox-card-content">
+                        <span class="item-name">{{ item.get('Item Name', 'Unnamed') }}</span>
+                        <span class="item-meta">
+                            {% set cost_str = item.get('Cost', '0')|string|replace('$','')|replace(',','') %}
+                            {% if cost_str and cost_str != '0' %}
+                            ${{ "%.2f"|format(cost_str|float(0)) }}
+                            {% if item.get('Quantity') and item.get('Quantity')|string != '1' %}
+                            × {{ item.get('Quantity') }}
+                            {% endif %}
+                            {% endif %}
+                            {% if item.get('Vendor') %}
+                            · {{ item.get('Vendor') }}
+                            {% endif %}
+                        </span>
+                    </div>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-block" id="create-btn" onclick="this.disabled=true; this.textContent='Creating...'; this.form.submit();">Create Bill</button>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-ghost btn-block">Cancel</a>
+        </div>
+    </form>
+
+    <script>
+        document.getElementById('select-all').addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('input[name="item_ids"]');
+            checkboxes.forEach(cb => cb.checked = this.checked);
+        });
+    </script>
+    {% endif %}
+</div>
+{% endblock %}

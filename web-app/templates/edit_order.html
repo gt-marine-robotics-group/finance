@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Edit Order: {{ order_id }} - MRG Purchasing{% endblock %}
+
+{% block content %}
+<div class="form-page" style="max-width: 900px;">
+    <h1>Edit Order: {{ order_id }}</h1>
+    <p class="text-muted" style="margin-bottom: 1.5rem;">
+        Edit individual line items or apply global changes to all {{ items|length }} item(s) in this order.
+    </p>
+
+    <form method="POST" action="{{ url_for('orders.edit_order', order_id=order_id) }}" class="item-form">
+        
+        <details class="bill-dropdown" style="margin-bottom: 1.5rem;" open>
+            <summary class="bill-header-toggle">
+                <h2>Batch Order Overrides</h2>
+            </summary>
+            <div style="padding: 1rem;">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="global_vendor">Global Vendor Override</label>
+                        <input type="text" id="global_vendor" name="global_vendor" class="input"
+                               placeholder="e.g. Amazon" value="{{ vendor }}">
+                    </div>
+                    <div class="form-group">
+                        <label for="global_purchaser">Global Purchaser Override</label>
+                        <input type="text" id="global_purchaser" name="global_purchaser" class="input"
+                               placeholder="e.g. Aaron" value="{{ purchaser }}">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="global_status">Global Status Override</label>
+                    <select id="global_status" name="global_status" class="input">
+                        <option value="">-- Keep Individual Statuses --</option>
+                        {% for status_opt in [
+                            'pending purchase', 'purchased - SOFO', 'purchased - cash',
+                            'purchased - awaiting reimbursement', 'arrived', 'bill approved',
+                            'review requested', 'canceled'
+                        ] %}
+                        <option value="{{ status_opt }}" {{ 'selected' if status_opt == status }}>{{ status_opt }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </details>
+
+        <h2 style="font-size: 1.1rem; margin-bottom: 1rem;">Line Items ({{ items|length }})</h2>
+
+        {% for item in items %}
+        {% set idx = loop.index0 %}
+        <div class="card" style="padding: 1rem; margin-bottom: 1rem; border: 1px solid var(--color-border); border-radius: var(--radius);">
+            <div style="font-weight: 600; margin-bottom: 0.5rem;">
+                Line Item #{{ idx + 1 }} {% if item.get('Bill Item ID') %}(Bill Item ID: {{ item.get('Bill Item ID') }}){% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="item_name_{{ idx }}">Item Name *</label>
+                <input type="text" id="item_name_{{ idx }}" name="item_name_{{ idx }}" required class="input"
+                       value="{{ item.get('Item Name', '') }}">
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="quantity_{{ idx }}">Quantity * {% if item.get('_max_bill_qty') %}(Max: {{ item.get('_max_bill_qty') }}){% endif %}</label>
+                    <input type="number" id="quantity_{{ idx }}" name="quantity_{{ idx }}"
+                           min="0.01" {% if item.get('_max_bill_qty') %}max="{{ item.get('_max_bill_qty') }}"{% endif %} step="any" required class="input"
+                           value="{{ item.get('Quantity', 1) }}">
+                </div>
+                <div class="form-group">
+                    <label for="vendor_{{ idx }}">Vendor</label>
+                    <input type="text" id="vendor_{{ idx }}" name="vendor_{{ idx }}" class="input"
+                           value="{{ item.get('Vendor', '') }}">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="purchaser_{{ idx }}">Purchaser</label>
+                    <input type="text" id="purchaser_{{ idx }}" name="purchaser_{{ idx }}" class="input"
+                           value="{{ item.get('Purchaser', '') }}">
+                </div>
+                <div class="form-group">
+                    <label for="status_{{ idx }}">Status</label>
+                    {% set cur_st = item.get('Status', '')|string|trim %}
+                    <select id="status_{{ idx }}" name="status_{{ idx }}" class="input">
+                        <option value="">-- Select --</option>
+                        {% for status_opt in [
+                            'pending purchase', 'purchased - SOFO', 'purchased - cash',
+                            'purchased - awaiting reimbursement', 'arrived', 'bill approved',
+                            'review requested', 'canceled'
+                        ] %}
+                        <option value="{{ status_opt }}" {{ 'selected' if status_opt == cur_st }}>{{ status_opt }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="ordering_instructions_{{ idx }}">Ordering Instructions (Read-Only from Bills Table)</label>
+                <input type="text" id="ordering_instructions_{{ idx }}" class="input" readonly
+                       style="background: rgba(0,0,0,0.03); color: var(--color-text-muted); cursor: not-allowed;"
+                       value="{{ item.get('_ordering_instructions', '') or item.get('Description', '') }}">
+            </div>
+        </div>
+        {% endfor %}
+
+        <div class="form-actions" style="margin-top: 1.5rem;">
+            <button type="submit" class="btn btn-primary btn-block">Save All Line Item Changes</button>
+            <a href="{{ url_for('orders.view_orders') }}" class="btn btn-ghost btn-block">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}500 - Server Error{% endblock %}
+
+{% block content %}
+<div class="card" style="text-align: center; margin-top: 3rem; padding: 2rem;">
+    <h2>500 - Internal Server Error</h2>
+    <p style="margin: 1rem 0; color: #64748b;">An unexpected error occurred while processing your request.</p>
+    {% if error_details %}
+    <p style="font-family: monospace; font-size: 0.85rem; color: #dc2626; background: #fef2f2; padding: 0.75rem; border-radius: 4px;">
+        {{ error_details }}
+    </p>
+    {% endif %}
+    <a href="{{ url_for('dashboard') }}" class="btn btn-primary" style="margin-top: 1rem;">Return to Dashboard</a>
+</div>
+{% endblock %}
