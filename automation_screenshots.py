@@ -1348,8 +1348,8 @@ def sync_screenshots_to_sharepoint():
         import subprocess
         print("☁️ Syncing screenshots up to SharePoint...")
         result = subprocess.run(
-            ["rclone", "copy", "--ignore-checksum", "--ignore-size", "--update", SAVE_FOLDER, "onedrive:OPS-1 Operations/FY27 Finances/screenshots"],
-            capture_output=True, text=True, timeout=60
+            ["rclone", "copy", "--ignore-checksum", "--ignore-size", "--update", "--transfers", "4", "--fast-list", SAVE_FOLDER, "onedrive:OPS-1 Operations/FY27 Finances/screenshots"],
+            capture_output=True, text=True, timeout=120
         )
         if result.returncode == 0:
             print("  ✅ Screenshots synced to SharePoint!")
@@ -1359,6 +1359,7 @@ def sync_screenshots_to_sharepoint():
         print(f"  ⚠️ SharePoint sync warning: {ex}")
 
 
+if __name__ == "__main__":
     sync_screenshots_to_sharepoint()
     from review_server import launch_review_server_and_browser
     launch_review_server_and_browser(REVIEW_HTML)
