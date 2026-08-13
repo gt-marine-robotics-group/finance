@@ -6,11 +6,11 @@ Automated bill request submission, purchase request automation, live price audit
 
 ## 🌟 Primary Priority Functions
 
-### 1️⃣ Priority 1: Submit Bill Requests (`mrg bill-request` / `automation.py`)
+### 1️⃣ Priority 1: Submit Bill Requests (`mrg-finance bill-request` / `automation.py`)
 - **Purpose**: Submits new draft budget bills to Georgia Tech CampusLabs Engage for SGA approval.
 - **Features**: Groups line items by budget section, verifies screenshot evidence for every item, and pre-fills the Engage bill form automatically.
 
-### 2️⃣ Priority 2: Submit Purchase Requests (`mrg purchase` / `automation_purchase.py`)
+### 2️⃣ Priority 2: Submit Purchase Requests (`mrg-finance purchase` / `automation_purchase.py`)
 - **Purpose**: Submits purchase requests to CampusLabs Engage for approved items ready to be ordered.
 - **Features**: Groups order items by vendor, checks live prices vs approved budget allocations, auto-adds items to Amazon carts, captures `cart.png` evidence, resolves exact live section & line numbers on Engage, and pre-fills the purchase request form.
 
@@ -43,7 +43,7 @@ Automated bill request submission, purchase request automation, live price audit
 <details>
 <summary><b>🌐 Layer 2: Web Application Dashboard & Review GUI</b></summary>
 
-- **`mrg.py`**: Unified CLI entrypoint supporting subcommands `mrg purchase`, `mrg bill-request`, `mrg review`, `mrg price-check`, `mrg screenshots`, and `mrg doctor`.
+- **`mrg.py`**: Unified CLI entrypoint supporting subcommands `mrg-finance purchase`, `mrg-finance bill-request`, `mrg-finance report`, `mrg-finance review`, `mrg-finance price-check`, `mrg-finance screenshots`, and `mrg-finance doctor`.
 - **`review_server.py`**: Micro HTTP server on port 8321. Serves `review.html` and handles `/save-prices` POST requests to update `FY27_Bills_Budget.xlsx` using openpyxl without opening Excel popups.
 - **`review.html`**: Interactive side-by-side screenshot and price review page with keyboard shortcuts (`←`/`A`, `→`/`D`, `1`, `2`, `Enter`), dark mode styling, and direct Excel saving.
 - **`web-app/app.py`**: Flask web application entrypoint registering blueprint routes (`auth`, `dashboard`, `bills`, `orders`, `items`, `screenshots`).
@@ -295,19 +295,19 @@ The application uses a **flexible matching algorithm** (`_find_file_in_dir`), so
 
 ---
 
-### 2. `mrg screenshots` — Scrape Prices & Capture Evidence
+### 2. `mrg-finance screenshots` — Scrape Prices & Capture Evidence
 
 Scrapes current product prices via headless Chrome and captures full-page product screenshots. Upon completion, it automatically opens the side-by-side review GUI.
 
 ```bash
 # Pull fresh spreadsheet & screenshots from SharePoint before running:
-mrg screenshots --fresh
+mrg-finance screenshots --fresh
 
 # Specify bill title directly:
-mrg screenshots --bill "FY27 Budget"
+mrg-finance screenshots --bill "FY27 Budget"
 
 # Launch review GUI directly using existing screenshots:
-mrg screenshots --review-only
+mrg-finance screenshots --review-only
 ```
 
 - **Ground-Truth Safeguard**: Existing baseline bill screenshots stored in `screenshots/<bill_title>/<item_name>.png` are **never overwritten**. Newly captured screenshots are stored alongside them for side-by-side comparison.
@@ -369,7 +369,7 @@ mrg price-check --fresh --bill "FY27 Budget" --cart
 
 ### 1. Side-by-Side Review Inspector (`http://localhost:8321`)
 
-When running `mrg review`, `mrg screenshots`, or `automation.py`, the system starts a local review server on port `8321` and opens **`http://localhost:8321`** in your browser.
+When running `mrg review`, `mrg-finance screenshots`, or `automation.py`, the system starts a local review server on port `8321` and opens **`http://localhost:8321`** in your browser.
 
 ```
 +-------------------------------------------------------------------------------+
