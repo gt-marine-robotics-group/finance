@@ -233,16 +233,14 @@ def main():
 
     order_id = args.order
     excel_path = args.excel_path
-    if not os.path.exists(excel_path):
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        local_fallback = os.path.join(script_dir, "FY27_Bills_Budget.xlsx")
-        user_fallback = os.path.expanduser("~/mrg/finance/FY27_Bills_Budget.xlsx")
-        if os.path.exists(local_fallback):
-            excel_path = local_fallback
-        elif os.path.exists(user_fallback):
-            excel_path = user_fallback
+    cwd_path = os.path.join(os.getcwd(), "FY27_Bills_Budget.xlsx")
+    repo_path = os.path.expanduser("~/mrg/finance/FY27_Bills_Budget.xlsx")
 
-    if not os.path.exists(excel_path):
+    if os.path.exists(cwd_path):
+        excel_path = cwd_path
+    elif os.path.exists(repo_path):
+        excel_path = repo_path
+    elif not os.path.exists(excel_path):
         print(f"❌ Master spreadsheet not found at {excel_path}")
         return
 
