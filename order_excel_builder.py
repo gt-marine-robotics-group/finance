@@ -85,6 +85,7 @@ def generate_order_budget_vs_quoted_excel(
     total_budget_grand = 0.0
     total_quoted_grand = 0.0
 
+    sub_row_indices = []
     bill_keys = list(bills_grouped.keys())
 
     for b_idx, sec_bill in enumerate(bill_keys):
@@ -148,6 +149,8 @@ def generate_order_budget_vs_quoted_excel(
 
         # Subtotal Row per Bill with live Excel SUM formulas
         sub_row_idx = curr_row
+        sub_row_indices.append(sub_row_idx)
+
         formula_sub_budget = f"=SUM(G{sec_start_row}:G{sec_end_row})"
         formula_sub_quoted = f"=SUM(J{sec_start_row}:J{sec_end_row})"
         formula_sub_variance = f"=J{sub_row_idx}-G{sub_row_idx}"
@@ -163,17 +166,18 @@ def generate_order_budget_vs_quoted_excel(
                 cell.alignment = Alignment(horizontal="right")
         curr_row += 1
 
-    # Grand Total Row with live Excel SUM formulas across all item rows
+    # Grand Total Row: Sum subtotal rows directly to avoid double-counting subtotal rows
     curr_row += 1
     grand_row_idx = curr_row
 
-    # Grand total sums all item totals (ignoring subtotal text rows)
-    item_rows = [r for r in range(5, curr_row - 1) if isinstance(ws.cell(row=r, column=1).value, str) and ws.cell(row=r, column=1).value.startswith("Line")]
-    if item_rows:
-        first_item_r = item_rows[0]
-        last_item_r = item_rows[-1]
-        formula_grand_budget = f"=SUM(G{first_item_r}:G{last_item_r})"
-        formula_grand_quoted = f"=SUM(J{first_item_r}:J{last_item_r})"
+    if len(sub_row_indices) == 1:
+        formula_grand_budget = f"=G{sub_row_indices[0]}"
+        formula_grand_quoted = f"=J{sub_row_indices[0]}"
+    elif len(sub_row_indices) > 1:
+        b_refs = ", ".join(f"G{r}" for r in sub_row_indices)
+        q_refs = ", ".join(f"J{r}" for r in sub_row_indices)
+        formula_grand_budget = f"=SUM({b_refs})"
+        formula_grand_quoted = f"=SUM({q_refs})"
     else:
         formula_grand_budget = "=0"
         formula_grand_quoted = "=0"
