@@ -1,6 +1,26 @@
-# ⚓ MRG Finance & Purchasing System
+# ⚓ Georgia Tech MRG Finance & Purchasing System
 
-Automated bill request submission, live price scraping, evidence screenshot auditing, side-by-side price verification, and purchase management for the **Georgia Tech Marine Robotics Group**.
+Automated bill request submission, purchase request automation, live price auditing, and budget spreadsheet management for the **Georgia Tech Marine Robotics Group**.
+
+---
+
+## 🌟 Primary Priority Functions
+
+### 1️⃣ Priority 1: Submit Bill Requests (`mrg bill-request` / `automation.py`)
+- **Purpose**: Submits new draft budget bills to Georgia Tech CampusLabs Engage for SGA approval.
+- **Features**: Groups line items by budget section, verifies screenshot evidence for every item, and pre-fills the Engage bill form automatically.
+
+### 2️⃣ Priority 2: Submit Purchase Requests (`mrg purchase` / `automation_purchase.py`)
+- **Purpose**: Submits purchase requests to CampusLabs Engage for approved items ready to be ordered.
+- **Features**: Groups order items by vendor, checks live prices vs approved budget allocations, auto-adds items to Amazon carts, captures `cart.png` evidence, resolves exact live section & line numbers on Engage, and pre-fills the purchase request form.
+
+---
+
+### 🛠️ Supporting Feature: Spreadsheet Item Management & Web GUI
+- **Purpose**: Easily add, edit, and review items in `FY27_Bills_Budget.xlsx`.
+- **GUI Tools**:
+  - **Side-by-Side Inspector (`http://localhost:8321`)**: Visually compare baseline bill screenshots against current live scraped prices.
+  - **Web Dashboard (`http://localhost:5000`)**: Full Flask web interface to paste product URLs, auto-scrape vendor details, and manage orders.
 
 ---
 
@@ -26,8 +46,13 @@ Ensure you have **Python 3.10+** installed. We recommend [`uv`](https://github.c
 
 ### 2. Clone Repository & Install CLI
 
-Clone the repository and set up your virtual environment:
+#### Option A: 1-Step Global CLI Installation (Use Anywhere!)
+```bash
+pipx install git+https://github.com/gt-marine-robotics-group/finance.git
+```
+*After running this once, `mrg purchase`, `mrg bill-request`, and `mrg doctor` work system-wide in any terminal window!*
 
+#### Option B: Local Editable Clone
 ```bash
 # 1. Clone the repository
 git clone git@github.com:gt-marine-robotics-group/finance.git
@@ -41,7 +66,7 @@ source .venv/bin/activate    # On Windows: .\.venv\Scripts\Activate.ps1
 uv pip install -e .
 ```
 
-After installation, the CLI is available as `mrg-finance`.
+After installation, the CLI is available as `mrg` (or `mrg-finance`).
 
 ---
 
@@ -87,24 +112,26 @@ rclone ls "onedrive:OPS-1 Operations/FY27 Finances"
 
 ---
 
-## 🤖 CLI Usage & Workflows (`mrg-finance`)
+## 🤖 CLI Usage & Workflows (`mrg` / `mrg-finance`)
 
-The `mrg-finance` CLI tool provides end-to-end automation for price scraping, side-by-side screenshot verification, bill submissions, and purchase tracking.
+The `mrg` CLI tool provides end-to-end automation for price scraping, side-by-side screenshot verification, bill submissions, and purchase tracking.
 
 ```
 Usage:
-    mrg-finance review [--bill TITLE]
-    mrg-finance screenshots [--fresh] [--bill TITLE] [--review-only]
-    mrg-finance bill-request [--fresh]
-    mrg-finance purchase [--fresh] [--order ORDER_ID]
-    mrg-finance price-check [--fresh] [--bill TITLE] [--cart]
+    mrg doctor [--fresh]
+    mrg bill-request [--fresh]
+    mrg purchase [--fresh] [--order ORDER_ID]
+    mrg review [--bill TITLE]
+    mrg price-check [--fresh] [--bill TITLE]
+    mrg screenshots [--fresh] [--bill TITLE] [--review-only]
 
 Commands:
+    doctor          Run pre-flight health audit on FY27_Bills_Budget.xlsx
+    bill-request    Submit a bill request to CampusLabs Engage (Priority 1)
+    purchase        Submit purchase requests to Engage (Priority 2)
     review          Launch side-by-side screenshot & price review GUI
-    screenshots     Scrape prices + capture full-page screenshots for a bill
-    bill-request    Submit a bill request to CampusLabs Engage
-    purchase        Submit purchase requests to Engage (grouped by vendor)
     price-check     Check live prices vs budget allocation & warn on overrun
+    screenshots     Scrape prices + capture full-page screenshots for a bill
 ```
 
 ---
