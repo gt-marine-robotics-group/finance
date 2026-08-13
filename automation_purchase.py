@@ -552,21 +552,43 @@ for r in requests_to_submit:
 # === Submit Purchase Requests ===
 results = {"success": [], "failed": []}
 
-# Build a single purchase request with all items
-order_subject = f"{vendor_name} Purchase {purchase_date}"
-order_description = "\n".join(
-    f"- {r['item_name']} (x{r['quantity']}) — ${r['total']:.2f} [{r.get('engage_line_ref') or r.get('bill_line_ref') or 'Line lookup pending'}]"
-    for r in requests_to_submit
-)
+# Subject line format: Marine Robotics Group "Vendor" Purchase Request YYYY-MM-DD
+order_subject = f"Marine Robotics Group {vendor_name} Purchase Request {purchase_date}"
+
+# Description field is left completely blank
+order_description = ""
 order_amount = grand_total
 
-# Collect unique line references
-unique_refs = []
+# SGA Bill Box text: Each item with Price, Line Number, Bill Number, Section Name (NO item name included)
+sga_box_lines = []
+ref_list = []
 for r in requests_to_submit:
-    ref = r.get('engage_line_ref') or r.get('bill_line_ref') or ""
-    if ref and ref not in unique_refs:
-        unique_refs.append(ref)
-order_bill_refs = ", ".join(unique_refs)
+    bill_no_val = str(r.get("bill_no") or bill_no or "").strip()
+    loc = (bill_line_cache.get(bill_no_val) or {}).get(r["item_name"])
+    line_id = loc.get("section_line_number") or loc.get("line_number") or r.get("bill_item_id") or "" if loc else r.get("bill_item_id") or ""
+    sec = str(loc.get("section") or "").strip() if loc else ""
+
+    line_str = f"Line {line_id}" if line_id else ""
+    bill_str = f"Bill {bill_no_val}" if bill_no_val else ""
+
+    # SGA Box item text (price, line, bill, section — NO item name)
+    sga_parts = [f"${r['total']:.2f}"]
+    if line_str:
+        sga_parts.append(line_str)
+    if bill_str:
+        sga_parts.append(bill_str)
+    if sec and sec != "Unknown Section":
+        sga_parts.append(sec)
+    sga_box_lines.append(", ".join(sga_parts))
+
+    # Line, Bill, Section ref for Budget/Bill & Line # box
+    if sec and sec != "Unknown Section":
+        ref_list.append(f"Bill {bill_no_val}, {sec}, Line {line_id}")
+    else:
+        ref_list.append(f"Bill {bill_no_val}, Line {line_id}")
+
+sga_bill_box_text = "\n".join(sga_box_lines)
+order_bill_refs = ", ".join(ref_list)
 
 print(f"\n{'='*60}")
 print(f"Submitting 1 purchase request with {len(requests_to_submit)} line items")
@@ -593,12 +615,11 @@ try:
     subject.clear()
     subject.send_keys(order_subject)
 
-    # Fill Description (all items listed)
+    # Fill Description (left completely blank as requested)
     try:
         desc_field = driver.find_element(By.ID, "Description")
         desc_field.clear()
-        desc_field.send_keys(order_description)
-        print(f"  📝 Filled Description ({len(requests_to_submit)} item(s) listed)")
+        print("  📝 Description field left blank as requested")
     except Exception:
         pass
 
@@ -628,17 +649,36 @@ try:
     if not amount_filled:
         print("  ⚠️ Could not find Amount field")
 
-    # Fill Bill # and Line # field using the live form labels instead of placeholder guesses.
+    # Fill SGA Bill Box (Price, Line Number, Bill Number, Section Name — NO item names)
+    sga_filled = False
+    sga_labels = ["SGA Bill", "SGA", "Bill Box", "SGA Details", "Bill Details"]
+    for label in sga_labels:
+        try:
+            label_elem = driver.find_element(By.XPATH, f"//*[contains(normalize-space(.), '{label}')][not(ancestor::*[contains(@style,'display: none') or contains(@class,'hidden')])]")
+            parent = label_elem.find_element(By.XPATH, "./ancestor::div[contains(@class,'form-group')] | ./ancestor::label | ./ancestor::td | ./ancestor::div[contains(@class,'field')] | ./ancestor::div[contains(@class,'form-field')] | ./ancestor::*[self::div or self::label][contains(@class,'input')]")
+            inputs = parent.find_elements(By.CSS_SELECTOR, "textarea, input")
+            if inputs:
+                field = inputs[0]
+                field.clear()
+                field.send_keys(sga_bill_box_text)
+                sga_filled = True
+                print(f"  ✅ Filled SGA Bill Box with item details (Item names excluded)")
+                break
+        except Exception:
+            pass
+
+    # Fill 'What is the Budget/Bill # and Request Line #? (Ex. Bill 376582, Line 4)' field
     bill_line_filled = False
     try:
         target_labels = [
+            "What is the Budget/Bill # and Request Line #?",
+            "Budget/Bill # and Request Line #",
+            "Budget/Bill",
+            "Bill/Line",
+            "Request Line #",
+            "Bill 376582",
             "Bill",
             "Budget",
-            "Line",
-            "Bill/Line",
-            "Budget/Bill",
-            "Bill Number",
-            "Budget Reference",
         ]
         for label in target_labels:
             try:
@@ -653,7 +693,7 @@ try:
                         field.clear()
                         field.send_keys(order_bill_refs)
                     bill_line_filled = True
-                    print(f"  ✅ Filled Bill/Line ref: {order_bill_refs}")
+                    print(f"  ✅ Filled Budget/Bill & Line # box: {order_bill_refs}")
                     break
             except Exception:
                 pass
@@ -667,7 +707,7 @@ try:
                         field.clear()
                         field.send_keys(order_bill_refs)
                     bill_line_filled = True
-                    print(f"  ✅ Filled Bill/Line ref: {order_bill_refs}")
+                    print(f"  ✅ Filled Budget/Bill & Line # box: {order_bill_refs}")
                     break
     except Exception as e:
         print(f"  ⚠️ Could not fill Bill/Line field: {e}")
