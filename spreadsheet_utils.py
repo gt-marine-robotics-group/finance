@@ -143,8 +143,14 @@ def read_sheet_robust(excel_file: pd.ExcelFile | str | openpyxl.Workbook, sheet_
             best_match_count = matches
             header_row_idx = row_idx
 
-    df = pd.read_excel(excel_file, sheet_name=sheet_name, header=header_row_idx).astype(object).fillna("")
-    df.columns = [str(c).strip() for c in df.columns]
+    if isinstance(excel_file, openpyxl.Workbook):
+        header_vals = [str(c).strip() if c is not None else "" for c in df_raw.iloc[header_row_idx]]
+        df_rows = df_raw.iloc[header_row_idx + 1:].copy()
+        df_rows.columns = header_vals
+        df = df_rows.astype(object).fillna("")
+    else:
+        df = pd.read_excel(excel_file, sheet_name=sheet_name, header=header_row_idx).astype(object).fillna("")
+        df.columns = [str(c).strip() for c in df.columns]
     return df
 
 
