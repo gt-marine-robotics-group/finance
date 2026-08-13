@@ -649,70 +649,65 @@ try:
     if not amount_filled:
         print("  ⚠️ Could not find Amount field")
 
-    # Fill SGA Bill Box (Price, Line Number, Bill Number, Section Name — NO item names)
-    sga_filled = False
-    sga_labels = ["SGA Bill", "SGA", "Bill Box", "SGA Details", "Bill Details"]
-    for label in sga_labels:
+    # Fill 'What is the Budget/Bill # and Request Line #? (Ex. Bill 376582, Line 4)' field
+    bill_line_filled = False
+    bill_line_queries = [
+        "//*[contains(normalize-space(.), 'What is the Budget/Bill # and Request Line #')]/following::textarea[1] | //*[contains(normalize-space(.), 'What is the Budget/Bill # and Request Line #')]/following::input[1]",
+        "//*[contains(normalize-space(.), 'Bill 376582')]/following::textarea[1] | //*[contains(normalize-space(.), 'Bill 376582')]/following::input[1]",
+        "//*[contains(normalize-space(.), 'Request Line #')]/following::textarea[1] | //*[contains(normalize-space(.), 'Request Line #')]/following::input[1]",
+        "//*[contains(normalize-space(.), 'Budget/Bill')]/following::textarea[1] | //*[contains(normalize-space(.), 'Budget/Bill')]/following::input[1]",
+    ]
+    for query in bill_line_queries:
         try:
-            label_elem = driver.find_element(By.XPATH, f"//*[contains(normalize-space(.), '{label}')][not(ancestor::*[contains(@style,'display: none') or contains(@class,'hidden')])]")
-            parent = label_elem.find_element(By.XPATH, "./ancestor::div[contains(@class,'form-group')] | ./ancestor::label | ./ancestor::td | ./ancestor::div[contains(@class,'field')] | ./ancestor::div[contains(@class,'form-field')] | ./ancestor::*[self::div or self::label][contains(@class,'input')]")
-            inputs = parent.find_elements(By.CSS_SELECTOR, "textarea, input")
-            if inputs:
-                field = inputs[0]
-                field.clear()
-                field.send_keys(sga_bill_box_text)
-                sga_filled = True
-                print(f"  ✅ Filled SGA Bill Box with item details (Item names excluded)")
+            elems = driver.find_elements(By.XPATH, query)
+            if elems:
+                field = elems[0]
+                if field.get_attribute("readonly") or field.get_attribute("disabled"):
+                    driver.execute_script("arguments[0].value = arguments[1]; arguments[0].dispatchEvent(new Event('input', {bubbles: true})); arguments[0].dispatchEvent(new Event('change', {bubbles: true}));", field, order_bill_refs)
+                else:
+                    field.clear()
+                    field.send_keys(order_bill_refs)
+                bill_line_filled = True
+                print(f"  ✅ Filled 'What is the Budget/Bill # and Request Line #' field: {order_bill_refs}")
                 break
         except Exception:
             pass
 
-    # Fill 'What is the Budget/Bill # and Request Line #? (Ex. Bill 376582, Line 4)' field
-    bill_line_filled = False
-    try:
-        target_labels = [
-            "What is the Budget/Bill # and Request Line #?",
-            "Budget/Bill # and Request Line #",
-            "Budget/Bill",
-            "Bill/Line",
-            "Request Line #",
-            "Bill 376582",
-            "Bill",
-            "Budget",
-        ]
-        for label in target_labels:
-            try:
-                label_elem = driver.find_element(By.XPATH, f"//*[contains(normalize-space(.), '{label}')][not(ancestor::*[contains(@style,'display: none') or contains(@class,'hidden')])]")
-                parent = label_elem.find_element(By.XPATH, "./ancestor::div[contains(@class,'form-group')] | ./ancestor::label | ./ancestor::td | ./ancestor::div[contains(@class,'field')] | ./ancestor::div[contains(@class,'form-field')] | ./ancestor::*[self::div or self::label][contains(@class,'input')] ")
-                inputs = parent.find_elements(By.CSS_SELECTOR, "input, textarea")
-                if inputs:
-                    field = inputs[0]
-                    if field.get_attribute("readonly") or field.get_attribute("disabled"):
-                        driver.execute_script("arguments[0].value = arguments[1]; arguments[0].dispatchEvent(new Event('input', {bubbles: true})); arguments[0].dispatchEvent(new Event('change', {bubbles: true}));", field, order_bill_refs)
-                    else:
-                        field.clear()
-                        field.send_keys(order_bill_refs)
-                    bill_line_filled = True
-                    print(f"  ✅ Filled Budget/Bill & Line # box: {order_bill_refs}")
-                    break
-            except Exception:
-                pass
-        if not bill_line_filled:
-            for field in driver.find_elements(By.CSS_SELECTOR, 'input[type="text"], textarea'):
-                type_name = (field.get_attribute("name") or field.get_attribute("id") or "").lower()
-                if any(k in type_name for k in ["bill", "budget", "line", "reference"]):
-                    if field.get_attribute("readonly") or field.get_attribute("disabled"):
-                        driver.execute_script("arguments[0].value = arguments[1]; arguments[0].dispatchEvent(new Event('input', {bubbles: true})); arguments[0].dispatchEvent(new Event('change', {bubbles: true}));", field, order_bill_refs)
-                    else:
-                        field.clear()
-                        field.send_keys(order_bill_refs)
-                    bill_line_filled = True
-                    print(f"  ✅ Filled Budget/Bill & Line # box: {order_bill_refs}")
-                    break
-    except Exception as e:
-        print(f"  ⚠️ Could not fill Bill/Line field: {e}")
-    if not bill_line_filled:
-        print("  ⚠️ Bill/Line field not found on current Engage form; please fill it manually.")
+    # Fill SGA Bill Box: 'Include Bill # and total reimbursement amount below ($ Per line item)' under SGA Bill
+    sga_filled = False
+    sga_queries = [
+        "//*[contains(normalize-space(.), 'Include Bill # and total reimbursement amount below')]/following::textarea[1] | //*[contains(normalize-space(.), 'Include Bill # and total reimbursement amount below')]/following::input[1]",
+        "//*[contains(normalize-space(.), 'SGA Bill')]/following::textarea[1] | //*[contains(normalize-space(.), 'SGA Bill')]/following::input[1]",
+        "//*[contains(normalize-space(.), 'Bill Details')]/following::textarea[1] | //*[contains(normalize-space(.), 'Bill Details')]/following::input[1]",
+    ]
+    for query in sga_queries:
+        try:
+            elems = driver.find_elements(By.XPATH, query)
+            if elems:
+                field = elems[0]
+                field.clear()
+                field.send_keys(sga_bill_box_text)
+                sga_filled = True
+                print("  ✅ Filled SGA Bill Box with item details (Item names excluded)")
+                break
+        except Exception:
+            pass
+
+    # Fallback to Description Box if custom form fields could not be populated
+    if not sga_filled or not bill_line_filled:
+        try:
+            desc_field = driver.find_element(By.ID, "Description")
+            fallback_parts = []
+            if sga_bill_box_text:
+                fallback_parts.append(f"SGA Bill Item Details:\n{sga_bill_box_text}")
+            if order_bill_refs:
+                fallback_parts.append(f"Budget/Bill References:\n{order_bill_refs}")
+            fallback_text = "\n\n".join(fallback_parts)
+            desc_field.clear()
+            desc_field.send_keys(fallback_text)
+            print("  📝 Loaded details into Description box (Fallback)")
+        except Exception:
+            pass
 
     # Upload cart screenshot if available
     cart_screenshot = os.path.join("screenshots", selected_order_id, "cart.png")
