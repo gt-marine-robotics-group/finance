@@ -16,11 +16,71 @@ Automated bill request submission, purchase request automation, live price audit
 
 ---
 
+---
+
 ### 🛠️ Supporting Feature: Spreadsheet Item Management & Web GUI
 - **Purpose**: Easily add, edit, and review items in `FY27_Bills_Budget.xlsx`.
 - **GUI Tools**:
   - **Side-by-Side Inspector (`http://localhost:8321`)**: Visually compare baseline bill screenshots against current live scraped prices.
   - **Web Dashboard (`http://localhost:5000`)**: Full Flask web interface to paste product URLs, auto-scrape vendor details, and manage orders.
+
+---
+
+## 🗺️ Complete Repository Architecture & Code Map
+
+<details>
+<summary><b>🤖 Layer 1: Core Automation Engine (CampusLabs Engage Forms & Price Scraping)</b></summary>
+
+- **`automation.py`**: Priority 1 SGA Bill Request automation script. Navigates CampusLabs Engage Angular SPA (`...#/edit/{bill_no}`), creates/edits bills, populates budget sections, uploads screenshot evidence, and verifies created items.
+- **`automation_purchase.py`**: Priority 2 Purchase Request automation script. Groups order items by vendor, checks live prices vs approved allocations, pre-fills Subject (`Marine Robotics Group Vendor Purchase Request YYYY-MM-DD`), Amount, SGA Bill Box (price/line/bill/section), and Budget/Bill Line # fields, with Description box fallback.
+- **`engage_bill_lookup.py`**: Engage DOM scraper module. Navigates to Engage bill pages, clicks the "Budget" tab, traverses section anchors (`h4.groupTitle`), and extracts section names and 1-based section line numbers.
+- **`engage_tools.py`**: Shared Selenium browser helper functions for GT SSO login (`USERNAME`/`PASSWORD`), 3-minute Duo MFA verification, and hidden file upload input handling.
+- **`price_scraper.py`**: Multi-vendor live price scraper and parser. Extracts unit prices from JSON-LD schema, OpenGraph meta tags, Amazon buyboxes, McMaster-Carr, DigiKey, Mouser, Adafruit, SparkFun, and Pololu.
+- **`automation_screenshots.py`**: Headless Chrome full-page screenshot capture engine. Resolves baseline bill screenshots vs scraped order screenshots and generates `review.html` for side-by-side inspection.
+
+</details>
+
+<details>
+<summary><b>🌐 Layer 2: Web Application Dashboard & Review GUI</b></summary>
+
+- **`mrg.py`**: Unified CLI entrypoint supporting subcommands `mrg purchase`, `mrg bill-request`, `mrg review`, `mrg price-check`, `mrg screenshots`, and `mrg doctor`.
+- **`review_server.py`**: Micro HTTP server on port 8321. Serves `review.html` and handles `/save-prices` POST requests to update `FY27_Bills_Budget.xlsx` using openpyxl without opening Excel popups.
+- **`review.html`**: Interactive side-by-side screenshot and price review page with keyboard shortcuts (`←`/`A`, `→`/`D`, `1`, `2`, `Enter`), dark mode styling, and direct Excel saving.
+- **`web-app/app.py`**: Flask web application entrypoint registering blueprint routes (`auth`, `dashboard`, `bills`, `orders`, `items`, `screenshots`).
+- **`web-app/xlsx_manager.py`**: Core Excel database engine. Manages `FY27_Bills_Budget.xlsx` via openpyxl and Microsoft Graph API, preserving cell formulas (`IFERROR`, `SUM`), row formatting, and O(1) in-memory caching.
+- **`web-app/screenshot_worker.py`**: Async background thread worker that monitors item creation queue and automatically generates product screenshots.
+- **`web-app/routes/`**: Modular Flask blueprints:
+  - **`auth.py`**: GT username SSO login session management.
+  - **`dashboard.py`**: Bill dashboard, total cost calculation, and quick-add bar.
+  - **`bills.py`**: Bill review page, inline line item editing, and screenshot triggers.
+  - **`orders.py`**: Order creation, vendor grouping, order quantity editing, and side-by-side order review.
+  - **`items.py`**: Quick-add URL parser and queue item management.
+  - **`screenshots.py`**: Static image serving and screenshot asset routes.
+
+</details>
+
+<details>
+<summary><b>🛡️ Layer 3: Spreadsheet Resilience & Pre-Flight Diagnostics</b></summary>
+
+- **`spreadsheet_utils.py`**: Robust Excel loading, dynamic header row detection (rows 0-10), fuzzy column alias resolution (`COLUMN_ALIASES`), float ID sanitization (`376851.0` ➔ `"376851"`), and `validate_budget_spreadsheet()` health checker.
+- **`FY27_Bills_Budget.xlsx`**: Master budget spreadsheet containing `Bills` sheet (approved SGA allocations) and `Ordering` sheet (OrderT order groups).
+- **`screenshots/`**: Evidence screenshot directory structured by bill title (`screenshots/<Bill Title>/<Item Name>.png`) and order ID (`screenshots/<Order ID>/<Item Name>.png`).
+
+</details>
+
+<details>
+<summary><b>📖 Layer 4: Configuration, Tests & Documentation</b></summary>
+
+- **`pyproject.toml`**: Setuptools build metadata and global CLI script entrypoints (`mrg = "mrg:main"`, `mrg-finance = "mrg:main"`).
+- **`USAGE_GUIDE.md`**: Comprehensive student usage guide, 5-minute setup, 1-step `pipx` global CLI installation, and developer code map.
+- **`DEVELOPMENT.md`**: Developer architecture guide, Flask blueprint structure, and technical reference.
+- **`tests/`**: Pytest automated test suite:
+  - **`test_app_routes.py`**: Flask web app endpoint & blueprint unit tests.
+  - **`test_engage_bill_lookup.py`**: Engage DOM parser and line number unit tests.
+  - **`test_price_scraper.py`**: Multi-vendor price parsing unit tests.
+  - **`test_xlsx_manager.py`**: Excel formula preservation and cell PATCHing unit tests.
+
+</details>
 
 ---
 
