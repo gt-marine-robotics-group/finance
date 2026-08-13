@@ -30,18 +30,21 @@ import price_scraper
 
 # === Paths ===
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-LOCAL_XLSX = os.path.join(SCRIPT_DIR, "FY27_Bills_Budget.xlsx")
+CWD_XLSX = os.path.join(os.getcwd(), "FY27_Bills_Budget.xlsx")
+REPO_XLSX = os.path.expanduser("~/mrg/finance/FY27_Bills_Budget.xlsx")
 ONEDRIVE_XLSX = os.path.expanduser(
     "~/Library/CloudStorage/OneDrive-GeorgiaInstituteofTechnology/"
     "Documents - Marine Robotics Group/OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx"
 )
 
-if os.path.exists(LOCAL_XLSX):
-    DEFAULT_XLSX = LOCAL_XLSX
+if os.path.exists(CWD_XLSX):
+    DEFAULT_XLSX = CWD_XLSX
+elif os.path.exists(REPO_XLSX):
+    DEFAULT_XLSX = REPO_XLSX
 elif os.path.exists(ONEDRIVE_XLSX):
     DEFAULT_XLSX = ONEDRIVE_XLSX
 else:
-    DEFAULT_XLSX = os.path.expanduser("~/mrg/finance/FY27_Bills_Budget.xlsx")
+    DEFAULT_XLSX = REPO_XLSX
 
 XLSX_PATH = os.environ.get("FINANCE_XLSX_PATH", DEFAULT_XLSX)
 SHEET_NAME = "Bills"
