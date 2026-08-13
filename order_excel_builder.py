@@ -191,3 +191,78 @@ def generate_order_budget_vs_quoted_excel(
             writer.writerow([v if v is not None else "" for v in row])
 
     return xlsx_path, csv_path
+
+
+def main():
+    import argparse
+    import pandas as pd
+    import spreadsheet_utils
+    import price_scraper
+
+    parser = argparse.ArgumentParser(description="Generate Budget vs Quoted Full Detail Excel and CSV comparison reports.")
+    parser.add_argument("--order", required=True, help="Order ID (e.g. 260811_amazon_awu335)")
+    parser.add_argument("--excel-path", default="FY27_Bills_Budget.xlsx", help="Path to master Excel file")
+    args = parser.parse_args()
+
+    order_id = args.order
+    excel_path = args.excel_path
+    if not os.path.exists(excel_path):
+        excel_path = os.path.expanduser("~/mrg/finance/FY27_Bills_Budget.xlsx")
+
+    if not os.path.exists(excel_path):
+        print(f"❌ Master spreadsheet not found at {excel_path}")
+        return
+
+    ef = pd.ExcelFile(excel_path)
+    df_bills = spreadsheet_utils.read_sheet_robust(ef, ["Bills", "Bill", "Budget"])
+    bill_item_map = {spreadsheet_utils.get_col_val(r.to_dict(), "bill_item_id"): r.to_dict() for _, r in df_bills.iterrows() if spreadsheet_utils.get_col_val(r.to_dict(), "bill_item_id")}
+
+    df_orders = spreadsheet_utils.read_sheet_robust(ef, ["Ordering", "Orders", "OrderT"])
+    oid_col = next((c for c in df_orders.columns if "order" in str(c).lower()), "Order ID")
+
+    order_rows = [r for _, r in df_orders.iterrows() if str(r.get(oid_col, "")).strip() == order_id]
+    if not order_rows:
+        print(f"❌ Order '{order_id}' not found in {excel_path}")
+        return
+
+    requests_to_submit = []
+    scraped_results = {}
+    print(f"🔍 Loading {len(order_rows)} item(s) for order {order_id}...")
+    for i, row in enumerate(order_rows, 1):
+        b_id = spreadsheet_utils.get_col_val(row.to_dict(), "bill_item_id")
+        b_row = bill_item_map.get(b_id, {})
+        b_no = spreadsheet_utils.get_col_val(b_row, "bill_no") or spreadsheet_utils.get_col_val(row.to_dict(), "bill_no") or "376851"
+        item_name = spreadsheet_utils.get_col_val(row.to_dict(), "item_name") or spreadsheet_utils.get_col_val(b_row, "item_name")
+        sec = spreadsheet_utils.get_col_val(b_row, "budget_section") or "B03 - General Inventoried Goods"
+        link = spreadsheet_utils.get_col_val(row.to_dict(), "link") or spreadsheet_utils.get_col_val(b_row, "link")
+        cost = spreadsheet_utils.safe_float(b_row.get("Cost", row.to_dict().get("Allocation", 0)))
+        qty = spreadsheet_utils.safe_int(row.to_dict().get("Quantity", 1))
+
+        if link and link.startswith("http"):
+            res = price_scraper.scrape_item_price(link)
+            if res and res.get("current_price") is not None:
+                scraped_results[item_name] = res["current_price"]
+
+        requests_to_submit.append({
+            "item_name": item_name,
+            "quantity": qty,
+            "cost": cost,
+            "total": cost * qty,
+            "bill_no": b_no,
+            "bill_item_id": b_id,
+            "link": link
+        })
+
+    xlsx_path, csv_path = generate_order_budget_vs_quoted_excel(
+        order_id=order_id,
+        requests_to_submit=requests_to_submit,
+        scraped_results=scraped_results
+    )
+
+    print(f"\n✅ Report Generation Complete!")
+    print(f"  📗 Excel Spreadsheet: {xlsx_path}")
+    print(f"  📄 CSV Spreadsheet:   {csv_path}")
+
+
+if __name__ == "__main__":
+    main()
