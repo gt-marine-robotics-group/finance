@@ -4,109 +4,11 @@ Automated bill request submission, purchase request automation, live price audit
 
 ---
 
-## 🌟 Primary Priority Functions
+## 🛠️ Quick Setup & Installation
 
-### 1️⃣ Priority 1: Submit Bill Requests (`mrg-finance bill-request` / `automation.py`)
-- **Purpose**: Submits new draft budget bills to Georgia Tech CampusLabs Engage for SGA approval.
-- **Features**: Groups line items by budget section, verifies screenshot evidence for every item, and pre-fills the Engage bill form automatically.
+### 1. Install CLI Tool (1-Step Global Access)
 
-### 2️⃣ Priority 2: Submit Purchase Requests (`mrg-finance purchase` / `automation_purchase.py`)
-- **Purpose**: Submits purchase requests to CampusLabs Engage for approved items ready to be ordered.
-- **Features**: Groups order items by vendor, checks live prices vs approved budget allocations, auto-adds items to Amazon carts, captures `cart.png` evidence, resolves exact live section & line numbers on Engage, and pre-fills the purchase request form.
-
----
-
----
-
-### 🛠️ Supporting Feature: Spreadsheet Item Management & Web GUI
-- **Purpose**: Easily add, edit, and review items in `FY27_Bills_Budget.xlsx`.
-- **GUI Tools**:
-  - **Side-by-Side Inspector (`http://localhost:8321`)**: Visually compare baseline bill screenshots against current live scraped prices.
-  - **Web Dashboard (`http://localhost:5000`)**: Full Flask web interface to paste product URLs, auto-scrape vendor details, and manage orders.
-
----
-
-## 🗺️ Complete Repository Architecture & Code Map
-
-<details>
-<summary><b>🤖 Layer 1: Core Automation Engine (CampusLabs Engage Forms & Price Scraping)</b></summary>
-
-- **`automation.py`**: Priority 1 SGA Bill Request automation script. Navigates CampusLabs Engage Angular SPA (`...#/edit/{bill_no}`), creates/edits bills, populates budget sections, uploads screenshot evidence, and verifies created items.
-- **`automation_purchase.py`**: Priority 2 Purchase Request automation script. Groups order items by vendor, checks live prices vs approved allocations, pre-fills Subject (`Marine Robotics Group Vendor Purchase Request YYYY-MM-DD`), Amount, SGA Bill Box (price/line/bill/section), and Budget/Bill Line # fields, with Description box fallback.
-- **`engage_bill_lookup.py`**: Engage DOM scraper module. Navigates to Engage bill pages, clicks the "Budget" tab, traverses section anchors (`h4.groupTitle`), and extracts section names and 1-based section line numbers.
-- **`engage_tools.py`**: Shared Selenium browser helper functions for GT SSO login (`USERNAME`/`PASSWORD`), 3-minute Duo MFA verification, and hidden file upload input handling.
-- **`price_scraper.py`**: Multi-vendor live price scraper and parser. Extracts unit prices from JSON-LD schema, OpenGraph meta tags, Amazon buyboxes, McMaster-Carr, DigiKey, Mouser, Adafruit, SparkFun, and Pololu.
-- **`automation_screenshots.py`**: Headless Chrome full-page screenshot capture engine. Resolves baseline bill screenshots vs scraped order screenshots and generates `review.html` for side-by-side inspection.
-
-</details>
-
-<details>
-<summary><b>🌐 Layer 2: Web Application Dashboard & Review GUI</b></summary>
-
-- **`mrg.py`**: Unified CLI entrypoint supporting subcommands `mrg-finance purchase`, `mrg-finance bill-request`, `mrg-finance report`, `mrg-finance review`, `mrg-finance price-check`, `mrg-finance screenshots`, and `mrg-finance doctor`.
-- **`review_server.py`**: Micro HTTP server on port 8321. Serves `review.html` and handles `/save-prices` POST requests to update `FY27_Bills_Budget.xlsx` using openpyxl without opening Excel popups.
-- **`review.html`**: Interactive side-by-side screenshot and price review page with keyboard shortcuts (`←`/`A`, `→`/`D`, `1`, `2`, `Enter`), dark mode styling, and direct Excel saving.
-- **`web-app/app.py`**: Flask web application entrypoint registering blueprint routes (`auth`, `dashboard`, `bills`, `orders`, `items`, `screenshots`).
-- **`web-app/xlsx_manager.py`**: Core Excel database engine. Manages `FY27_Bills_Budget.xlsx` via openpyxl and Microsoft Graph API, preserving cell formulas (`IFERROR`, `SUM`), row formatting, and O(1) in-memory caching.
-- **`web-app/screenshot_worker.py`**: Async background thread worker that monitors item creation queue and automatically generates product screenshots.
-- **`web-app/routes/`**: Modular Flask blueprints:
-  - **`auth.py`**: GT username SSO login session management.
-  - **`dashboard.py`**: Bill dashboard, total cost calculation, and quick-add bar.
-  - **`bills.py`**: Bill review page, inline line item editing, and screenshot triggers.
-  - **`orders.py`**: Order creation, vendor grouping, order quantity editing, and side-by-side order review.
-  - **`items.py`**: Quick-add URL parser and queue item management.
-  - **`screenshots.py`**: Static image serving and screenshot asset routes.
-
-</details>
-
-<details>
-<summary><b>🛡️ Layer 3: Spreadsheet Resilience & Pre-Flight Diagnostics</b></summary>
-
-- **`spreadsheet_utils.py`**: Robust Excel loading, dynamic header row detection (rows 0-10), fuzzy column alias resolution (`COLUMN_ALIASES`), float ID sanitization (`376851.0` ➔ `"376851"`), and `validate_budget_spreadsheet()` health checker.
-- **`FY27_Bills_Budget.xlsx`**: Master budget spreadsheet containing `Bills` sheet (approved SGA allocations) and `Ordering` sheet (OrderT order groups).
-- **`screenshots/`**: Evidence screenshot directory structured by bill title (`screenshots/<Bill Title>/<Item Name>.png`) and order ID (`screenshots/<Order ID>/<Item Name>.png`).
-
-</details>
-
-<details>
-<summary><b>📖 Layer 4: Configuration, Tests & Documentation</b></summary>
-
-- **`pyproject.toml`**: Setuptools build metadata and global CLI script entrypoints (`mrg = "mrg:main"`, `mrg-finance = "mrg:main"`).
-- **`USAGE_GUIDE.md`**: Comprehensive student usage guide, 5-minute setup, 1-step `pipx` global CLI installation, and developer code map.
-- **`DEVELOPMENT.md`**: Developer architecture guide, Flask blueprint structure, and technical reference.
-- **`tests/`**: Pytest automated test suite:
-  - **`test_app_routes.py`**: Flask web app endpoint & blueprint unit tests.
-  - **`test_engage_bill_lookup.py`**: Engage DOM parser and line number unit tests.
-  - **`test_price_scraper.py`**: Multi-vendor price parsing unit tests.
-  - **`test_xlsx_manager.py`**: Excel formula preservation and cell PATCHing unit tests.
-
-</details>
-
----
-
-## 🛠️ Prerequisites & System Setup
-
-Follow this step-by-step setup guide to configure your environment, install the CLI, and connect to SharePoint cloud sync.
-
-### 1. Python & UV Package Manager
-
-Ensure you have **Python 3.10+** installed. We recommend [`uv`](https://github.com/astral-sh/uv) for fast, reliable package and environment management.
-
-- **macOS / Linux**:
-  ```bash
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-  # Or via Homebrew: brew install uv
-  ```
-- **Windows (PowerShell)**:
-  ```powershell
-  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-  ```
-
----
-
-### 2. Clone Repository & Install CLI
-
-#### Option A: 1-Step Global CLI Installation (Use Anywhere!)
+Choose either `pipx` or `uv tool` to install the `mrg-finance` CLI globally so it works from **any directory** in your terminal:
 
 ##### ⚡ Via `pipx` (Standard Python CLI Installer):
 ```bash
@@ -118,68 +20,22 @@ pipx install git+https://github.com/gt-marine-robotics-group/finance.git
 uv tool install git+https://github.com/gt-marine-robotics-group/finance.git
 ```
 
-> **💡 What is the difference between `pipx` and `uv tool`?**
-> - **Global Terminal Access**: Both tools install `mrg-finance` inside an isolated Python virtual environment and link the `mrg-finance` executable globally so it runs from **any terminal directory**.
-> - **`pipx install`**: The traditional standard tool for installing Python CLI applications (`brew install pipx`). It uses standard `pip` underneath.
-> - **`uv tool install`**: The modern alternative powered by Astral's `uv` (written in Rust). It completes package installation in **milliseconds** (10-50x faster than pipx) and handles dependency resolution ultra-fast.
-
-#### Option B: Local Editable Clone
-```bash
-# 1. Clone the repository
-git clone git@github.com:gt-marine-robotics-group/finance.git
-cd finance
-
-# 2. Create virtual environment & activate
-uv venv
-source .venv/bin/activate    # On Windows: .\.venv\Scripts\Activate.ps1
-
-# 3. Install dependencies and CLI tool in editable mode
-uv pip install -e .
-```
-
-After installation, the CLI is available globally as `mrg-finance`.
+*(For local editable developer setup, run `git clone git@github.com:gt-marine-robotics-group/finance.git && cd finance && uv venv && source .venv/bin/activate && uv pip install -e .`)*
 
 ---
 
-### 3. Browser & Selenium Setup
+### 2. Browser & Cloud Sync Prerequisites
 
-The system uses Chrome and Selenium for automated web scraping and CampusLabs Engage form submission.
-
-- **macOS**: Install Google Chrome (`brew install --cask google-chrome`).
-- **Linux**: Install Chromium/Chrome (`sudo apt install chromium-browser`).
-- **Windows**: Install Google Chrome.
-
----
-
-### 4. ☁️ SharePoint & Cloud Sync Setup (`rclone`)
-
-Item screenshots and master budget files are synced directly with the team's shared **GT OneDrive / SharePoint** folder (`OPS-1 Operations/FY27 Finances`).
-
-#### Step 1: Install `rclone`
-- **macOS**: `brew install rclone`
-- **Linux**: `sudo apt install rclone`
-- **Windows**: `winget install rclone.rclone`
-
-#### Step 2: Configure GT OneDrive Remote
-Run `rclone config` in your terminal and follow this exact key sequence:
-
-1. Type **`n`** *(New remote)*
-2. Name: Type **`onedrive`** *(Must be exactly `onedrive` in lowercase)*
-3. Storage: Type **`42`** *(Microsoft OneDrive)*
-4. `client_id` & `client_secret`: Press **Enter** *(Leave blank)*
-5. `region`: Press **Enter** *(Default global)*
-6. `Edit advanced config?`: Type **`n`**
-7. `Use web browser to authenticate?`: Type **`y`**
-8. **Browser Authentication**: Log in with your **Georgia Tech SSO (`<username>@gatech.edu`) + Duo MFA**.
-9. `config_type`: Type **`3`** *(SharePoint site name or URL)*
-10. `config_site_url`: Type **`https://gtvault.sharepoint.com/sites/MarineRoboticsGroup`**
-11. `config_driveid`: Type **`3`** *(Documents)*
-12. Confirm with **`y`**, then type **`q`** to quit.
-
-#### Step 3: Verify Remote Sync Access
-```bash
-rclone ls "onedrive:OPS-1 Operations/FY27 Finances"
-```
+1. **Google Chrome**: Required for web scraping and CampusLabs Engage form submission.
+   - macOS: `brew install --cask google-chrome` | Linux: `sudo apt install chromium-browser`
+2. **SharePoint Cloud Sync (`rclone`)**:
+   - Install: `brew install rclone` (macOS) or `sudo apt install rclone` (Linux)
+   - Configure GT OneDrive remote (`onedrive`):
+     ```bash
+     rclone config
+     # New remote (n) -> Name: onedrive -> Storage: 42 (OneDrive) -> Auth with GT SSO -> SharePoint Site: https://gtvault.sharepoint.com/sites/MarineRoboticsGroup -> Drive: Documents (3)
+     ```
+   - Verify: `rclone ls "onedrive:OPS-1 Operations/FY27 Finances"`
 
 ---
 
@@ -195,12 +51,12 @@ The entire purchasing and bill submission pipeline is driven by the team's share
 
 | Sheet Name | Role & Purpose | Key Columns & Requirements |
 | :--- | :--- | :--- |
-| 📜 **`Bills`** | **Master Approved Line Items**<br>Defines all approved SGA bill line items. Every item gets a unique `Bill Item ID`. | • **`Bill Item ID`**: Unique item identifier (e.g., `376851_1`)<br>• **`Bill No.`**: SGA Bill Number (e.g., `376851`)<br>• **`Item Name`**: Item description<br>• **`Budget Section`**: Category (e.g., `B03 - General Inventoried Goods`)<br>• **`Cost`**: Approved unit allocation price<br>• **`Link`**: Direct product URL (Amazon, McMaster, DigiKey) |
-| 🛒 **`Ordering`** | **Order Groupings (`OrderT`)**<br>Groups line items from `Bills` into actionable vendor purchase orders under an `Order ID`. | • **`Order ID`**: Unique order grouping string (e.g., `260811_amazon_awu335`)<br>• **`Bill Item ID`**: References target line item in `Bills` sheet<br>• **`Quantity`**: Number of units to order<br>• **`Vendor`**: Supplier name (e.g., `Amazon`, `McMaster-Carr`) |
+| 📜 **`Bills`** | **Master Approved Line Items**<br>Defines all approved SGA bill line items. Every item gets a unique `Bill Item ID`. | • **`Bill Item ID`**: Unique identifier (e.g., `376851_1`)<br>• **`Bill No.`**: SGA Bill Number (e.g., `376851`)<br>• **`Item Name`**: Line item description<br>• **`Budget Section`**: Category (e.g., `B03 - General Inventoried Goods`)<br>• **`Cost`**: Approved unit allocation price<br>• **`Link`**: Direct product URL (Amazon, McMaster, DigiKey) |
+| 🛒 **`Ordering`** | **Order Groupings (`OrderT`)**<br>Groups line items from `Bills` into vendor purchase orders under an `Order ID`. | • **`Order ID`**: Unique order string (e.g., `260811_amazon_awu335`)<br>• **`Bill Item ID`**: References target line item in `Bills` sheet<br>• **`Quantity`**: Number of units to order<br>• **`Vendor`**: Supplier name (e.g., `Amazon`, `McMaster-Carr`) |
 
 ---
 
-### 🔄 End-to-End Tandem Workflow (How Team Members Interface with Excel)
+### 🔄 End-to-End Tandem Workflow
 
 ```mermaid
 flowchart TD
@@ -214,32 +70,17 @@ flowchart TD
     H --> I["Pre-fills Engage Purchase Request form & attaches reports"]
 ```
 
-#### Step-by-Step Interface Guide:
+#### How Team Members Interface with Excel:
 
-1. **Adding New Bill Line Items**:
-   - Open [FY27_Bills_Budget.xlsx on SharePoint](https://gtvault.sharepoint.com/:x:/r/sites/MarineRoboticsGroup/Shared%20Documents/OPS-1%20Operations/FY27%20Finances/FY27_Bills_Budget.xlsx?d=w89396907686c491395b64a5ef042181c&csf=1&web=1&e=b5knap).
-   - Navigate to the **`Bills`** sheet. Add a new row with a unique `Bill Item ID`, item name, budget section, approved unit cost, and product link.
-
-2. **Creating a New Vendor Order**:
-   - Navigate to the **`Ordering`** sheet.
-   - Create a new `Order ID` (format: `YYMMDD_<vendor>_<gt_username>`, e.g., `260811_amazon_awu335`).
-   - List the `Bill Item ID`s and quantities to order.
-
-3. **Running `mrg-finance` with Excel**:
-   - Run `mrg-finance doctor --fresh` to pull the latest SharePoint Excel edits and verify that all `Bill Item ID` references, product URLs, and prices are valid.
-   - Run `mrg-finance report --fresh --order <ORDER_ID>` to generate the side-by-side **Budget vs Quoted** report.
-   - Run `mrg-finance purchase --fresh --order <ORDER_ID>` to perform price auditing, auto-build Amazon carts, capture evidence, and pre-fill CampusLabs Engage purchase forms.
-
-4. **Web GUI Alternative**:
-   - Alternatively, launch the Web Dashboard (`http://localhost:5000`) or Side-by-Side Review Inspector (`http://localhost:8321`). Any price adjustments or item edits saved through the GUI automatically write back to `FY27_Bills_Budget.xlsx` using openpyxl while preserving all existing Excel formulas (`SUM`, `IFERROR`) and formatting.
+1. **Add Bill Items**: Open [FY27_Bills_Budget.xlsx on SharePoint](https://gtvault.sharepoint.com/:x:/r/sites/MarineRoboticsGroup/Shared%20Documents/OPS-1%20Operations/FY27%20Finances/FY27_Bills_Budget.xlsx?d=w89396907686c491395b64a5ef042181c&csf=1&web=1&e=b5knap). In **`Bills`**, add line items with unique `Bill Item ID`s, costs, and URLs.
+2. **Create Vendor Orders**: In **`Ordering`**, group items under an `Order ID` (e.g., `260811_amazon_awu335`) referencing the `Bill Item ID`s and quantities.
+3. **Run Automation**: Use `mrg-finance doctor --fresh` to audit Excel integrity, `mrg-finance report --fresh --order <ORDER_ID>` to build comparison reports, and `mrg-finance purchase --fresh --order <ORDER_ID>` to automate form submissions.
 
 ---
 
 ## 🤖 CLI Usage & Workflows (`mrg-finance`)
 
-The `mrg-finance` CLI tool provides end-to-end automation for price scraping, side-by-side screenshot verification, bill submissions, and purchase tracking.
-
-```
+```bash
 Usage:
     mrg-finance report [--fresh] [--order ORDER_ID]
     mrg-finance doctor [--fresh]
@@ -248,15 +89,6 @@ Usage:
     mrg-finance review [--bill TITLE]
     mrg-finance price-check [--fresh] [--bill TITLE]
     mrg-finance screenshots [--fresh] [--bill TITLE] [--review-only]
-
-Commands:
-    report          Generate Budget vs Quoted Full Detail Excel (.xlsx) & CSV reports
-    doctor          Run pre-flight health audit on FY27_Bills_Budget.xlsx
-    bill-request    Submit a bill request to CampusLabs Engage (Priority 1)
-    purchase        Submit purchase requests to Engage (Priority 2)
-    review          Launch side-by-side screenshot & price review GUI
-    price-check     Check live prices vs budget allocation & warn on overrun
-    screenshots     Scrape prices + capture full-page screenshots for a bill
 ```
 
 ---
@@ -266,220 +98,108 @@ Commands:
 Generates a side-by-side **Budget Request vs Quoted Line Items** comparison report containing live Excel formulas (`=E*F`, `=H*I`, `=SUM(...)`), subtotal rows, and grand totals for attachment to Engage purchase requests.
 
 ```bash
-# Generate report for specific order:
+# Generate report for a specific order:
 mrg-finance report --order 260811_amazon_awu335
 
-# Sync fresh spreadsheet from SharePoint first, then generate report:
+# Sync fresh spreadsheet from SharePoint first:
 mrg-finance report --fresh --order 260811_amazon_awu335
 
-# Interactive order selection (shows a numbered list of all available orders):
+# Interactive order selection:
 mrg-finance report
 ```
-
-*Output files are saved to `screenshots/<order_id>/Budget_vs_Quoted_Detail_<order_id>.xlsx` and `.csv`.*
+*Output files: `screenshots/<order_id>/Budget_vs_Quoted_Detail_<order_id>.xlsx` and `.csv`.*
 
 ---
 
-### 🩺 `mrg-finance doctor` — Pre-Flight Spreadsheet Health Audit
+### 2. `mrg-finance doctor` — Pre-Flight Spreadsheet Health Audit
 
-`mrg-finance doctor` runs a pre-flight health diagnostic audit on `FY27_Bills_Budget.xlsx` before running bill or purchase request submissions. It protects automation scripts from spreadsheet edits, missing links, and broken row references.
+Runs a pre-flight health diagnostic audit on `FY27_Bills_Budget.xlsx` before running bill or purchase request submissions.
 
 ```bash
-# Run spreadsheet diagnostic check on local file:
 mrg-finance doctor
-
-# Sync latest file from SharePoint first, then run diagnostic check:
 mrg-finance doctor --fresh
 ```
 
-#### What `mrg-finance doctor` actually checks:
-
-| Diagnostic Check | Description | Action Required if Flagged |
-| :--- | :--- | :--- |
-| 🔍 **Duplicate Item IDs** | Detects duplicate `Bill Item ID`s across sheets that cause item mapping collisions. | Ensure each bill line item has a unique ID in Excel. |
-| 🔗 **Broken Order References** | Identifies `OrderT` rows referencing a `Bill Item ID` that does not exist in the `Bills` sheet. | Fix or clear the invalid `Bill Item ID` on the order row. |
-| 🌐 **Invalid or Missing Links** | Flags items missing product URLs or containing non-HTTP/malformed links. | Add valid product URLs (e.g. Amazon, DigiKey, McMaster) to the item. |
-| 💵 **$0.00 Cost Allocations** | Highlights approved items allocated with `$0.00` cost. | Check allocation column for accidental zero values. |
-| 📄 **Sheet & Header Offsets** | Scans top 10 rows to detect header shifts and verifies required sheets (`Bills`, `Ordering`). | Auto-resolved by `spreadsheet_utils` fuzzy parser. |
-
-> **💡 Row-Level Reporting**:
-> When errors or warnings are detected, `mrg-finance doctor` reports the **exact Excel row numbers** so team members can fix them directly in Excel before submitting requests!
+#### What `mrg-finance doctor` checks:
+- 🔍 **Duplicate Item IDs**: Flags duplicate `Bill Item ID`s across sheets.
+- 🔗 **Broken Order References**: Identifies `OrderT` rows referencing missing `Bill Item ID`s.
+- 🌐 **Invalid or Missing Links**: Flags items missing product URLs or containing malformed links.
+- 💵 **$0.00 Cost Allocations**: Highlights approved items allocated with `$0.00` cost.
+- 📄 **Sheet & Header Offsets**: Scans top 10 rows to detect header shifts and verifies required sheets.
 
 ---
 
-### 2. `mrg-finance review` — Instant Side-by-Side Review
+### 3. `mrg-finance purchase` — Automated Purchase Requests
 
-Launches the interactive side-by-side screenshot & price review GUI in your default browser **without running web scraping or opening Chrome automation**.
+Submits purchase requests to CampusLabs Engage grouped by vendor from `OrderT`.
 
 ```bash
-# Prompt to select a bill:
-mrg-finance review
+mrg-finance purchase --fresh
+mrg-finance purchase --fresh --order "260811_amazon_awu335"
+```
+**Workflow**: Audits live prices ➔ Builds 1-Click Amazon Multi-Item Cart URL ➔ Captures `cart.png` ➔ Auto-generates Budget vs Quoted Excel detail report ➔ Pre-fills Engage Purchase Request form in Chrome.
 
-# Or specify a bill directly:
+---
+
+### 4. `mrg-finance bill-request` — Submit Bill to CampusLabs Engage
+
+Automates submitting a new draft budget bill to CampusLabs Engage for SGA approval.
+
+```bash
+mrg-finance bill-request --fresh
+```
+**Workflow**: Scrapes live prices ➔ Verifies screenshot evidence ➔ Launches side-by-side inspector ➔ Pre-fills Engage bill form sections.
+
+---
+
+### 5. `mrg-finance review` — Instant Side-by-Side Review
+
+Launches the interactive side-by-side screenshot & price review GUI at `http://localhost:8321` **without running web scraping or opening Chrome automation**.
+
+```bash
+mrg-finance review
 mrg-finance review --bill "Marine Robotics Group RobotX Testing Equipment Bill"
 ```
 
 ---
 
-### 📸 Manual Screenshot Naming Guide
+### 6. `mrg-finance price-check` — Budget Overrun Audit
 
-If team members capture or upload screenshots manually, place them in:
+Checks live vendor online prices against approved budget allocations.
+
+```bash
+mrg-finance price-check --fresh --bill "FY27 Budget" --cart
 ```
-screenshots/<Bill Title>/<Item Name>.png
-# OR on SharePoint:
-onedrive:OPS-1 Operations/FY27 Finances/screenshots/<Bill Title>/<Item Name>.png
-```
-
-#### How Naming & Recognition Works:
-The application uses a **flexible matching algorithm** (`_find_file_in_dir`), so manual screenshots are automatically recognized even with minor naming variations:
-
-1. **Item Name Matching**:
-   - Item `"wire cutters"` → `wire cutters.png` or `wire cutters.jpg`
-2. **Case & Whitespace Flexible**:
-   - Double spaces, trailing spaces, or UPPERCASE/lowercase differences are automatically normalized:
-     - Item: `"N type connector  replacement"` (double space)
-     - Filename: `N type connector replacement.png` or `N Type Connector Replacement.PNG` → **✅ 100% Recognized**
-3. **Special Character Sanitization**:
-   - Characters like slashes `/` or colons `:` can be replaced with spaces or underscores:
-     - Item: `"2m IP67 LED Strip (144LED/m)"`
-     - Filename: `2m IP67 LED Strip (144LED_m).png` or `2m IP67 LED Strip (144LED m).png` → **✅ 100% Recognized**
-4. **Supported Extensions**: `.png`, `.jpg`, `.jpeg`, `.webp`
 
 ---
 
-### 2. `mrg-finance screenshots` — Scrape Prices & Capture Evidence
+### 7. `mrg-finance screenshots` — Scrape Prices & Capture Evidence
 
-Scrapes current product prices via headless Chrome and captures full-page product screenshots. Upon completion, it automatically opens the side-by-side review GUI.
+Scrapes product prices via headless Chrome and captures full-page product screenshots.
 
 ```bash
-# Pull fresh spreadsheet & screenshots from SharePoint before running:
 mrg-finance screenshots --fresh
-
-# Specify bill title directly:
 mrg-finance screenshots --bill "FY27 Budget"
-
-# Launch review GUI directly using existing screenshots:
-mrg-finance screenshots --review-only
 ```
-
-- **Ground-Truth Safeguard**: Existing baseline bill screenshots stored in `screenshots/<bill_title>/<item_name>.png` are **never overwritten**. Newly captured screenshots are stored alongside them for side-by-side comparison.
 
 ---
 
-### 3. `mrg bill-request` — Submit Bill to CampusLabs Engage
+## 🗺️ System Architecture & Code Map
 
-Automates creating a official bill request on CampusLabs Engage.
+<details>
+<summary><b>📁 Expand Complete Repository Architecture</b></summary>
 
-```bash
-mrg bill-request --fresh
-```
+- **`mrg.py`**: Main CLI entrypoint for `mrg-finance` commands.
+- **`automation.py`**: SGA Bill Request Engage form automation (Priority 1).
+- **`automation_purchase.py`**: Purchase Request Engage form automation (Priority 2).
+- **`order_excel_builder.py`**: Side-by-side Budget vs Quoted Excel (`.xlsx`) & CSV report generator.
+- **`engage_bill_lookup.py`**: Engage DOM scraper module for section names and 1-based section line numbers.
+- **`engage_tools.py`**: Shared Selenium browser helper functions for GT SSO login and Duo MFA.
+- **`price_scraper.py`**: Multi-vendor live price scraper (Amazon, McMaster, DigiKey, Mouser, Adafruit, SparkFun, Pololu).
+- **`spreadsheet_utils.py`**: Robust Excel loader, dynamic header row detector, and `validate_budget_spreadsheet()` health auditor.
+- **`review_server.py`**: Micro HTTP server on port 8321 serving side-by-side review GUI.
+- **`web-app/`**: Flask web application dashboard (`http://localhost:5000`).
 
-**Workflow**:
-1. Prompts for GT SSO credentials + Duo MFA.
-2. Performs a missing screenshot audit and captures any missing item screenshots.
-3. Launches the side-by-side review GUI (`http://localhost:8321`) to verify prices and screenshots.
-4. Opens Engage in Chrome, fills out line items for each budget section, uploads screenshot evidence, and saves each item.
+For detailed student instructions, see [`USAGE_GUIDE.md`](USAGE_GUIDE.md). For developer architecture details, see [`DEVELOPMENT.md`](DEVELOPMENT.md).
 
----
-
-### 4. `mrg purchase` — Automated Purchase Requests
-
-Automates purchase request submissions on CampusLabs Engage grouped by vendor from `OrderT`.
-
-```bash
-# Interactive order selection:
-mrg purchase --fresh
-
-# Specify order ID directly:
-mrg purchase --fresh --order "260811_amazon_awu335"
-```
-
-**Workflow**:
-1. Prompts to select an Order ID.
-2. Runs a live price audit against vendor product links.
-3. Auto-generates a **1-Click Amazon Multi-Item Cart URL** (or warns for non-Amazon vendor items).
-4. Opens side-by-side order review window and populates Engage purchase request fields.
-
----
-
-### 5. `mrg price-check` — Budget Overrun Audit
-
-Runs a headless price check against product links to verify live prices against approved budget allocations.
-
-```bash
-mrg price-check --fresh --bill "FY27 Budget" --cart
-```
-
-**Workflow**:
-1. Scrapes live prices from product pages.
-2. Prints a comparison table highlighting budget overruns (`+$XX.XX OVER BUDGET`) or savings.
-3. Generates a 1-Click Amazon Cart link for Amazon items.
-
----
-
-## 🌐 Web Page & Review GUI Features
-
-### 1. Side-by-Side Review Inspector (`http://localhost:8321`)
-
-When running `mrg review`, `mrg-finance screenshots`, or `automation.py`, the system starts a local review server on port `8321` and opens **`http://localhost:8321`** in your browser.
-
-```
-+-------------------------------------------------------------------------------+
-|  📋 Side-by-Side Review  |  Bill: Testing Equipment Bill    [💾 Save to Excel] |
-+------------------+------------------------------------------------------------+
-|  SIDEBAR DRAWER  |  ITEM INSPECTOR (Item 6 of 11: large rope)                 |
-|                  |  Spreadsheet: $13.99  |  Scraped: $0.25                    |
-|  [All (11)]      |  [Use Spreadsheet Price (1)]  [Use Scraped Price (2)]     |
-|  [⚠️ Review (2)] |                                                            |
-|  [✅ OK (9)]     |  +--------------------------+---------------------------+  |
-|                  |  | 📜 Baseline Screenshot    | 📸 New Scraped Screenshot |  |
-|  1. hose     ⚠️  |  |   (Ground Truth)         |   (Current Run)           |  |
-|  2. anchors  ✅  |  |                          |                           |  |
-| >3. large rope ⚠️|  |  [ Image Frame ]         |   [ Image Frame ]         |  |
-|  4. Pi Pico  ✅  |  +--------------------------+---------------------------+  |
-+------------------+------------------------------------------------------------+
-|  Shortcuts: [←/A] Prev  |  [→/D] Next  |  [1] Spreadsheet  |  [2] Scraped     |
-+-------------------------------------------------------------------------------+
-```
-
-#### Key Visualizer Features:
-- 🖼️ **Side-by-Side Split View**: Displays the **Baseline / Old Screenshot** (left) directly alongside the **New / Scraped Screenshot** (right).
-- ⚡ **Fast Click-Through Navigation**:
-  - `◀ Prev` and `Next ▶` buttons.
-  - Left thumbnail drawer sidebar for instant 1-click item selection.
-  - **Keyboard Shortcuts**:
-    - `←` / `A`: Move to Previous Item
-    - `→` / `D`: Move to Next Item
-    - `1`: Apply Spreadsheet Price
-    - `2`: Apply Scraped Price
-    - `Enter`: Save current price & advance to Next Item
-- ✏️ **Direct Spreadsheet Saving**: Clicking **`💾 Save to Spreadsheet`** updates `FY27_Bills_Budget.xlsx` directly via background HTTP POST—without popping open Excel application windows.
-- 🔍 **High-Res Lightbox**: Click any image to open a full-screen zoom modal.
-- ☰ **View Modes**: Toggle between **Focused Inspector View** (single item side-by-side) and **List View** (all cards scrollable list).
-
----
-
-### 2. Web App Dashboard (`http://localhost:5000`)
-
-To start the full web management dashboard locally:
-
-```bash
-source .venv/bin/activate
-python3 web-app/app.py
-```
-
-Open **`http://localhost:5000`** in your browser (*Password: `boats0519`*):
-
-- **Quick-Add Bar**: Paste any product URL to auto-scrape vendor and price details.
-- **Bill Management (`/review/<bill_title>`)**: Review bill items, inspect pre-captured screenshots, and edit line items.
-- **Order Creation (`/create-order`)**: Group approved bill items by vendor, select custom quantities (capped at approved bill max), and generate 1-click Amazon Cart links.
-- **Side-by-Side Order Review (`/orders/review/<order_id>`)**: Compare baseline bill screenshots against live order prices with overrun badges.
-
----
-
-## 🛡️ System Safeguards & Offline Mode
-
-1. **Ground-Truth Screenshot Protection**: Original bill evidence images in `screenshots/<bill_title>/<item_name>.png` are permanently preserved.
-2. **Zero File Deletions (`rclone copy`)**: SharePoint sync uses `rclone copy --checksum` (never `rclone sync`), preventing accidental file deletion.
-3. **No Excel Popups**: Saving edits in the review GUI updates the underlying `.xlsx` file cleanly and touches file timestamps for OneDrive sync without interrupting your workflow.
-4. **Offline Excel Mode**: If working offline, save your spreadsheet locally at `finance/FY27_Bills_Budget.xlsx` and run CLI commands without the `--fresh` flag.
+</details>
