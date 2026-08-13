@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import re
 import pandas as pd
+import openpyxl
 
 
 COLUMN_ALIASES = {
@@ -70,9 +71,22 @@ def safe_int(val, default: int = 1) -> int:
         return default
 
 
-def find_sheet_name(excel_file: pd.ExcelFile, candidate_names: list[str]) -> str | None:
+def find_sheet_name(excel_file: pd.ExcelFile | str | openpyxl.Workbook, candidate_names: list[str]) -> str | None:
     """Find sheet name ignoring case and slight differences."""
-    existing_sheets = excel_file.sheet_names
+    if isinstance(excel_file, str):
+        try:
+            wb = openpyxl.load_workbook(excel_file, read_only=True, data_only=True)
+            existing_sheets = wb.sheetnames
+            wb.close()
+        except Exception:
+            existing_sheets = []
+    elif hasattr(excel_file, "sheetnames"):
+        existing_sheets = excel_file.sheetnames
+    elif hasattr(excel_file, "sheet_names"):
+        existing_sheets = excel_file.sheet_names
+    else:
+        existing_sheets = []
+
     norm_existing = {s.lower().strip(): s for s in existing_sheets}
     for cand in candidate_names:
         cand_clean = cand.lower().strip()
@@ -96,7 +110,7 @@ def get_col_val(row_dict: dict, canonical_key: str, default: str = "") -> str:
     return default
 
 
-def read_sheet_robust(excel_file: pd.ExcelFile, sheet_candidates: list[str], max_header_scan: int = 10) -> pd.DataFrame:
+def read_sheet_robust(excel_file: pd.ExcelFile | str | openpyxl.Workbook, sheet_candidates: list[str], max_header_scan: int = 10) -> pd.DataFrame:
     """
     Read an Excel sheet robustly by searching the first max_header_scan rows
     for the true header row containing key column names.
@@ -105,7 +119,13 @@ def read_sheet_robust(excel_file: pd.ExcelFile, sheet_candidates: list[str], max
     if not sheet_name:
         return pd.DataFrame()
 
-    df_raw = pd.read_excel(excel_file, sheet_name=sheet_name, header=None)
+    if isinstance(excel_file, openpyxl.Workbook):
+        ws = excel_file[sheet_name]
+        data = list(ws.iter_rows(values_only=True))
+        df_raw = pd.DataFrame(data)
+    else:
+        df_raw = pd.read_excel(excel_file, sheet_name=sheet_name, header=None, engine="openpyxl")
+
     if df_raw.empty:
         return pd.DataFrame()
 
