@@ -107,10 +107,21 @@ Ensure you have **Python 3.10+** installed. We recommend [`uv`](https://github.c
 ### 2. Clone Repository & Install CLI
 
 #### Option A: 1-Step Global CLI Installation (Use Anywhere!)
+
+##### ⚡ Via `pipx` (Standard Python CLI Installer):
 ```bash
 pipx install git+https://github.com/gt-marine-robotics-group/finance.git
 ```
-*After running this once, `mrg purchase`, `mrg bill-request`, and `mrg doctor` work system-wide in any terminal window!*
+
+##### 🚀 Via `uv tool` (Ultra-Fast Modern Alternative):
+```bash
+uv tool install git+https://github.com/gt-marine-robotics-group/finance.git
+```
+
+> **💡 What is the difference between `pipx` and `uv tool`?**
+> - **Global Terminal Access**: Both tools install `mrg` inside an isolated Python virtual environment and link the `mrg` executable globally so it runs from **any terminal directory**.
+> - **`pipx install`**: The traditional standard tool for installing Python CLI applications (`brew install pipx`). It uses standard `pip` underneath.
+> - **`uv tool install`**: The modern alternative powered by Astral's `uv` (written in Rust). It completes package installation in **milliseconds** (10-50x faster than pipx) and handles dependency resolution ultra-fast.
 
 #### Option B: Local Editable Clone
 ```bash
@@ -214,6 +225,33 @@ mrg report
 ```
 
 *Output files are saved to `screenshots/<order_id>/Budget_vs_Quoted_Detail_<order_id>.xlsx` and `.csv`.*
+
+---
+
+### 🩺 `mrg doctor` — Pre-Flight Spreadsheet Health Audit
+
+`mrg doctor` runs a pre-flight health diagnostic audit on `FY27_Bills_Budget.xlsx` before running bill or purchase request submissions. It protects automation scripts from spreadsheet edits, missing links, and broken row references.
+
+```bash
+# Run spreadsheet diagnostic check on local file:
+mrg doctor
+
+# Sync latest file from SharePoint first, then run diagnostic check:
+mrg doctor --fresh
+```
+
+#### What `mrg doctor` actually checks:
+
+| Diagnostic Check | Description | Action Required if Flagged |
+| :--- | :--- | :--- |
+| 🔍 **Duplicate Item IDs** | Detects duplicate `Bill Item ID`s across sheets that cause item mapping collisions. | Ensure each bill line item has a unique ID in Excel. |
+| 🔗 **Broken Order References** | Identifies `OrderT` rows referencing a `Bill Item ID` that does not exist in the `Bills` sheet. | Fix or clear the invalid `Bill Item ID` on the order row. |
+| 🌐 **Invalid or Missing Links** | Flags items missing product URLs or containing non-HTTP/malformed links. | Add valid product URLs (e.g. Amazon, DigiKey, McMaster) to the item. |
+| 💵 **$0.00 Cost Allocations** | Highlights approved items allocated with `$0.00` cost. | Check allocation column for accidental zero values. |
+| 📄 **Sheet & Header Offsets** | Scans top 10 rows to detect header shifts and verifies required sheets (`Bills`, `Ordering`). | Auto-resolved by `spreadsheet_utils` fuzzy parser. |
+
+> **💡 Row-Level Reporting**:
+> When errors or warnings are detected, `mrg doctor` reports the **exact Excel row numbers** so team members can fix them directly in Excel before submitting requests!
 
 ---
 
