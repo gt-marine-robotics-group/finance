@@ -30,12 +30,17 @@ import price_scraper
 
 # === Paths ===
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_XLSX = os.path.expanduser(
+LOCAL_XLSX = os.path.join(SCRIPT_DIR, "FY27_Bills_Budget.xlsx")
+ONEDRIVE_XLSX = os.path.expanduser(
     "~/Library/CloudStorage/OneDrive-GeorgiaInstituteofTechnology/"
     "Documents - Marine Robotics Group/OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx"
 )
-# Fallback for Linux (SIM PC)
-if not os.path.exists(os.path.dirname(DEFAULT_XLSX)):
+
+if os.path.exists(LOCAL_XLSX):
+    DEFAULT_XLSX = LOCAL_XLSX
+elif os.path.exists(ONEDRIVE_XLSX):
+    DEFAULT_XLSX = ONEDRIVE_XLSX
+else:
     DEFAULT_XLSX = os.path.expanduser("~/mrg/finance/FY27_Bills_Budget.xlsx")
 
 XLSX_PATH = os.environ.get("FINANCE_XLSX_PATH", DEFAULT_XLSX)
@@ -517,21 +522,65 @@ def cmd_doctor(args):
     print()
 
 
+def cmd_report(args):
+    """Generate Budget vs Quoted Full Detail Excel and CSV comparison report for an order."""
+    import order_excel_builder
+    order_id = getattr(args, "order", None)
+
+    if not order_id:
+        # Prompt interactively if order ID not specified
+        import pandas as pd
+        import spreadsheet_utils
+        if not os.path.exists(XLSX_PATH):
+            print(f"❌ Spreadsheet not found at {XLSX_PATH}")
+            return
+        try:
+            ef = pd.ExcelFile(XLSX_PATH)
+            df_orders = spreadsheet_utils.read_sheet_robust(ef, ["Ordering", "Orders", "OrderT"])
+            oid_col = next((c for c in df_orders.columns if "order" in str(c).lower()), "Order ID")
+            order_ids = list(dict.fromkeys(str(r.get(oid_col, "")).strip() for _, r in df_orders.iterrows() if str(r.get(oid_col, "")).strip() and not str(r.get(oid_col, "")).strip().startswith("#")))
+
+            if not order_ids:
+                print("❌ No valid orders found in Ordering sheet.")
+                return
+
+            print("\n📋 Available Orders:")
+            for idx, oid in enumerate(order_ids, 1):
+                print(f"  {idx}. {oid}")
+            try:
+                choice = input(f"\nSelect order [1-{len(order_ids)}]: ").strip()
+                order_id = order_ids[int(choice) - 1]
+            except Exception:
+                order_id = order_ids[0]
+        except Exception as e:
+            print(f"❌ Could not load order list: {e}")
+            return
+
+    sys.argv = ["order_excel_builder.py", "--order", order_id, "--excel-path", XLSX_PATH]
+    order_excel_builder.main()
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="MRG Finance CLI — bill requests, purchases, and price checking",
+        description="MRG Finance CLI — bill requests, purchases, price checking, and report generation",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  mrg.py screenshots --fresh --bill "FY27 Budget"
-  mrg.py review --bill "Marine Robotics Group RobotX Testing Equipment Bill"
-  mrg.py bill-request --fresh
-  mrg.py purchase --fresh
-  mrg.py price-check --bill "FY27 Budget" --cart
-  mrg.py doctor --fresh
+  mrg report --order 260811_amazon_awu335
+  mrg screenshots --fresh --bill "FY27 Budget"
+  mrg review --bill "Marine Robotics Group RobotX Testing Equipment Bill"
+  mrg bill-request --fresh
+  mrg purchase --fresh
+  mrg price-check --bill "FY27 Budget" --cart
+  mrg doctor --fresh
         """
     )
     sub = parser.add_subparsers(dest="command")
+
+    # report
+    p_rep = sub.add_parser("report", help="Generate Budget vs Quoted Full Detail Excel/CSV comparison report")
+    p_rep.add_argument("--fresh", "-f", action="store_true", help="Sync from SharePoint first")
+    p_rep.add_argument("--order", "-o", help="Order ID (skips interactive selection)")
 
     # screenshots
     p_ss = sub.add_parser("screenshots", help="Scrape prices + take screenshots")
@@ -574,6 +623,7 @@ Examples:
 
     # Dispatch
     commands = {
+        "report": cmd_report,
         "screenshots": cmd_screenshots,
         "review": cmd_review,
         "bill-request": cmd_bill_request,
