@@ -38,6 +38,7 @@ py-modules = [
     "screenshot_worker",
     "engage_bill_lookup",
     "spreadsheet_utils",
+    "order_excel_builder",
 ]
 packages = ["web-app", "web-app.routes"]
 

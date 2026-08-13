@@ -524,6 +524,8 @@ def cmd_doctor(args):
 
 def cmd_report(args):
     """Generate Budget vs Quoted Full Detail Excel and CSV comparison report for an order."""
+    if SCRIPT_DIR not in sys.path:
+        sys.path.insert(0, SCRIPT_DIR)
     import order_excel_builder
     order_id = getattr(args, "order", None)
 
