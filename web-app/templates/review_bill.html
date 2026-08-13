@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Review: {{ bill_title }} - MRG Purchasing{% endblock %}
+
+{% block content %}
+<div class="review-page">
+    <div class="review-header">
+        <h1>Review: {{ bill_title }}</h1>
+        <p class="text-muted">{{ items|length }} items — tap arrows to navigate</p>
+        <a href="{{ url_for('bill_view', bill_title=bill_title) }}" class="btn btn-sm btn-ghost">Done</a>
+    </div>
+
+    {% if items %}
+    <div class="review-card" id="review-card">
+        <div class="review-counter">
+            <span id="current-idx">1</span> / {{ items|length }}
+        </div>
+
+        {% for item in items %}
+        <div class="review-item {% if loop.first %}active{% endif %}" data-idx="{{ loop.index0 }}">
+            {% if item.get('_screenshot_path') %}
+            <div class="review-screenshot">
+                <a href="{{ url_for('serve_screenshot', filename=item.get('_screenshot_path')) }}" target="_blank">
+                    <img src="{{ url_for('serve_screenshot', filename=item.get('_screenshot_path')) }}" alt="Screenshot">
+                </a>
+            </div>
+            {% else %}
+            <div class="review-screenshot review-no-screenshot">
+                <p>No screenshot</p>
+                {% if item.get('Link') %}
+                <a href="{{ item.get('Link') }}" target="_blank" class="btn btn-sm btn-ghost">Open link</a>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <form method="POST" action="{{ url_for('review_save', bill_title=bill_title) }}" class="review-form">
+                <input type="hidden" name="item_id" value="{{ item.get('Bill Item ID', '') }}">
+
+                <div class="review-item-name">{{ item.get('Item Name', '') }}</div>
+
+                {% if item.get('Link') %}
+                <a href="{{ item.get('Link') }}" target="_blank" class="review-link">{{ item.get('Link', '')[:50] }}...</a>
+                {% endif %}
+
+                <div class="review-fields">
+                    <div class="form-group">
+                        <label>Cost ($)</label>
+                        {% set cost_val = item.get('Cost', '')|string|replace('$','')|replace(',','') %}
+                        <input type="number" name="cost" step="0.01" class="input" value="{{ cost_val }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Qty</label>
+                        <input type="number" name="quantity" min="1" class="input" value="{{ item.get('Quantity', 1) }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Vendor</label>
+                        <input type="text" name="vendor" class="input" value="{{ item.get('Vendor', '') }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Budget Section</label>
+                        {% set current_section = item.get('Budget Section', '') %}
+                        <select name="budget_section" class="input">
+                            <option value="">--</option>
+                            {% for section in ['B01 - Advertising/Promotion', 'B02 - Equipment Rental',
+                                'B03 - General Inventoried Goods', 'B04 - Food/Beverage', 'B05 - Lodging',
+                                'B06 - Decorations', 'B07 - Clothing/Awards', 'B08 - Printing/Copies',
+                                'B09 - Professional Services', 'B10 - Supplies/Materials',
+                                'B11 - Transportation', 'B12 - Conference Registration'] %}
+                            <option value="{{ section }}" {{ 'selected' if section == current_section }}>{{ section }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block">Save</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="review-nav">
+        <button class="btn btn-ghost" id="prev-btn" onclick="navigate(-1)">← Prev</button>
+        <button class="btn btn-ghost" id="next-btn" onclick="navigate(1)">Next →</button>
+    </div>
+
+    {% else %}
+    <div class="empty-state">
+        <p>No items in this bill.</p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+let currentIdx = 0;
+const items = document.querySelectorAll('.review-item');
+const counter = document.getElementById('current-idx');
+const total = items.length;
+
+function navigate(dir) {
+    items[currentIdx].classList.remove('active');
+    currentIdx = Math.max(0, Math.min(total - 1, currentIdx + dir));
+    items[currentIdx].classList.add('active');
+    counter.textContent = currentIdx + 1;
+}
+
+// Swipe support
+let startX = 0;
+const card = document.getElementById('review-card');
+card.addEventListener('touchstart', e => { startX = e.touches[0].clientX; });
+card.addEventListener('touchend', e => {
+    const diff = e.changedTouches[0].clientX - startX;
+    if (Math.abs(diff) > 50) navigate(diff < 0 ? 1 : -1);
+});
+</script>
+{% endblock %}

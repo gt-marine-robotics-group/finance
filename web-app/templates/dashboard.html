@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - MRG Purchasing{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <div class="dashboard-header">
+        <h1>Bill Dashboard</h1>
+    </div>
+
+    {# Quick-add bar #}
+    <form method="POST" action="{{ url_for('items.quick_add') }}" class="quick-add">
+        <input type="text" name="item_name" placeholder="Quick add item..." required class="input">
+        <input type="number" name="quantity" value="1" min="0.01" step="any" placeholder="Qty" required class="input" style="width: 80px;">
+        <input type="text" name="link" placeholder="Link (optional)" class="input quick-add-link">
+        <button type="submit" class="btn btn-primary">+</button>
+    </form>
+
+    {% if backlog %}
+    <section class="bill-section">
+        <details class="bill-dropdown" open>
+            <summary class="bill-header-toggle">
+                <h2>
+                    Backlog
+                    <span class="badge">{{ backlog|length }}</span>
+                </h2>
+                <span class="bill-total-inline">Items not yet assigned to a bill</span>
+            </summary>
+            <div class="bill-dropdown-actions">
+                <a href="{{ url_for('bills.create_bill') }}" class="btn btn-sm btn-primary">Create Bill from Backlog</a>
+            </div>
+            <div class="item-grid">
+                {% for item in backlog %}
+                {% include "_item_card.html" %}
+                {% endfor %}
+            </div>
+        </details>
+    </section>
+    {% endif %}
+
+    {% for title, items in bills.items() %}
+    <section class="bill-section">
+        <details class="bill-dropdown">
+            <summary class="bill-header-toggle">
+                <h2>
+                    {{ title }}
+                    <span class="badge">{{ items|length }}</span>
+                </h2>
+                {% set ns = namespace(total=0) %}
+                {% for item in items %}
+                    {% set cost_str = item.get('Cost', '0')|string|replace('$','')|replace(',','') %}
+                    {% set qty_str = item.get('Quantity', '1')|string %}
+                    {% set ns.total = ns.total + (cost_str|float(0) * qty_str|float(1)) %}
+                {% endfor %}
+                <span class="bill-total-inline">${{ "%.2f"|format(ns.total) }}</span>
+            </summary>
+            <div class="bill-dropdown-actions" style="display: flex; gap: 0.5rem; align-items: center;">
+                {% if not locked_bills.get(title) %}
+                <a href="{{ url_for('bills.review_bill', bill_title=title) }}" class="btn btn-sm btn-primary">Review Bill</a>
+                {% else %}
+                <span class="badge" style="background: rgba(234, 179, 8, 0.2); color: var(--color-warning); padding: 0.3rem 0.6rem; font-weight: 600; font-size: 0.8rem;">🔒 Approved</span>
+                {% endif %}
+                <a href="{{ url_for('bills.bill_view', bill_title=title) }}" class="btn btn-sm btn-ghost">Edit Bill →</a>
+            </div>
+            <div class="item-grid">
+                {% for item in items %}
+                {% include "_item_card.html" %}
+                {% endfor %}
+            </div>
+        </details>
+    </section>
+    {% endfor %}
+
+    {% if not backlog and not bills %}
+    <div class="empty-state">
+        <p>No items yet.</p>
+        <a href="{{ url_for('items.add_item') }}" class="btn btn-primary">+ Add First Item</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

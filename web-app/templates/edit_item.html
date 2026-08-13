@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Edit: {{ item.get('Item Name', '') }} - MRG Purchasing{% endblock %}
+
+{% block content %}
+<div class="form-page">
+    <h1>Edit Item</h1>
+
+    {% set item_name = item.get('Item Name', '') %}
+    {% set item_id = item.get('Bill Item ID', '') %}
+
+    {# Screenshot preview #}
+    {% if item.get('_has_screenshot') is not defined %}
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('edit_item', item_id=item_id) }}" class="item-form">
+        <div class="form-group">
+            <label for="item_name">Item Name *</label>
+            <input type="text" id="item_name" name="item_name" required class="input"
+                   value="{{ item.get('Item Name', '') }}">
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="cost">Cost ($)</label>
+                {% set cost_val = item.get('Cost', '')|string|replace('$','')|replace(',','') %}
+                <input type="number" id="cost" name="cost" step="0.01" min="0" class="input"
+                       value="{{ cost_val }}">
+            </div>
+            <div class="form-group">
+                <label for="quantity">Quantity</label>
+                <input type="number" id="quantity" name="quantity" min="1" class="input"
+                       value="{{ item.get('Quantity', 1) }}">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="link">Link (URL)</label>
+            <input type="text" id="link" name="link" class="input"
+                   value="{{ item.get('Link', '') }}">
+        </div>
+
+        <div class="form-group">
+            <label for="vendor">Vendor</label>
+            <input type="text" id="vendor" name="vendor" class="input"
+                   value="{{ item.get('Vendor', '') }}">
+        </div>
+
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" rows="3" class="input">{{ item.get('Description', '') }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="budget_section">Budget Section</label>
+            {% set current_section = item.get('Budget Section', '') %}
+            <select id="budget_section" name="budget_section" class="input">
+                <option value="">-- Select --</option>
+                {% for section in ['B01 - Advertising/Promotion', 'B02 - Equipment Rental',
+                    'B03 - General Inventoried Goods', 'B04 - Food/Beverage', 'B05 - Lodging',
+                    'B06 - Decorations', 'B07 - Clothing/Awards', 'B08 - Printing/Copies',
+                    'B09 - Professional Services', 'B10 - Supplies/Materials',
+                    'B11 - Transportation', 'B12 - Conference Registration'] %}
+                <option value="{{ section }}" {{ 'selected' if section == current_section }}>{{ section }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="bill_title">Assign to Bill</label>
+            {% set current_bill = item.get('Bill Title', '') %}
+            <select id="bill_title" name="bill_title" class="input">
+                <option value="">-- Backlog (no bill) --</option>
+                {% for bill in bills %}
+                <option value="{{ bill }}" {{ 'selected' if bill == current_bill }}>{{ bill }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="status">Status</label>
+            {% set current_status = item.get('Status', '') %}
+            <select id="status" name="status" class="input">
+                <option value="">-- None --</option>
+                {% for status in ['bill requested', 'bill submitted', 'bill approved', 'purchased - SOFO', 'purchased - cash', 'purchased - awaiting reimbursement', 'arrived', 'pending purchase', 'review requested'] %}
+                <option value="{{ status }}" {{ 'selected' if status == current_status }}>{{ status }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="person_requesting">Person Requesting</label>
+            <input type="text" id="person_requesting" name="person_requesting" class="input"
+                   value="{{ item.get('Person Requesting', '') }}">
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-block">Save Changes</button>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-ghost btn-block">Cancel</a>
+        </div>
+    </form>
+
+    <hr class="divider">
+
+    <form method="POST" action="{{ url_for('delete_item', item_id=item_id) }}"
+          onsubmit="return confirm('Delete this item? This cannot be undone.')">
+        <button type="submit" class="btn btn-danger btn-block">Delete Item</button>
+    </form>
+</div>
+{% endblock %}

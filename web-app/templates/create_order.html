@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}{% if filter_vendor or request.args.get('filter_vendor') %}Add Items to Order{% else %}Create New Order{% endif %} - MRG Purchasing{% endblock %}
+
+{% block content %}
+<div class="form-page" style="max-width: 900px;">
+    <h1>{% if filter_vendor or request.args.get('filter_vendor') %}Add Items to {{ filter_vendor or request.args.get('filter_vendor') }} Order{% else %}Create New Order{% endif %}</h1>
+
+    <div class="toggle-group" style="margin-bottom: 1rem;">
+        <a href="{{ url_for('create_order', group='vendor') }}" class="btn btn-sm {{ 'btn-primary' if group_by == 'vendor' else 'btn-ghost' }}">By Vendor</a>
+        <a href="{{ url_for('create_order', group='bill') }}" class="btn btn-sm {{ 'btn-primary' if group_by == 'bill' else 'btn-ghost' }}">By Bill</a>
+    </div>
+
+    {% if not vendors %}
+    <div class="empty-state">
+        <p>No items with status "bill approved" or "pending purchase".</p>
+        <p class="text-muted">Bills must be approved on CampusLabs before ordering.</p>
+    </div>
+    {% else %}
+
+    <form method="POST" action="{{ url_for('submit_order') }}" id="order-form">
+        {% for group_name, items in vendors.items() %}
+        <details class="bill-dropdown" style="margin-bottom: 1rem;">
+            <summary class="bill-header-toggle">
+                <h2>{{ group_name }} <span class="badge">{{ items|length }}</span></h2>
+                {% set ns = namespace(total=0) %}
+                {% for item in items %}
+                    {% set cost_str = item.get('Cost', '0')|string|replace('$','')|replace(',','') %}
+                    {% set qty_str = item.get('Quantity', '1')|string %}
+                    {% set ns.total = ns.total + (cost_str|float(0) * qty_str|float(1)) %}
+                {% endfor %}
+                <span class="bill-total-inline">${{ "%.2f"|format(ns.total) }}</span>
+            </summary>
+
+            <div class="order-items-list">
+                <div class="select-all-row" style="padding: 0.5rem 1rem;">
+                    <label class="checkbox-label">
+                        <input type="checkbox" class="select-all-group"> <strong>Select All</strong>
+                    </label>
+                </div>
+
+                {% for item in items %}
+                {% set b_id = item.get('Bill Item ID', '')|string %}
+                {% set status_str = item.get('Status', '')|string|lower|trim %}
+                {% set is_already_ordered = (b_id in ordered_items_map) or (status_str == 'pending purchase') or ('purchased' in status_str) or (status_str == 'arrived') %}
+                {% set cost_str = item.get('Cost', '0')|string|replace('$','')|replace(',','') %}
+                {% set qty = item.get('Quantity', '1')|string %}
+                <label class="checkbox-card" {% if is_already_ordered %}style="opacity: 0.65; background: rgba(0,0,0,0.02); cursor: not-allowed;"{% endif %}>
+                    <input type="checkbox" name="item_ids" value="{{ b_id }}"
+                           {% if is_already_ordered %}disabled{% endif %}
+                           data-vendor="{{ item.get('Vendor', '') }}" data-cost="{{ cost_str }}"
+                           data-item-id="{{ b_id }}">
+                    <div class="checkbox-card-content">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span class="item-name">{{ item.get('Item Name', 'Unnamed') }}</span>
+                            {% if is_already_ordered %}
+                            <span class="badge" style="background: rgba(234, 179, 8, 0.2); color: #d97706; font-weight: 600; font-size: 0.75rem;">
+                                🔒 Pending Purchase {% if b_id in ordered_items_map %}({{ ordered_items_map[b_id] }}){% endif %}
+                            </span>
+                            {% endif %}
+                        </div>
+                        <span class="item-meta">
+                            ${{ "%.2f"|format(cost_str|float(0)) }}
+                            · {{ item.get('Vendor', '') }}
+                            {% if group_by == 'vendor' %} · {{ item.get('Bill Title', '')[:25] }}{% endif %}
+                        </span>
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.35rem;" onclick="event.stopPropagation();">
+                            <span style="font-size: 0.8rem; font-weight: 500; color: var(--color-text-muted);">Order Qty (Max {{ qty }}):</span>
+                            <input type="number" name="quantity_{{ b_id }}"
+                                   id="qty_input_{{ b_id }}"
+                                   value="{{ qty }}" min="0.01" max="{{ qty }}" step="any" required class="input item-qty-input"
+                                   {% if is_already_ordered %}disabled{% endif %}
+                                   style="width: 85px; padding: 0.2rem 0.4rem; font-size: 0.85rem;"
+                                   oninput="updateSummary()">
+                        </div>
+                        {% if item.get('Ordering Instructions') %}
+                        <span class="item-meta" style="color: var(--color-warning); margin-top: 0.25rem;">Note: {{ item.get('Ordering Instructions') }}</span>
+                        {% endif %}
+                    </div>
+                </label>
+                {% endfor %}
+            </div>
+        </details>
+        {% endfor %}
+
+        <div class="order-actions" style="position: sticky; bottom: 0; background: var(--color-surface); padding: 1rem; border-top: 1px solid var(--color-border);">
+            <div id="order-summary" class="text-muted" style="margin-bottom: 0.5rem;">
+                <span id="selected-count">0</span> items selected · $<span id="selected-total">0.00</span>
+                <span id="vendor-warning" style="color: var(--color-danger); display: none;"> · Multiple vendors — will create separate orders</span>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+                <button type="button" class="btn btn-ghost" onclick="checkSelectedPrices()">Check Prices</button>
+                <button type="submit" class="btn btn-primary" id="submit-btn" disabled
+                        onclick="this.disabled=true; this.textContent='Submitting...'; this.form.submit();">
+                    {% if filter_vendor or request.args.get('filter_vendor') %}➕ Add Items to Order{% else %}🛒 Create Order{% endif %}
+                </button>
+            </div>
+            <div class="price-results" style="display:none; margin-top:0.75rem;"></div>
+        </div>
+    </form>
+
+    {% endif %}
+</div>
+
+<script>
+// Select all per group
+document.querySelectorAll('.select-all-group').forEach(cb => {
+    cb.addEventListener('change', function() {
+        const details = this.closest('details');
+        details.querySelectorAll('input[name="item_ids"]').forEach(item => {
+            item.checked = this.checked;
+        });
+        updateSummary();
+    });
+});
+
+// Update summary on any checkbox change
+document.querySelectorAll('input[name="item_ids"]').forEach(cb => {
+    cb.addEventListener('change', updateSummary);
+});
+
+function updateSummary() {
+    const checked = document.querySelectorAll('input[name="item_ids"]:checked');
+    const count = checked.length;
+    let total = 0;
+    const vendors = new Set();
+
+    checked.forEach(cb => {
+        const itemId = cb.dataset.itemId;
+        const qtyInput = document.getElementById('qty_input_' + itemId);
+        const qtyVal = qtyInput ? (parseFloat(qtyInput.value) || 1) : 1;
+        total += (parseFloat(cb.dataset.cost || 0) * qtyVal);
+        if (cb.dataset.vendor) vendors.add(cb.dataset.vendor);
+    });
+
+    document.getElementById('selected-count').textContent = count;
+    document.getElementById('selected-total').textContent = total.toFixed(2);
+    document.getElementById('submit-btn').disabled = count === 0;
+
+    const warning = document.getElementById('vendor-warning');
+    if (vendors.size > 1) {
+        warning.style.display = 'inline';
+    } else {
+        warning.style.display = 'none';
+    }
+}
+
+function checkSelectedPrices() {
+    const checked = document.querySelectorAll('input[name="item_ids"]:checked');
+    if (checked.length === 0) { alert('Select items first'); return; }
+
+    const btn = document.querySelector('.order-actions .btn-ghost');
+    btn.disabled = true;
+    btn.textContent = 'Checking...';
+
+    const resultsDiv = document.querySelector('.price-results');
+    resultsDiv.style.display = 'block';
+    resultsDiv.innerHTML = '<table class="price-table"><tr><th>Item</th><th>Allocated</th><th>Current</th><th>Delta</th></tr></table><p class="text-muted" id="price-progress">Checking 0/' + checked.length + '...</p>';
+
+    const table = resultsDiv.querySelector('table');
+    const progress = document.getElementById('price-progress');
+    let count = 0;
+
+    const formData = new FormData();
+    checked.forEach(cb => formData.append('item_ids', cb.value));
+
+    fetch('{{ url_for("check_prices") }}', { method: 'POST', body: formData })
+        .then(response => {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            function read() {
+                reader.read().then(({done, value}) => {
+                    if (done) { progress.remove(); btn.disabled = false; btn.textContent = 'Check Prices'; return; }
+                    buffer += decoder.decode(value, {stream: true});
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+                    lines.forEach(line => {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const r = JSON.parse(line.slice(6));
+                                if (r.done) { progress.remove(); btn.disabled = false; btn.textContent = 'Check Prices'; return; }
+                                if (r.error) { progress.textContent = 'Error: ' + r.error; return; }
+                                count++;
+                                progress.textContent = 'Checking ' + count + '/' + checked.length + '...';
+                                const cls = r.warning ? 'price-warn' : 'price-ok';
+                                const currentStr = r.current !== null ? '$' + r.current.toFixed(2) : '—';
+                                const deltaStr = r.delta !== null ? (r.delta > 0 ? '+' : '') + '$' + r.delta.toFixed(2) : '—';
+                                table.innerHTML += '<tr class="' + cls + '"><td>' + r.name + '</td><td>$' + r.allocated.toFixed(2) + '</td><td>' + currentStr + '</td><td>' + deltaStr + '</td></tr>';
+                            } catch(e) {}
+                        }
+                    });
+                    read();
+                });
+            }
+            read();
+        })
+        .catch(e => { resultsDiv.innerHTML = '<p style="color:red;">Error: ' + e + '</p>'; btn.disabled = false; btn.textContent = 'Check Prices'; });
+}
+</script>
+{% endblock %}
