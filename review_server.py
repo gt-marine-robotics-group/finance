@@ -181,13 +181,13 @@ def launch_review_server_and_browser(html_path="review.html", port=PORT):
             except Exception:
                 continue
 
-    file_uri = f"file://{os.path.abspath(html_path)}"
-    print(f"  🌐 Opening Review Page: {file_uri}")
+    review_url = f"http://127.0.0.1:{port}/review.html"
+    print(f"  🌐 Opening Review Page: {review_url}")
 
-    if sys.platform == "darwin":
-        subprocess.run(["open", os.path.abspath(html_path)], check=False)
-    else:
-        webbrowser.open(file_uri)
+    try:
+        webbrowser.open(review_url)
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":

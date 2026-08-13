@@ -432,13 +432,38 @@ driver = webdriver.Chrome(options=options)
 driver.get("https://gatech.campuslabs.com/engage/")
 
 # Login
-discovery_bar = WebDriverWait(driver, 20).until(
-    EC.presence_of_element_located((By.ID, "discovery-bar"))
+WebDriverWait(driver, 20).until(
+    lambda d: d.execute_script("return !!document.getElementById('discovery-bar')")
 )
-parent_root = discovery_bar.find_element(By.ID, "parent-root")
-shadow_root = driver.execute_script("return arguments[0].shadowRoot", parent_root)
-sign_in_button = shadow_root.find_element(By.CSS_SELECTOR, "a[href*='/engage/account/login']")
-sign_in_button.click()
+
+sign_in_button = None
+try:
+    discovery_bar = driver.find_element(By.ID, "discovery-bar")
+    parent_root = discovery_bar.find_element(By.ID, "parent-root")
+    shadow_root = driver.execute_script("return arguments[0].shadowRoot", parent_root)
+    sign_in_candidates = shadow_root.find_elements(By.CSS_SELECTOR, "a[href*='/engage/account/login'], a[href*='account/login'], button, [role='button']")
+    for candidate in sign_in_candidates:
+        href = (candidate.get_attribute("href") or "").lower()
+        text = (candidate.text or "").lower()
+        if "account/login" in href or "sign in" in text or "log in" in text:
+            sign_in_button = candidate
+            break
+except Exception:
+    sign_in_button = None
+
+if sign_in_button is None:
+    try:
+        sign_in_button = driver.find_element(By.CSS_SELECTOR, "a[href*='/engage/account/login']")
+    except Exception:
+        sign_in_button = driver.find_element(By.XPATH, "//a[contains(@href, '/engage/account/login') or contains(normalize-space(.), 'Sign In') or contains(normalize-space(.), 'Log In')][1]")
+
+if sign_in_button is None:
+    raise RuntimeError("Could not locate the Engage sign-in link")
+
+try:
+    sign_in_button.click()
+except Exception:
+    driver.execute_script("arguments[0].click();", sign_in_button)
 
 username_input = WebDriverWait(driver, 20).until(
     EC.presence_of_element_located((By.ID, "username"))
