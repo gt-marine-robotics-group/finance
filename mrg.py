@@ -495,6 +495,28 @@ def cmd_review(args):
     subprocess.run(cmd)
 
 
+def cmd_doctor(args):
+    """Run diagnostic health check on FY27_Bills_Budget.xlsx."""
+    import spreadsheet_utils
+    print(f"\n🩺 Running MRG Finance Spreadsheet Diagnostic Doctor...")
+    print(f"   Target file: {XLSX_PATH}\n")
+    results = spreadsheet_utils.validate_budget_spreadsheet(XLSX_PATH)
+    print("-" * 75)
+    print(f"Summary: {results['summary']}")
+    print("-" * 75)
+    if results["errors"]:
+        print(f"\n❌ ERRORS ({len(results['errors'])}):")
+        for err in results["errors"]:
+            print(f"  • {err}")
+    if results["warnings"]:
+        print(f"\n⚠️ WARNINGS ({len(results['warnings'])}):")
+        for w in results["warnings"]:
+            print(f"  • {w}")
+    if not results["errors"] and not results["warnings"]:
+        print("\n🎉 Spreadsheet is 100% healthy and ready for automation!")
+    print()
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="MRG Finance CLI — bill requests, purchases, and price checking",
@@ -506,6 +528,7 @@ Examples:
   mrg.py bill-request --fresh
   mrg.py purchase --fresh
   mrg.py price-check --bill "FY27 Budget" --cart
+  mrg.py doctor --fresh
         """
     )
     sub = parser.add_subparsers(dest="command")
@@ -535,6 +558,10 @@ Examples:
     p_pc.add_argument("--bill", "-b", help="Bill title (skips interactive selection)")
     p_pc.add_argument("--cart", "-c", action="store_true", help="Generate Amazon cart link")
 
+    # doctor
+    p_doc = sub.add_parser("doctor", help="Run diagnostic health check on FY27_Bills_Budget.xlsx")
+    p_doc.add_argument("--fresh", "-f", action="store_true", help="Sync from SharePoint first")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -552,6 +579,7 @@ Examples:
         "bill-request": cmd_bill_request,
         "purchase": cmd_purchase,
         "price-check": cmd_price_check,
+        "doctor": cmd_doctor,
     }
     commands[args.command](args)
 
