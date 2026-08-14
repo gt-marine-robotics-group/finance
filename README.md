@@ -1,4 +1,4 @@
-# ⚓ Georgia Tech MRG Finance & Purchasing System
+# 🚢 Georgia Tech MRG Finance & Purchasing System
 
 The core features of this system include:
 - **Automatic Bill Submission**: Auto-fills Engage forms, uploads screenshot evidence, and includes a side-by-side review page.
