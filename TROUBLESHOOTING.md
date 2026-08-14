@@ -31,11 +31,9 @@ Solutions to common issues, rclone sync errors, browser automation timeouts, and
 
 ## 🌐 Chrome & Selenium Automation Issues
 
-### 1. `ChromeDriver` Version Mismatch
-- **Cause**: Chrome updated automatically and no longer matches installed `chromedriver`.
-- **Solution**: `selenium>=4.27` handles ChromeDriver resolution automatically. Ensure Chrome is updated:
-  - macOS: `brew upgrade --cask google-chrome`
-  - Linux: `sudo apt update && sudo apt install --only-upgrade chromium-browser`
+### 1. Browser & ChromeDriver Resolution (macOS, Windows & Linux)
+- **Automatic Resolution**: `selenium>=4.27` includes built-in Selenium Manager that automatically detects system Chrome binaries or downloads isolated **Chrome for Testing** binaries across **macOS, Windows, and Linux** automatically.
+- **No Manual Install Needed**: Users on Windows, macOS, or Linux do not need to install Chrome or ChromeDriver manually—Selenium downloads and manages compatible binaries in `~/.cache/selenium/` or `%USERPROFILE%\.cache\selenium\`.
 
 ### 2. GT SSO / Duo MFA Timeout
 - **Cause**: Duo MFA push notification was not approved within 3 minutes (180 seconds).
