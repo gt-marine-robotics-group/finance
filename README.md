@@ -72,9 +72,8 @@ mrg-finance purchase --fresh --order <ORDER_ID>
 ```
 > 💡 **Tip**: If you omit `--order <ORDER_ID>`, the CLI will launch an interactive menu for you to select an order. You can find the exact Order IDs on the `Ordering` sheet of `FY27_Bills_Budget.xlsx`.
 1. Checks live online prices and flags any overruns.
-2. Auto-adds items to an Amazon cart (opens in Incognito).
-3. Generates the **Budget vs Quoted Detail Report** (`.xlsx`).
-4. Pastes the needed info for each line item (cost, bill number) into the Engage **Description** box. *(Note: full auto-filling of specific Engage form fields is still a work in progress).*
+2. Generates the **Budget vs Quoted Detail Report** (`.xlsx`).
+3. Pastes the needed info for each line item (cost, bill number) into the Engage **Description** box. *(Note: full auto-filling of specific Engage form fields is still a work in progress).*
 5. ⚠️ **Final Actions Required**:
    - Manually input the details from the Description box into the actual Engage form fields.
    - Manually attach the **Cart Screenshot (`cart.png`)** and the **Budget vs Quoted Detail Report**.
@@ -128,7 +127,6 @@ Launch the side-by-side screenshot & price review GUI locally.
 Check current online prices vs the approved allocation.
 - `--fresh`, `-f`: Sync latest changes from SharePoint before running.
 - `--bill BILL`, `-b BILL`: Target a specific Bill title to skip interactive selection.
-- `--cart`, `-c`: Automatically generate an Amazon cart link from the items.
 
 ### `mrg-finance screenshots`
 Scrape prices and take screenshots in the background.

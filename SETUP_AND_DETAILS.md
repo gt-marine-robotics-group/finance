@@ -48,14 +48,7 @@ rclone ls "onedrive:OPS-1 Operations/FY27 Finances"
 
 ---
 
-## 🛒 Amazon Multi-Item Cart Links (Incognito Mode)
 
-When placing Amazon orders via `mrg-finance purchase`, the system builds a single multi-item cart URL:
-
-- **Why Incognito Chrome?**: Automatically launches Incognito so any student can generate a fresh cart screenshot without mixing items into their personal Amazon account.
-- **How it Works**: Uses Amazon's AWS add-to-cart API (`ASIN.x` and `Quantity.x`). Clicking "Continue" on the Amazon landing page pre-fills your cart instantly.
-
----
 
 ## 📸 Manual Screenshot Naming Guide
 
