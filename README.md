@@ -10,24 +10,26 @@ Automated bill request submission, purchase request automation, live price audit
 
 This repository exclusively uses [`uv`](https://docs.astral.sh/uv/getting-started/installation/) as the package and environment manager.
 
-#### Step 1: Install `uv`
-- **macOS / Linux**:
-  ```bash
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-  # Or via Homebrew: brew install uv
-  ```
-- **Windows (PowerShell)**:
-  ```powershell
-  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-  ```
-
-> 📖 **Official `uv` Installation Guide**: [https://docs.astral.sh/uv/getting-started/installation/](https://docs.astral.sh/uv/getting-started/installation/)
-
-#### Step 2: Install `mrg-finance` CLI (1-Step Global Access)
+#### 🍎 macOS / 🐧 Linux Setup:
 ```bash
+# 1. Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 2. Install mrg-finance CLI tool globally
 uv tool install git+https://github.com/gt-marine-robotics-group/finance.git
 ```
-*After running this once, `mrg-finance` works system-wide in any terminal window!*
+
+#### 🪟 Windows Setup (PowerShell):
+```powershell
+# 1. Install uv package manager
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# 2. Install mrg-finance CLI tool globally
+uv tool install git+https://github.com/gt-marine-robotics-group/finance.git
+```
+
+> 💡 **PATH Environment Note for Windows**: Ensure `%USERPROFILE%\.local\bin` is in your User Environment `PATH` variable so `mrg-finance` runs directly in PowerShell or Command Prompt.
+> 📖 **Official `uv` Installation Guide**: [https://docs.astral.sh/uv/getting-started/installation/](https://docs.astral.sh/uv/getting-started/installation/)
 
 *(For local editable developer setup, run `git clone git@github.com:gt-marine-robotics-group/finance.git && cd finance && uv venv && source .venv/bin/activate && uv pip install -e .`)*
 
@@ -36,9 +38,13 @@ uv tool install git+https://github.com/gt-marine-robotics-group/finance.git
 ### 2. Browser & Cloud Sync Prerequisites
 
 1. **Google Chrome**: Required for web scraping and CampusLabs Engage form submission.
-   - macOS: `brew install --cask google-chrome` | Linux: `sudo apt install chromium-browser`
+   - **macOS**: `brew install --cask google-chrome`
+   - **Linux**: `sudo apt install chromium-browser`
+   - **Windows**: Install [Google Chrome for Windows](https://www.google.com/chrome/).
 2. **SharePoint Cloud Sync (`rclone`)**:
-   - Install: `brew install rclone` (macOS) or `sudo apt install rclone` (Linux)
+   - **macOS**: `brew install rclone`
+   - **Linux**: `sudo apt install rclone`
+   - **Windows (PowerShell)**: `winget install rclone.rclone`
    - Configure GT OneDrive remote (`onedrive`):
      ```bash
      rclone config
