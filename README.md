@@ -3,7 +3,7 @@
 The core features of this system include:
 - **Automatic Bill Submission**: Auto-fills Engage forms, uploads screenshot evidence, and includes a side-by-side review page.
 - **Automatic Purchase Requests**: Auto-fills Engage forms, dynamically finds section/line numbers, and automatically generates a Budget vs Current Price allocation `.xlsx` report. *(Note: Automated price scraping is primarily validated on Amazon).*
-- **Flexible Management**: All bills and orders can be managed manually on the master spreadsheet or through the interactive web dashboard.
+- **Flexible Management**: All bills and orders can be managed manually on the master spreadsheet or through the interactive web dashboard *(currently hosted in the background on the team's SIM PC)*.
 
 ---
 

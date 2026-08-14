@@ -2,10 +2,13 @@ README.md
 automation.py
 automation_purchase.py
 automation_screenshots.py
+engage_bill_lookup.py
 mrg.py
+order_excel_builder.py
 price_scraper.py
 pyproject.toml
 review_server.py
+spreadsheet_utils.py
 mrg_finance.egg-info/PKG-INFO
 mrg_finance.egg-info/SOURCES.txt
 mrg_finance.egg-info/dependency_links.txt
@@ -13,6 +16,8 @@ mrg_finance.egg-info/entry_points.txt
 mrg_finance.egg-info/requires.txt
 mrg_finance.egg-info/top_level.txt
 tests/test_app_routes.py
+tests/test_engage_bill_lookup.py
+tests/test_order_excel_builder.py
 tests/test_price_scraper.py
 tests/test_xlsx_manager.py
 web-app/app.py
