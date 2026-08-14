@@ -122,9 +122,11 @@ mrg-finance purchase --fresh
 4. **Generates an Amazon Multi-Item Cart Link**:
    - Offers to open the cart link in **Incognito Chrome** (recommended so you don't need to be signed into any personal Amazon account).
    - Click "Continue" on Amazon to add all order items to your cart automatically.
-5. Launches the **Side-by-Side Review GUI** (`http://127.0.0.1:8321`).
-6. Pre-fills the Engage Purchase Request form in Chrome with subject, total amount, item breakdown, and exact section/line numbers (`Bill 376851, B03 - General Inventoried Goods, Line 1...`).
-7. If an item went over budget, prompts to auto-create a separate **Overflow Purchase Request**.
+5. Auto-generates the **Budget vs Quoted Detail Report** (`Budget_vs_Quoted_Detail_<order_id>.xlsx`) with live formulas (`=E*F`, `=SUM(...)`).
+6. Pre-fills the Engage Purchase Request form fields and attaches the **two mandatory backup documents**:
+   - 📸 **Upload #1**: Cart Screenshot (`cart.png`).
+   - 📗 **Upload #2**: Budget vs Quoted Detail Report (`Budget_vs_Quoted_Detail_<order_id>.xlsx`).
+7. ⚠️ **Final Action Required**: Review the pre-filled form in Chrome and click **"Submit"** on CampusLabs Engage to finalize the request!
 
 ---
 
