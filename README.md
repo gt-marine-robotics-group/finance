@@ -102,12 +102,15 @@ flowchart TD
    - Run `mrg-finance doctor --fresh` to pull the latest SharePoint Excel edits and verify that all `Bill Item ID` references, product URLs, and prices are valid.
    - Run `mrg-finance report --fresh --order <ORDER_ID>` to generate the side-by-side **Budget vs Quoted** Excel report (`.xlsx`) containing live formulas and subtotal calculations.
 
-4. **Step 4: Executing Purchase Request Automation**:
+4. **Step 4: Executing Purchase Request Automation & Backup Uploads**:
    - Run `mrg-finance purchase --fresh --order <ORDER_ID>`.
-   - The CLI performs a live price audit against vendor URLs, auto-builds an Amazon multi-item cart URL, captures cart screenshot evidence (`cart.png`), and pre-fills CampusLabs Engage purchase forms with exact section and line numbers.
+   - The CLI performs a live price audit, auto-builds an Amazon cart, and automatically attaches the **two mandatory backup documents** to the Engage form:
+     - 📸 **Upload #1**: Shopping Cart Screenshot (`cart.png`).
+     - 📗 **Upload #2**: Budget vs Quoted Detail Report (`Budget_vs_Quoted_Detail_<order_id>.xlsx`) comparing approved allocated costs vs live quoted prices with dynamic Excel cell formulas.
+   - Pre-fills Subject, Amount, SGA Bill Box (price/line/bill/section), and Budget/Bill Line # fields.
 
-5. **Step 5: Web Dashboard & Review GUI Alternative**:
-   - Alternatively, launch the Web Dashboard (`http://localhost:5000`) or Side-by-Side Review Inspector (`http://localhost:8321`). Any price adjustments or item edits saved through the GUI automatically write back to `FY27_Bills_Budget.xlsx` using openpyxl while preserving all existing Excel formulas (`SUM`, `IFERROR`) and formatting.
+5. **Step 5: Final Submission on CampusLabs Engage**:
+   - ⚠️ **IMPORTANT**: After `mrg-finance` completes pre-filling the form fields and uploading the two backup documents, **you must review the populated form in Chrome and click "Submit" on CampusLabs Engage to finalize the bill or purchase request!**
 
 ---
 
@@ -184,7 +187,13 @@ Submits purchase requests to CampusLabs Engage grouped by vendor from `OrderT`.
 mrg-finance purchase --fresh
 mrg-finance purchase --fresh --order "260811_amazon_awu335"
 ```
-**Workflow**: Audits live prices ➔ Builds 1-Click Amazon Multi-Item Cart URL ➔ Captures `cart.png` ➔ Auto-generates Budget vs Quoted Excel detail report ➔ Pre-fills Engage Purchase Request form in Chrome.
+**Workflow**: Audits live prices ➔ Builds 1-Click Amazon Cart URL ➔ Captures `cart.png` ➔ Auto-generates Budget vs Quoted Excel detail report ➔ Attaches mandatory backup docs ➔ Pre-fills Engage form fields.
+
+#### Mandatory Backup Documentation Attached:
+1. 📸 **Upload #1**: Shopping Cart Screenshot (`cart.png`).
+2. 📗 **Upload #2**: Budget vs Quoted Detail Report (`Budget_vs_Quoted_Detail_<order_id>.xlsx`) containing live Excel formulas (`=E*F`, `=H*I`, `=SUM(...)`) comparing allocated budget costs vs live quoted vendor prices.
+
+> ⚠️ **Final Action Required**: After automation pre-fills the form fields and attaches both files, **you must click "Submit" on CampusLabs Engage to finalize the request!**
 
 ---
 
