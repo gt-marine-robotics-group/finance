@@ -70,6 +70,7 @@ When you are placing an order for items approved on a bill:
 ```bash
 mrg-finance purchase --fresh --order <ORDER_ID>
 ```
+> 💡 **Tip**: If you omit `--order <ORDER_ID>`, the CLI will launch an interactive menu for you to select an order. You can find the exact Order IDs on the `Ordering` sheet of `FY27_Bills_Budget.xlsx`.
 1. Checks live online prices and flags any overruns.
 2. Auto-adds items to an Amazon cart (opens in Incognito).
 3. Generates the **Budget vs Quoted Detail Report** (`.xlsx`).
