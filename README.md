@@ -94,3 +94,43 @@ mrg-finance review
 - [**Spreadsheet Guide**](SPREADSHEET_GUIDE.md): Master spreadsheet schema, formulas, and `doctor` diagnostic rules.
 - [**Troubleshooting**](TROUBLESHOOTING.md): Solutions for `rclone` sync errors, Chrome/Selenium driver issues, and MFA timeouts.
 - [**Development Guide**](DEVELOPMENT.md): System architecture, Flask web dashboard, and contributor code map.
+
+---
+
+## 💻 CLI Commands Reference
+
+You can view these options directly from your terminal by running `mrg-finance --help` or appending `--help` to any command.
+
+### `mrg-finance bill-request`
+Submit a bill to CampusLabs Engage for SGA approval.
+- `--fresh`, `-f`: Sync latest changes from SharePoint before running.
+
+### `mrg-finance purchase`
+Submit purchase requests to Engage.
+- `--fresh`, `-f`: Sync latest changes from SharePoint before running.
+- `--order ORDER`, `-o ORDER`: Pass a specific Order ID to skip interactive selection.
+
+### `mrg-finance report`
+Generate the Budget vs Quoted Full Detail Excel/CSV comparison report locally.
+- `--fresh`, `-f`: Sync latest changes from SharePoint before running.
+- `--order ORDER`, `-o ORDER`: Pass a specific Order ID to skip interactive selection.
+
+### `mrg-finance doctor`
+Run diagnostic health check on `FY27_Bills_Budget.xlsx`.
+- `--fresh`, `-f`: Sync latest changes from SharePoint before running.
+
+### `mrg-finance review`
+Launch the side-by-side screenshot & price review GUI locally.
+- `--bill BILL`, `-b BILL`: Target a specific Bill title to skip interactive selection.
+
+### `mrg-finance price-check`
+Check current online prices vs the approved allocation.
+- `--fresh`, `-f`: Sync latest changes from SharePoint before running.
+- `--bill BILL`, `-b BILL`: Target a specific Bill title to skip interactive selection.
+- `--cart`, `-c`: Automatically generate an Amazon cart link from the items.
+
+### `mrg-finance screenshots`
+Scrape prices and take screenshots in the background.
+- `--fresh`, `-f`: Sync latest changes from SharePoint before running.
+- `--bill BILL`, `-b BILL`: Target a specific Bill title to skip interactive selection.
+- `--review-only`, `-r`: Launch review GUI without scraping new prices.
