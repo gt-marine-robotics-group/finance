@@ -1,6 +1,9 @@
 # ⚓ Georgia Tech MRG Finance & Purchasing System
 
-Automated bill request submission, purchase request automation, live price auditing, and budget spreadsheet management for the **Georgia Tech Marine Robotics Group**.
+The core features of this system include:
+- **Automatic Bill Submission**: Auto-fills Engage forms, uploads screenshot evidence, and includes a side-by-side review page.
+- **Automatic Purchase Requests**: Auto-fills Engage forms, dynamically finds section/line numbers, and automatically generates a Budget vs Current Price allocation `.xlsx` report. *(Note: Automated price scraping is primarily validated on Amazon).*
+- **Flexible Management**: All bills and orders can be managed manually on the master spreadsheet or through the interactive web dashboard.
 
 ---
 
@@ -38,6 +41,13 @@ Item screenshots and master budget files are synced with the team's shared GT Sh
    rclone ls "onedrive:OPS-1 Operations/FY27 Finances"
    ```
    *Seeing `FY27_Bills_Budget.xlsx` listed confirms your cloud connection is working.*
+
+### 📸 Manual Screenshots (CAPTCHA Fallback)
+
+One of the most robust features is the ability to easily override the scraper. If the automation encounters a website with a CAPTCHA, you can simply take the screenshot manually and save it to the synced folder. The system will automatically detect and use it during submission:
+```text
+screenshots/<Bill Title>/<Item Name>.png
+```
 
 ---
 
