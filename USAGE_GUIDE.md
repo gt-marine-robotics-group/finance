@@ -41,10 +41,8 @@ uv tool install git+https://github.com/gt-marine-robotics-group/finance.git
 
 Follow these steps to set up your Mac or PC:
 
-### Step 0: Ensure Google Chrome is Installed
-The system uses **Google Chrome** for automated price scraping and CampusLabs Engage submissions:
-- **macOS**: `brew install --cask google-chrome` or download from [google.com/chrome](https://www.google.com/chrome/)
-- **Windows**: Download and install [google.com/chrome](https://www.google.com/chrome/)
+### Step 0: Browser Requirement (Auto-Managed)
+The system uses **Google Chrome** for automated price scraping and CampusLabs Engage submissions. You **do not need to install Chrome manually**—Selenium automatically downloads and manages its own isolated Chrome browser (`~/.cache/selenium/`) on first execution.
 
 ### Step 1: Open Terminal & Clone Repository
 ```bash
