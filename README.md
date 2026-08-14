@@ -55,18 +55,7 @@ screenshots/<Bill Title>/<Item Name>.png
 
 Before running commands, you can verify your spreadsheet health with `mrg-finance doctor --fresh`.
 
-### 1. Submit a Purchase Request
-When you are placing an order for items approved on a bill:
-```bash
-mrg-finance purchase --fresh --order <ORDER_ID>
-```
-1. Checks live online prices and flags any overruns.
-2. Auto-adds items to an Amazon cart (opens in Incognito).
-3. Generates the **Budget vs Quoted Detail Report** (`.xlsx`).
-4. Pre-fills the Engage Purchase Request form.
-5. ⚠️ **Final Action Required**: You must manually attach the **Cart Screenshot (`cart.png`)** and the **Budget vs Quoted Detail Report**, then click **"Submit"** on CampusLabs Engage!
-
-### 2. Submit a Bill Request
+### 1. Submit a Bill Request
 When submitting a newly drafted bill for SGA approval:
 ```bash
 mrg-finance bill-request --fresh
@@ -75,6 +64,21 @@ mrg-finance bill-request --fresh
 2. Opens the side-by-side inspector to review items.
 3. Pre-fills the Engage bill form automatically.
 4. ⚠️ **Final Action Required**: Click **"Submit"** on CampusLabs Engage.
+
+### 2. Submit a Purchase Request
+When you are placing an order for items approved on a bill:
+```bash
+mrg-finance purchase --fresh --order <ORDER_ID>
+```
+1. Checks live online prices and flags any overruns.
+2. Auto-adds items to an Amazon cart (opens in Incognito).
+3. Generates the **Budget vs Quoted Detail Report** (`.xlsx`).
+4. Pastes the needed info for each line item (cost, bill number) into the Engage **Description** box. *(Note: full auto-filling of specific Engage form fields is still a work in progress).*
+5. ⚠️ **Final Actions Required**:
+   - Manually input the details from the Description box into the actual Engage form fields.
+   - Manually attach the **Cart Screenshot (`cart.png`)** and the **Budget vs Quoted Detail Report**.
+   - Digitally "sign" the request by typing your name in the final box.
+   - Click **"Submit"** on CampusLabs Engage!
 
 ### 3. Review Prices & Screenshots
 Open the side-by-side review GUI without running browser automation:
