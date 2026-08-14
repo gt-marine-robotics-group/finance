@@ -6,11 +6,6 @@ Automated bill request submission, purchase request automation, live price audit
 
 ## 🛠️ Step-by-Step System Setup
 
-### 🌐 Chrome Browser (Auto-Managed by Selenium)
-The system uses Chrome for automated web price scraping and CampusLabs Engage form submissions. You **do not need to manually install Chrome**—Selenium automatically downloads and manages an isolated Chrome binary on first run.
-
----
-
 ### Step 1: Install `uv` Package Manager
 This repository exclusively uses [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for fast Python environment and package management.
 - **macOS / Linux**: `curl -LsSf https://astral.sh/uv/install.sh | sh`
