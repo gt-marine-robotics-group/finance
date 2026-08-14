@@ -110,14 +110,26 @@ flowchart TD
 
 ```bash
 Usage:
-    mrg-finance report [--fresh] [--order ORDER_ID]
+    mrg-finance report [--fresh] [--order ORDER_ID] [--skip-scrape]
     mrg-finance doctor [--fresh]
     mrg-finance bill-request [--fresh]
     mrg-finance purchase [--fresh] [--order ORDER_ID]
     mrg-finance review [--bill TITLE]
-    mrg-finance price-check [--fresh] [--bill TITLE]
+    mrg-finance price-check [--fresh] [--bill TITLE] [--cart]
     mrg-finance screenshots [--fresh] [--bill TITLE] [--review-only]
 ```
+
+### 📋 Subcommands & Flags Cheat Sheet
+
+| Subcommand | Supported Flags | Purpose & Description | Quick Example |
+| :--- | :--- | :--- | :--- |
+| **`report`** | `--fresh` (`-f`), `--order` (`-o`), `--skip-scrape` | Generates side-by-side Budget vs Quoted Excel & CSV reports with live formulas. | `mrg-finance report --fresh --order 260811_amazon_awu335` |
+| **`doctor`** | `--fresh` (`-f`) | Pre-flight audit checking duplicate IDs, broken links, $0 allocations & row offsets. | `mrg-finance doctor --fresh` |
+| **`purchase`** | `--fresh` (`-f`), `--order` (`-o`) | Audits prices, builds 1-Click Amazon cart, captures `cart.png`, & pre-fills Engage forms. | `mrg-finance purchase --fresh --order 260811_amazon_awu335` |
+| **`bill-request`** | `--fresh` (`-f`) | Submits draft budget bills to CampusLabs Engage for SGA approval. | `mrg-finance bill-request --fresh` |
+| **`review`** | `--bill` (`-b`) | Launches interactive side-by-side review GUI at `http://localhost:8321`. | `mrg-finance review --bill "Testing Equipment"` |
+| **`price-check`** | `--fresh` (`-f`), `--bill` (`-b`), `--cart` (`-c`) | Headless price audit comparing live online prices against budget allocations. | `mrg-finance price-check --fresh --cart` |
+| **`screenshots`** | `--fresh` (`-f`), `--bill` (`-b`), `--review-only` (`-r`) | Scrapes prices via headless Chrome & captures full-page screenshot evidence. | `mrg-finance screenshots --fresh` |
 
 ---
 
