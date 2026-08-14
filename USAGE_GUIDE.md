@@ -26,26 +26,14 @@ Welcome to the **Marine Robotics Group (MRG) Finance & Purchasing System**! This
 
 ## 🌐 1-Step Global CLI Installation (Use Anywhere!)
 
-You can install `mrg-finance` globally so the `mrg-finance` command works from **any directory** in your terminal:
+This repository exclusively uses [`uv`](https://docs.astral.sh/uv/getting-started/installation/) as the package manager.
 
-### Option A: Via `pipx` (Recommended Global CLI)
-```bash
-pipx install git+https://github.com/gt-marine-robotics-group/finance.git
-```
-*Now typing `mrg-finance purchase`, `mrg-finance bill-request`, or `mrg-finance doctor` works system-wide in any terminal window!*
-
-### Option B: Via `uv tool`
 ```bash
 uv tool install git+https://github.com/gt-marine-robotics-group/finance.git
 ```
+*Now typing `mrg-finance purchase`, `mrg-finance bill-request`, or `mrg-finance doctor` works system-wide in any terminal window!*
 
-### Option C: From Local Clone
-```bash
-git clone git@github.com:gt-marine-robotics-group/finance.git
-cd finance
-uv venv && source .venv/bin/activate
-uv pip install -e .
-```
+*(For local editable setup, run `git clone git@github.com:gt-marine-robotics-group/finance.git && cd finance && uv venv && source .venv/bin/activate && uv pip install -e .`)*
 
 ---
 
@@ -89,6 +77,9 @@ Test your connection:
 ```bash
 rclone ls "onedrive:OPS-1 Operations/FY27 Finances"
 ```
+
+> ⚠️ **WARNING / IMPORTANT**:
+> Configuring `rclone` to sync GT OneDrive / SharePoint involves multi-factor authentication (GT SSO + Duo MFA) and specific remote settings. If you encounter any issues during this configuration step, **ask a finance officer or team lead for help**!
 
 ---
 
