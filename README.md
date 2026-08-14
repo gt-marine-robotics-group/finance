@@ -84,8 +84,7 @@ flowchart TD
     D -->|"Submit Bill"| E["mrg-finance bill-request"]
     D -->|"Place Order"| F["mrg-finance purchase --order ID"]
     D -->|"Generate Report"| G["mrg-finance report --order ID"]
-    F --> H["Auto-build Amazon Cart<br/>Capture cart.png Evidence<br/>Build Budget vs Quoted Report"]
-    H --> I["Pre-fill Engage Purchase Form<br/>& Upload Backup Docs"]
+    F --> I["Pre-fill Engage Purchase Form<br/>& Upload Backup Docs"]
 ```
 
 #### Step-by-Step Interface Guide for Team Members:
