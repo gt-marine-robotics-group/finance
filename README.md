@@ -127,7 +127,7 @@ Usage:
 
 ### 📋 Subcommands & Flags Cheat Sheet
 
-| Subcommand | Supported Flags | Purpose & Description | Quick Example |
+| Subcommand | Supported Flags | Purpose & Description | macOS / Linux & Windows Example |
 | :--- | :--- | :--- | :--- |
 | **`report`** | `--fresh` (`-f`), `--order` (`-o`), `--skip-scrape` | Generates side-by-side Budget vs Quoted Excel & CSV reports with live formulas. | `mrg-finance report --fresh --order 260811_amazon_awu335` |
 | **`doctor`** | `--fresh` (`-f`) | Pre-flight audit checking duplicate IDs, broken links, $0 allocations & row offsets. | `mrg-finance doctor --fresh` |
@@ -136,6 +136,8 @@ Usage:
 | **`review`** | `--bill` (`-b`) | Launches interactive side-by-side review GUI at `http://localhost:8321`. | `mrg-finance review --bill "Testing Equipment"` |
 | **`price-check`** | `--fresh` (`-f`), `--bill` (`-b`), `--cart` (`-c`) | Headless price audit comparing live online prices against budget allocations. | `mrg-finance price-check --fresh --cart` |
 | **`screenshots`** | `--fresh` (`-f`), `--bill` (`-b`), `--review-only` (`-r`) | Scrapes prices via headless Chrome & captures full-page screenshot evidence. | `mrg-finance screenshots --fresh` |
+
+> 🪟 **Windows PowerShell Note**: All `mrg-finance` CLI subcommands run identically in **Windows PowerShell** or Command Prompt once `%USERPROFILE%\.local\bin` is added to your environment `PATH`.
 
 ---
 
