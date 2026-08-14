@@ -82,11 +82,27 @@ flowchart TD
     H --> I["Pre-fills Engage Purchase Request form & attaches reports"]
 ```
 
-#### How Team Members Interface with Excel:
+#### Step-by-Step Interface Guide for Team Members:
 
-1. **Add Bill Items**: Open [FY27_Bills_Budget.xlsx on SharePoint](https://gtvault.sharepoint.com/:x:/r/sites/MarineRoboticsGroup/Shared%20Documents/OPS-1%20Operations/FY27%20Finances/FY27_Bills_Budget.xlsx?d=w89396907686c491395b64a5ef042181c&csf=1&web=1&e=b5knap). In **`Bills`**, add line items with unique `Bill Item ID`s, costs, and URLs.
-2. **Create Vendor Orders**: In **`Ordering`**, group items under an `Order ID` (e.g., `260811_amazon_awu335`) referencing the `Bill Item ID`s and quantities.
-3. **Run Automation**: Use `mrg-finance doctor --fresh` to audit Excel integrity, `mrg-finance report --fresh --order <ORDER_ID>` to build comparison reports, and `mrg-finance purchase --fresh --order <ORDER_ID>` to automate form submissions.
+1. **Step 1: Adding Approved Line Items (`Bills` sheet)**:
+   - Open [FY27_Bills_Budget.xlsx on SharePoint](https://gtvault.sharepoint.com/:x:/r/sites/MarineRoboticsGroup/Shared%20Documents/OPS-1%20Operations/FY27%20Finances/FY27_Bills_Budget.xlsx?d=w89396907686c491395b64a5ef042181c&csf=1&web=1&e=b5knap).
+   - Navigate to the **`Bills`** sheet. Add a new row with a unique `Bill Item ID` (e.g. `376851_1`), SGA `Bill No.`, item description, budget section, approved unit cost, and product link.
+
+2. **Step 2: Grouping Line Items into Orders (`Ordering` sheet)**:
+   - Navigate to the **`Ordering`** sheet.
+   - Create a new `Order ID` (format: `YYMMDD_<vendor>_<gt_username>`, e.g., `260811_amazon_awu335`).
+   - List the `Bill Item ID`s and quantities to order for each item.
+
+3. **Step 3: Running Pre-Flight Audit & Report Generation**:
+   - Run `mrg-finance doctor --fresh` to pull the latest SharePoint Excel edits and verify that all `Bill Item ID` references, product URLs, and prices are valid.
+   - Run `mrg-finance report --fresh --order <ORDER_ID>` to generate the side-by-side **Budget vs Quoted** Excel report (`.xlsx`) containing live formulas and subtotal calculations.
+
+4. **Step 4: Executing Purchase Request Automation**:
+   - Run `mrg-finance purchase --fresh --order <ORDER_ID>`.
+   - The CLI performs a live price audit against vendor URLs, auto-builds an Amazon multi-item cart URL, captures cart screenshot evidence (`cart.png`), and pre-fills CampusLabs Engage purchase forms with exact section and line numbers.
+
+5. **Step 5: Web Dashboard & Review GUI Alternative**:
+   - Alternatively, launch the Web Dashboard (`http://localhost:5000`) or Side-by-Side Review Inspector (`http://localhost:8321`). Any price adjustments or item edits saved through the GUI automatically write back to `FY27_Bills_Budget.xlsx` using openpyxl while preserving all existing Excel formulas (`SUM`, `IFERROR`) and formatting.
 
 ---
 
