@@ -78,14 +78,14 @@ The entire purchasing and bill submission pipeline is driven by the team's share
 
 ```mermaid
 flowchart TD
-    A["1️⃣ Team Member edits FY27_Bills_Budget.xlsx on SharePoint"] --> B["2️⃣ mrg-finance CLI syncs latest xlsx via rclone / Graph API (--fresh)"]
-    B --> C["3️⃣ Pre-Flight Audit (mrg-finance doctor) validates row integrity & links"]
-    C --> D{"Choose Action"}
+    A["1️⃣ Edit Excel on SharePoint<br/>(FY27_Bills_Budget.xlsx)"] --> B["2️⃣ Sync Fresh Copy<br/>mrg-finance --fresh"]
+    B --> C["3️⃣ Pre-Flight Audit<br/>mrg-finance doctor"]
+    C --> D{"Select CLI Action"}
     D -->|"Submit Bill"| E["mrg-finance bill-request"]
     D -->|"Place Order"| F["mrg-finance purchase --order ID"]
-    D -->|"Gen Report"| G["mrg-finance report --order ID"]
-    F --> H["Auto-generates Amazon cart, captures cart.png, and generates Budget vs Quoted .xlsx report"]
-    H --> I["Pre-fills Engage Purchase Request form & attaches reports"]
+    D -->|"Generate Report"| G["mrg-finance report --order ID"]
+    F --> H["Auto-build Amazon Cart<br/>Capture cart.png Evidence<br/>Build Budget vs Quoted Report"]
+    H --> I["Pre-fill Engage Purchase Form<br/>& Upload Backup Docs"]
 ```
 
 #### Step-by-Step Interface Guide for Team Members:
