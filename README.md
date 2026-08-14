@@ -4,30 +4,65 @@ Automated bill request submission, purchase request automation, live price audit
 
 ---
 
-### ⚡ 1-Step Installation (`uv`)
+## 🛠️ Step-by-Step System Setup
 
-| Platform | Installation Command |
-| :--- | :--- |
-| 🍎 **macOS / Linux** | `curl -LsSf https://astral.sh/uv/install.sh \| sh && uv tool install git+https://github.com/gt-marine-robotics-group/finance.git` |
-| 🪟 **Windows (PowerShell)** | `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"; uv tool install git+https://github.com/gt-marine-robotics-group/finance.git` |
-
----
-
-### 🔌 Prerequisites
-
-1. **Google Chrome**: macOS (`brew install --cask google-chrome`) \| Windows (Install Chrome)
-2. **SharePoint Cloud Sync (`rclone`)**: `rclone config` *(Remote: `onedrive` ➔ Storage: `42` ➔ Site: `https://gtvault.sharepoint.com/sites/MarineRoboticsGroup`)*
-   > ⚠️ **Need Help?**: Ask a finance officer or team lead if you need assistance during initial `rclone` SSO/Duo setup!
+### 🌐 Requirement Notice: Google Chrome
+The system uses **Google Chrome** for automated web price scraping, screenshot evidence capture, and CampusLabs Engage form submission.
+- **macOS**: Install via Homebrew `brew install --cask google-chrome` or download from [google.com/chrome](https://www.google.com/chrome/).
+- **Windows**: Download and install from [google.com/chrome](https://www.google.com/chrome/).
+- **Linux**: `sudo apt install chromium-browser`
 
 ---
 
-### 📊 Master Budget Spreadsheet
+### Step 1: Install `uv` Package Manager
+This repository exclusively uses [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for fast Python environment and package management.
+- **macOS / Linux**: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- **Windows (PowerShell)**: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
+
+---
+
+### Step 2: Clone Repository & Set Up Virtual Environment (`.venv`)
+
+```bash
+# 1. Clone the repository
+git clone git@github.com:gt-marine-robotics-group/finance.git
+cd finance
+
+# 2. Create virtual environment using uv
+uv venv
+
+# 3. Activate the virtual environment
+source .venv/bin/activate        # On macOS / Linux
+# On Windows PowerShell: .\.venv\Scripts\activate
+
+# 4. Install dependencies and mrg-finance CLI tool in editable mode
+uv pip install -e .
+```
+
+*Optional Global Access*: Run `uv tool install git+https://github.com/gt-marine-robotics-group/finance.git` to run `mrg-finance` from any directory without activating `.venv`.
+
+---
+
+### Step 3: Configure Cloud Sync (`rclone`)
+1. **Install `rclone`**: macOS (`brew install rclone`) \| Windows (`winget install rclone.rclone`) \| Linux (`sudo apt install rclone`)
+2. **Configure Remote (`onedrive`)**:
+   ```bash
+   rclone config
+   # Select 'n' (New remote) -> Name: onedrive -> Storage: 42 (OneDrive) -> Auth with GT SSO -> SharePoint Site: https://gtvault.sharepoint.com/sites/MarineRoboticsGroup -> Drive: Documents (3)
+   ```
+3. **Verify Sync**: `rclone ls "onedrive:OPS-1 Operations/FY27 Finances"`
+
+> ⚠️ **Need Help?**: `rclone` setup involves GT SSO + Duo MFA. Ask a finance officer or team lead for assistance during initial config!
+
+---
+
+## 📊 Master Budget Spreadsheet
 
 🔗 **Direct SharePoint Link**: [FY27_Bills_Budget.xlsx (SharePoint Web View)](https://gtvault.sharepoint.com/:x:/r/sites/MarineRoboticsGroup/Shared%20Documents/OPS-1%20Operations/FY27%20Finances/FY27_Bills_Budget.xlsx?d=w89396907686c491395b64a5ef042181c&csf=1&web=1&e=b5knap)
 
 ---
 
-### 🤖 CLI Commands Cheat Sheet (`mrg-finance`)
+## 🤖 CLI Commands Quick Reference (`mrg-finance`)
 
 | Command | Action / Description | Example |
 | :--- | :--- | :--- |
@@ -41,7 +76,7 @@ Automated bill request submission, purchase request automation, live price audit
 
 ---
 
-### 📚 Complete Documentation Guides
+## 📚 Complete Documentation Guides
 
 | Guide | Content / Focus |
 | :--- | :--- |

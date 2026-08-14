@@ -41,25 +41,29 @@ uv tool install git+https://github.com/gt-marine-robotics-group/finance.git
 
 Follow these steps to set up your Mac or PC:
 
+### Step 0: Ensure Google Chrome is Installed
+The system uses **Google Chrome** for automated price scraping and CampusLabs Engage submissions:
+- **macOS**: `brew install --cask google-chrome` or download from [google.com/chrome](https://www.google.com/chrome/)
+- **Windows**: Download and install [google.com/chrome](https://www.google.com/chrome/)
+
 ### Step 1: Open Terminal & Clone Repository
 ```bash
 git clone git@github.com:gt-marine-robotics-group/finance.git
 cd finance
 ```
 
-### Step 2: Create Python Environment
-Make sure you have **Python 3.10+** installed:
+### Step 2: Create Python Environment (`.venv`)
+Ensure you have [`uv`](https://docs.astral.sh/uv/getting-started/installation/) installed (`curl -LsSf https://astral.sh/uv/install.sh | sh`):
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate    # On Windows: .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-pip install -e .
+uv venv
+source .venv/bin/activate        # On Windows: .\.venv\Scripts\activate
+uv pip install -e .
 ```
 
 ### Step 3: Configure SharePoint Sync (`rclone`)
 Screenshots and master Excel files are synced from GT SharePoint via `rclone`.
 ```bash
-# Install rclone (macOS: brew install rclone)
+# Install rclone (macOS: brew install rclone | Windows: winget install rclone.rclone)
 rclone config
 ```
 When prompted by `rclone config`:
