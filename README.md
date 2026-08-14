@@ -82,8 +82,8 @@ flowchart TD
     B --> C["3️⃣ Pre-Flight Audit<br/>mrg-finance doctor"]
     C --> D{"Select CLI Action"}
     D -->|"Submit Bill"| E["mrg-finance bill-request"]
-    D -->|"Place Order"| F["mrg-finance purchase --order ID"]
-    D -->|"Generate Report"| G["mrg-finance report --order ID"]
+    D -->|"Place Order"| F["mrg-finance purchase"]
+    D -->|"Generate Report"| G["mrg-finance report"]
     F --> I["Pre-fill Engage Purchase Form<br/>& Upload Backup Docs"]
 ```
 
