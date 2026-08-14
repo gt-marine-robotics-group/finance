@@ -6,19 +6,28 @@ Automated bill request submission, purchase request automation, live price audit
 
 ## 🛠️ Quick Setup & Installation
 
-### 1. Install CLI Tool (1-Step Global Access)
+### 1. Install `uv` Package Manager & CLI Tool
 
-Choose either `pipx` or `uv tool` to install the `mrg-finance` CLI globally so it works from **any directory** in your terminal:
+This repository exclusively uses [`uv`](https://docs.astral.sh/uv/getting-started/installation/) as the package and environment manager.
 
-##### ⚡ Via `pipx` (Standard Python CLI Installer):
-```bash
-pipx install git+https://github.com/gt-marine-robotics-group/finance.git
-```
+#### Step 1: Install `uv`
+- **macOS / Linux**:
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  # Or via Homebrew: brew install uv
+  ```
+- **Windows (PowerShell)**:
+  ```powershell
+  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+  ```
 
-##### 🚀 Via `uv tool` (Ultra-Fast Modern Alternative):
+> 📖 **Official `uv` Installation Guide**: [https://docs.astral.sh/uv/getting-started/installation/](https://docs.astral.sh/uv/getting-started/installation/)
+
+#### Step 2: Install `mrg-finance` CLI (1-Step Global Access)
 ```bash
 uv tool install git+https://github.com/gt-marine-robotics-group/finance.git
 ```
+*After running this once, `mrg-finance` works system-wide in any terminal window!*
 
 *(For local editable developer setup, run `git clone git@github.com:gt-marine-robotics-group/finance.git && cd finance && uv venv && source .venv/bin/activate && uv pip install -e .`)*
 
@@ -36,6 +45,9 @@ uv tool install git+https://github.com/gt-marine-robotics-group/finance.git
      # New remote (n) -> Name: onedrive -> Storage: 42 (OneDrive) -> Auth with GT SSO -> SharePoint Site: https://gtvault.sharepoint.com/sites/MarineRoboticsGroup -> Drive: Documents (3)
      ```
    - Verify: `rclone ls "onedrive:OPS-1 Operations/FY27 Finances"`
+
+> ⚠️ **WARNING / IMPORTANT**:
+> Configuring `rclone` to sync GT OneDrive / SharePoint involves multi-factor authentication (GT SSO + Duo MFA) and specific remote settings. If you encounter any issues during this configuration step, **ask a finance officer or team lead for help**!
 
 ---
 
