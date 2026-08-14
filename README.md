@@ -6,11 +6,8 @@ Automated bill request submission, purchase request automation, live price audit
 
 ## 🛠️ Step-by-Step System Setup
 
-### 🌐 Requirement Notice: Google Chrome
-The system uses **Google Chrome** for automated web price scraping, screenshot evidence capture, and CampusLabs Engage form submission.
-- **macOS**: Install via Homebrew `brew install --cask google-chrome` or download from [google.com/chrome](https://www.google.com/chrome/).
-- **Windows**: Download and install from [google.com/chrome](https://www.google.com/chrome/).
-- **Linux**: `sudo apt install chromium-browser`
+### 🌐 Chrome Browser (Auto-Managed by Selenium)
+The system uses Chrome for automated web price scraping and CampusLabs Engage form submissions. You **do not need to manually install Chrome**—Selenium automatically downloads and manages an isolated Chrome binary on first run.
 
 ---
 
