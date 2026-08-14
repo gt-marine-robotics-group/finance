@@ -107,9 +107,32 @@ pip install -r requirements.txt
 ```
 
 Requires:
-- Chrome installed
+- Chrome (automatically managed by Selenium)
 - OneDrive syncing the MRG SharePoint
 - rclone configured (for `--fresh` flag)
+
+## Code Map
+
+For contributors adding features, here is how the codebase is structured:
+
+```
+finance/
+├── web-app/                 # Flask web dashboard (http://localhost:5000)
+├── automation_purchase.py   # Purchase request submission flow & Amazon cart launcher
+├── engage_bill_lookup.py    # Engage DOM scraper (finds section titles & line numbers)
+├── automation.py            # Bill request submission flow & item creation logic
+├── automation_screenshots.py# Price scraper integration & review HTML generator
+├── price_scraper.py         # Live price scraping (Amazon, McMaster, etc.) & ASIN parser
+├── review_server.py         # Local HTTP server (port 8321) for saving price edits to Excel
+├── review.html              # Side-by-side screenshot review GUI
+├── mrg.py                   # CLI entrypoint for `mrg-finance` commands
+└── engage_tools.py          # SharePoint download utility
+```
+
+### Key Functions to Know:
+- **`lookup_bill_item_locations()`** in `engage_bill_lookup.py`: Navigates to an Engage bill URL, clicks the "Budget" tab, traverses section headers, and returns `{item_name: {section, section_line_number}}`.
+- **`generate_amazon_cart_url()`** in `price_scraper.py`: Parses Amazon URLs for ASINs (`/dp/B0...`) and builds the AWS cart URL.
+- **`_open_incognito_browser()`** in `automation_purchase.py`: Launches Chrome in `--incognito` mode across macOS, Linux, and Windows.
 
 ## Adding Features
 

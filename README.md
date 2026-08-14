@@ -4,75 +4,79 @@ Automated bill request submission, purchase request automation, live price audit
 
 ---
 
-## 🛠️ Step-by-Step System Setup
+## 🚀 Installation
 
-### Step 1: Install `uv` Package Manager
-This repository exclusively uses [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for fast Python environment and package management.
-- **macOS / Linux**: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- **Windows (PowerShell)**: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
+This tool installs system-wide via [`uv`](https://docs.astral.sh/uv/getting-started/installation/) so the `mrg-finance` command works from **any directory** without manually managing Python environments.
 
----
+### Step 1: Install CLI
 
-### Step 2: Clone Repository & Set Up Virtual Environment (`.venv`)
+- **macOS / Linux**:
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  uv tool install git+https://github.com/gt-marine-robotics-group/finance.git
+  ```
+- **Windows (PowerShell)**:
+  ```powershell
+  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+  uv tool install git+https://github.com/gt-marine-robotics-group/finance.git
+  ```
 
-```bash
-# 1. Clone the repository
-git clone git@github.com:gt-marine-robotics-group/finance.git
-cd finance
+> 🌐 **Browser Note**: You **do not need to install Chrome**. Selenium automatically downloads and manages an isolated browser on first run.
 
-# 2. Create virtual environment using uv
-uv venv
+### Step 2: Configure Cloud Sync (`rclone`)
 
-# 3. Activate the virtual environment
-source .venv/bin/activate        # On macOS / Linux
-# On Windows PowerShell: .\.venv\Scripts\activate
+Item screenshots and master budget files are synced with the team's shared GT SharePoint.
 
-# 4. Install dependencies and mrg-finance CLI tool in editable mode
-uv pip install -e .
-```
-
-*Optional Global Access*: Run `uv tool install git+https://github.com/gt-marine-robotics-group/finance.git` to run `mrg-finance` from any directory without activating `.venv`.
-
----
-
-### Step 3: Configure Cloud Sync (`rclone`)
-1. **Install `rclone`**: macOS (`brew install rclone`) \| Windows (`winget install rclone.rclone`) \| Linux (`sudo apt install rclone`)
+1. **Install `rclone`**: macOS (`brew install rclone`) | Windows (`winget install rclone.rclone`) | Linux (`sudo apt install rclone`)
 2. **Configure Remote (`onedrive`)**:
    ```bash
    rclone config
-   # Select 'n' (New remote) -> Name: onedrive -> Storage: 42 (OneDrive) -> Auth with GT SSO -> SharePoint Site: https://gtvault.sharepoint.com/sites/MarineRoboticsGroup -> Drive: Documents (3)
+   # Select 'n' (New remote) -> Name: onedrive -> Storage: 42 (OneDrive) -> Auth with GT SSO + Duo MFA -> SharePoint Site: https://gtvault.sharepoint.com/sites/MarineRoboticsGroup -> Drive: Documents (3)
    ```
-3. **Verify Sync**: `rclone ls "onedrive:OPS-1 Operations/FY27 Finances"`
-
-> ⚠️ **Need Help?**: `rclone` setup involves GT SSO + Duo MFA. Ask a finance officer or team lead for assistance during initial config!
-
----
-
-## 📊 Master Budget Spreadsheet
-
-🔗 **Direct SharePoint Link**: [FY27_Bills_Budget.xlsx (SharePoint Web View)](https://gtvault.sharepoint.com/:x:/r/sites/MarineRoboticsGroup/Shared%20Documents/OPS-1%20Operations/FY27%20Finances/FY27_Bills_Budget.xlsx?d=w89396907686c491395b64a5ef042181c&csf=1&web=1&e=b5knap)
+3. **Verify Sync Access**:
+   ```bash
+   rclone ls "onedrive:OPS-1 Operations/FY27 Finances"
+   ```
+   *Seeing `FY27_Bills_Budget.xlsx` listed confirms your cloud connection is working.*
 
 ---
 
-## 🤖 CLI Commands Quick Reference (`mrg-finance`)
+## 🛒 Usage & Workflow
 
-| Command | Action / Description | Example |
-| :--- | :--- | :--- |
-| `mrg-finance doctor` | Pre-flight audit checking duplicate IDs, broken links & row shifts | `mrg-finance doctor --fresh` |
-| `mrg-finance purchase` | Audits prices, builds Amazon cart, attaches `cart.png` & `.xlsx` report, pre-fills form | `mrg-finance purchase --fresh --order 260811_amazon_awu335` |
-| `mrg-finance report` | Generates side-by-side Budget vs Quoted Excel (`.xlsx`) & CSV detail reports | `mrg-finance report --fresh --order 260811_amazon_awu335` |
-| `mrg-finance bill-request` | Submits draft budget bill to CampusLabs Engage for SGA approval | `mrg-finance bill-request --fresh` |
-| `mrg-finance review` | Launches interactive side-by-side screenshot & price review GUI (`:8321`) | `mrg-finance review` |
+Before running commands, you can verify your spreadsheet health with `mrg-finance doctor --fresh`.
 
-> ⚠️ **Engage Form Submission**: After `mrg-finance purchase` or `bill-request` pre-fills the form and attaches backup files, **you must click "Submit" on CampusLabs Engage** to finalize the request.
+### 1. Submit a Purchase Request
+When you are placing an order for items approved on a bill:
+```bash
+mrg-finance purchase --fresh --order <ORDER_ID>
+```
+1. Checks live online prices and flags any overruns.
+2. Auto-adds items to an Amazon cart (opens in Incognito).
+3. Generates the **Budget vs Quoted Detail Report** (`.xlsx`).
+4. Pre-fills the Engage Purchase Request form.
+5. ⚠️ **Final Action Required**: You must manually attach the **Cart Screenshot (`cart.png`)** and the **Budget vs Quoted Detail Report**, then click **"Submit"** on CampusLabs Engage!
+
+### 2. Submit a Bill Request
+When submitting a newly drafted bill for SGA approval:
+```bash
+mrg-finance bill-request --fresh
+```
+1. Verifies screenshot evidence for every line item.
+2. Opens the side-by-side inspector to review items.
+3. Pre-fills the Engage bill form automatically.
+4. ⚠️ **Final Action Required**: Click **"Submit"** on CampusLabs Engage.
+
+### 3. Review Prices & Screenshots
+Open the side-by-side review GUI without running browser automation:
+```bash
+mrg-finance review
+```
 
 ---
 
-## 📚 Complete Documentation Guides
+## 📚 Documentation Guides
 
-| Guide | Content / Focus |
-| :--- | :--- |
-| 📘 [**USAGE_GUIDE.md**](USAGE_GUIDE.md) | **Student Workflow Guide**: Purchasing walkthrough, Amazon cart generation, and Engage form pre-filling. |
-| 📊 [**SPREADSHEET_GUIDE.md**](SPREADSHEET_GUIDE.md) | **Master Spreadsheet Guide**: `FY27_Bills_Budget.xlsx` schema (`Bills` vs `Ordering`) and formula rules. |
-| 🔍 [**TROUBLESHOOTING.md**](TROUBLESHOOTING.md) | **Troubleshooting & FAQ**: Solutions for `rclone` sync errors, Chrome/Selenium drivers, Duo MFA, and Windows setup. |
-| 💻 [**DEVELOPMENT.md**](DEVELOPMENT.md) | **Developer Guide**: System architecture map, Flask web dashboard, database schemas, and unit test suite details. |
+- [**In-Depth Setup & Extra Details**](SETUP_AND_DETAILS.md): Local editable setup, detailed `rclone` configuration, Amazon cart linking behavior, and screenshot naming rules.
+- [**Spreadsheet Guide**](SPREADSHEET_GUIDE.md): Master spreadsheet schema, formulas, and `doctor` diagnostic rules.
+- [**Troubleshooting**](TROUBLESHOOTING.md): Solutions for `rclone` sync errors, Chrome/Selenium driver issues, and MFA timeouts.
+- [**Development Guide**](DEVELOPMENT.md): System architecture, Flask web dashboard, and contributor code map.
