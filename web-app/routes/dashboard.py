@@ -5,7 +5,7 @@ dashboard.py - Main dashboard, system status, and force pull routes.
 import os
 import json
 import requests
-from flask import Blueprint, render_template, redirect, url_for, flash, request
+from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
 import xlsx_manager
 import screenshot_worker
 from routes.auth import login_required
@@ -60,6 +60,7 @@ def dashboard():
 
 
 @dashboard_bp.route("/force-pull", methods=["POST"])
+@dashboard_bp.route("/sync-onedrive", methods=["POST"])
 @login_required
 def force_pull():
     """Force a fresh pull from SharePoint, bypassing all caches."""
@@ -69,7 +70,10 @@ def force_pull():
     result = xlsx_manager.sync_pull(force=True)
     if result:
         if os.path.exists(xlsx_manager.LOCAL_XLSX):
-            os.utime(xlsx_manager.LOCAL_XLSX, None)
+            try:
+                os.utime(xlsx_manager.LOCAL_XLSX, None)
+            except OSError:
+                pass
         flash("Synced from SharePoint", "success")
     else:
         flash("Sync failed — check rclone config", "error")
@@ -121,4 +125,4 @@ def system_status():
         status["sync"] = "no local file"
         status["sync_age"] = "No sync"
 
-    return json.dumps(status)
+    return jsonify(status)

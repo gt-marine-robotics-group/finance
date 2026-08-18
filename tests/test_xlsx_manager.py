@@ -52,3 +52,28 @@ def test_get_bills_empty():
         assert len(items_alpha) == 2
     finally:
         xlsx_manager.read_items = original_read_items
+
+
+from unittest.mock import patch, MagicMock
+
+
+def test_sync_pull_rclone_success(tmp_path):
+    target_xlsx = tmp_path / "test.xlsx"
+    target_xlsx.write_text("test")
+    with patch("xlsx_manager.LOCAL_XLSX", str(target_xlsx)), \
+         patch("xlsx_manager._run_rclone", return_value=True) as mock_rclone:
+        res = xlsx_manager.sync_pull(force=True)
+        assert res is True
+        assert mock_rclone.called
+
+
+def test_sync_pull_graph_api_fallback(tmp_path):
+    target_xlsx = tmp_path / "test.xlsx"
+    target_xlsx.write_text("test")
+    with patch("xlsx_manager.LOCAL_XLSX", str(target_xlsx)), \
+         patch("xlsx_manager._run_rclone", return_value=False), \
+         patch("xlsx_manager._download_xlsx_via_graph_api", return_value=True) as mock_graph:
+        res = xlsx_manager.sync_pull(force=True)
+        assert res is True
+        assert mock_graph.called
+

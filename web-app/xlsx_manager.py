@@ -113,6 +113,27 @@ def _run_rclone(args: list[str]) -> bool:
         return False
 
 
+def _download_xlsx_via_graph_api(target_path: str) -> bool:
+    """Download fresh FY27_Bills_Budget.xlsx directly from SharePoint via Graph API."""
+    import requests as _requests
+    try:
+        creds = _get_graph_token()
+        if not creds:
+            return False
+        access_token, drive_id, file_id = creds
+        url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/content"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        resp = _requests.get(url, headers=headers, timeout=30)
+        if resp.status_code == 200:
+            os.makedirs(os.path.dirname(os.path.abspath(target_path)), exist_ok=True)
+            with open(target_path, "wb") as f:
+                f.write(resp.content)
+            return True
+    except Exception as e:
+        print(f"[sync] Graph API download failed: {e}")
+    return False
+
+
 def sync_pull(force: bool = False) -> bool:
     """Pull latest xlsx from SharePoint. Background by default, synchronous when force=True."""
     global _last_pull_time
@@ -126,14 +147,22 @@ def sync_pull(force: bool = False) -> bool:
     local_dir = str(Path(LOCAL_XLSX).parent)
     os.makedirs(local_dir, exist_ok=True)
 
-    if force:
-        return _run_rclone(["copy", "--checksum", RCLONE_REMOTE, local_dir])
+    def _perform_pull() -> bool:
+        ok = _run_rclone(["copy", "--checksum", RCLONE_REMOTE, local_dir])
+        if not ok:
+            ok = _download_xlsx_via_graph_api(LOCAL_XLSX)
+        if ok and os.path.exists(LOCAL_XLSX):
+            try:
+                os.utime(LOCAL_XLSX, None)
+            except OSError:
+                pass
+        return ok
 
-    def _do_pull():
-        _run_rclone(["copy", "--checksum", RCLONE_REMOTE, local_dir])
+    if force:
+        return _perform_pull()
 
     # Trigger pull in background thread so HTTP request does not wait on rclone
-    threading.Thread(target=_do_pull, daemon=True).start()
+    threading.Thread(target=_perform_pull, daemon=True).start()
     return True
 
 

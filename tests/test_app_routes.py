@@ -168,3 +168,39 @@ def test_prevent_duplicate_order_item_submission(client):
         assert response.status_code == 200
         assert b"is already assigned to an order" in response.data or b"already included in an existing order" in response.data
 
+
+def test_force_pull_and_sync_onedrive_routes(client):
+    """Ensure both /force-pull and /sync-onedrive trigger cache invalidation and sync_pull."""
+    client.post("/login", data={"password": "boats0519", "name": "Tester"})
+    with patch("xlsx_manager.sync_pull", return_value=True) as mock_sync, \
+         patch("xlsx_manager.invalidate_all_caches") as mock_inval:
+        resp1 = client.post("/force-pull", follow_redirects=True)
+        assert resp1.status_code == 200
+        assert mock_sync.called
+        assert mock_inval.called
+
+    with patch("xlsx_manager.sync_pull", return_value=True) as mock_sync, \
+         patch("xlsx_manager.invalidate_all_caches") as mock_inval:
+        resp2 = client.post("/sync-onedrive", follow_redirects=True)
+        assert resp2.status_code == 200
+        assert mock_sync.called
+        assert mock_inval.called
+
+
+def test_status_endpoint_sync_age_formatting(client, tmp_path):
+    """Ensure /status returns properly formatted sync_age strings."""
+    client.post("/login", data={"password": "boats0519", "name": "Tester"})
+    test_xlsx = tmp_path / "test.xlsx"
+    test_xlsx.write_text("dummy")
+
+    with patch("xlsx_manager.LOCAL_XLSX", str(test_xlsx)), \
+         patch("xlsx_manager._get_graph_token", return_value=None):
+        resp = client.get("/status")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "sync_age" in data
+        assert "Synced just now" in data["sync_age"]
+        # Ensure it does not contain duplicated "ago"
+        assert "ago ago" not in data["sync_age"]
+
+

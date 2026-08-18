@@ -48,7 +48,10 @@
         }
     </style>
     <script>
+    let isSyncing = false;
     function triggerSync() {
+        if (isSyncing) return;
+        isSyncing = true;
         const icon = document.getElementById('nav-sync-icon');
         const label = document.getElementById('nav-status-label');
         if (icon) {
@@ -56,26 +59,36 @@
             icon.classList.add('spinning');
         }
         if (label) label.textContent = 'Syncing...';
-        fetch('/sync-onedrive', { method: 'POST' })
+        fetch('/force-pull', { method: 'POST' })
             .then(() => { location.reload(); })
             .catch(() => { location.reload(); });
     }
 
-    fetch('/status').then(r=>r.json()).then(s=>{
-        const dot = document.getElementById('nav-status');
-        const label = document.getElementById('nav-status-label');
-        if(s.token==='ok') {
-            dot.style.color='#16a34a';
-            label.textContent = (s.sync_age ? s.sync_age + ' ago' : 'Synced');
-        } else if(s.token==='expired') {
-            dot.style.color='#dc2626';
-            label.textContent='Token Expired';
-            dot.title='Run: rclone authorize "onedrive"';
-        } else {
-            dot.style.color='#ca8a04';
-            label.textContent='Offline';
-        }
-    }).catch(()=>{ document.getElementById('nav-status-label').textContent='Offline'; document.getElementById('nav-status').style.color='#ca8a04'; });
+    function checkStatus() {
+        fetch('/status').then(r=>r.json()).then(s=>{
+            const dot = document.getElementById('nav-status');
+            const label = document.getElementById('nav-status-label');
+            if (!dot || !label) return;
+            if(s.token==='ok') {
+                dot.style.color='#16a34a';
+                label.textContent = s.sync_age || 'Synced';
+            } else if(s.token==='expired') {
+                dot.style.color='#dc2626';
+                label.textContent='Token Expired';
+                dot.title='Run: rclone authorize "onedrive"';
+            } else {
+                dot.style.color='#ca8a04';
+                label.textContent = s.sync_age || 'Offline';
+            }
+        }).catch(()=>{
+            const dot = document.getElementById('nav-status');
+            const label = document.getElementById('nav-status-label');
+            if (label) label.textContent='Offline';
+            if (dot) dot.style.color='#ca8a04';
+        });
+    }
+    checkStatus();
+    setInterval(checkStatus, 30000);
     </script>
     {% endif %}
 
