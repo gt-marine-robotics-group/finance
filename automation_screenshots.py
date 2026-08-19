@@ -279,19 +279,9 @@ def extract_price_from_page(driver, url):
 
 
 def dismiss_popups(driver):
-    """Try to dismiss cookie/popup overlays."""
-    for sel in ['[id*="cookie"] button', '[class*="cookie"] button',
-                '[id*="consent"] button', 'button[class*="accept"]',
-                'button[class*="dismiss"]', 'button[aria-label*="close"]']:
-        try:
-            buttons = driver.find_elements(By.CSS_SELECTOR, sel)
-            for btn in buttons[:2]:
-                if btn.is_displayed():
-                    btn.click()
-                    time.sleep(0.3)
-                    break
-        except Exception:
-            continue
+    """Try to dismiss cookie/popup overlays and Amazon continue shopping interstitials."""
+    import price_scraper
+    price_scraper.dismiss_popups_and_interstitials(driver)
 
 
 def wait_for_page_ready(driver, timeout=15):

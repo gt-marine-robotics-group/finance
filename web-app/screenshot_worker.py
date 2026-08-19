@@ -308,6 +308,7 @@ def _process_job(job: dict):
             print(f"[screenshot worker] Page load warning for {item_name}: {load_err}")
 
         time.sleep(DELAY)
+        price_scraper.dismiss_popups_and_interstitials(driver)
         driver.save_screenshot(filepath)
 
         price_text = price_scraper.scrape_price_from_driver(driver)

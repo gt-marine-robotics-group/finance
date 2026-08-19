@@ -289,6 +289,7 @@ if run_check in ("", "y", "yes"):
                     shot_path = os.path.join(order_shot_dir, f"{safe_name}.png")
                     c_driver.get(url)
                     time.sleep(2)
+                    price_scraper.dismiss_popups_and_interstitials(c_driver)
                     c_driver.save_screenshot(shot_path)
                     print(f"  📸 Saved screenshot for '{item_name}' -> {shot_path}")
 
