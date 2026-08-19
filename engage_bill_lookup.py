@@ -328,7 +328,38 @@ def lookup_bill_item_locations(driver, bill_no: str, item_names: list[str]) -> d
         except Exception:
             pass
 
-    print(f"     ✅ Found {len(by_name)} total line items across {section_count} section(s) on Engage.")
+    # 4) Robust Fallback: Scan full page text lines for numbered items (e.g. 34. Toggle Swtich)
+    if not by_name:
+        try:
+            body_text = driver.find_element(By.TAG_NAME, "body").text or ""
+            current_sec = "B06 - Non-Inventoried Items"
+            for ln in body_text.splitlines():
+                ln = ln.strip()
+                if not ln:
+                    continue
+                if re.match(r"^B\d{2}\s*-", ln):
+                    current_sec = ln.split("\t")[0].strip()
+                    continue
+                m = re.match(r"^\s*(\d+)\.\s*(.+)$", ln)
+                if m:
+                    num = int(m.group(1))
+                    raw = m.group(2)
+                    sec_m = re.search(r"(B\d{2}\s*-\s*[A-Za-z0-9\s\-_]+)", raw)
+                    sec = sec_m.group(1).strip() if sec_m else current_sec
+                    cleaned = _clean_item_name(raw)
+                    norm = _normalize_text(cleaned)
+                    if norm and norm != _normalize_text(sec) and len(norm) >= 2:
+                        if not any(skip in norm for skip in ["add line item", "delete section", "section total", "edit section"]):
+                            if norm not in by_name:
+                                by_name[norm] = {
+                                    "section": sec,
+                                    "line_number": num,
+                                    "section_line_number": num,
+                                }
+        except Exception:
+            pass
+
+    print(f"     ✅ Found {len(by_name)} total line items across {section_count or len(set(v.get('section') for v in by_name.values()))} section(s) on Engage.")
 
     # 4) Match target item names against extracted Engage line items using multi-tiered matcher
     result = {}
