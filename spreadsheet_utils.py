@@ -104,9 +104,15 @@ def get_col_val(row_dict: dict, canonical_key: str, default: str = "") -> str:
     """Extract a row value using flexible column alias matching."""
     aliases = COLUMN_ALIASES.get(canonical_key, [canonical_key])
     norm_row = {str(k).lower().strip(): v for k, v in row_dict.items()}
+    # 1. Exact match
     for alias in aliases:
         if alias in norm_row:
             return clean_str(norm_row[alias])
+    # 2. Substring match fallback
+    for alias in aliases:
+        for k, v in norm_row.items():
+            if alias in k or k in alias:
+                return clean_str(v)
     return default
 
 
