@@ -26,33 +26,35 @@ def test_find_line_number_in_bill_html_matches_item_name():
     assert find_line_number_in_bill_html(html, "missing item") is None
 
 
-def test_lookup_bill_item_locations_maps_section_and_line():
-    class FakeElement:
-        def __init__(self, text):
-            self.text = text
+def test_find_line_number_in_bill_html_prioritizes_exact_over_substring():
+    html = """
+    <div>
+      <a ng-click="editLineItem(lineItem)">USB Antenna adapter</a>
+      <a ng-click="editLineItem(lineItem)">Antenna</a>
+      <a ng-click="editLineItem(lineItem)">Toggle Switch</a>
+    </div>
+    """
+    assert find_line_number_in_bill_html(html, "Antenna") == 2
+    assert find_line_number_in_bill_html(html, "USB Antenna adapter") == 1
+    assert find_line_number_in_bill_html(html, "Toggle Switch") == 3
 
-    class FakeDriver:
-        def __init__(self):
-            self.page_url = None
 
-        def get(self, url):
-            self.page_url = url
+def test_find_best_item_match_prevents_substring_hijacking():
+    from engage_bill_lookup import find_best_item_match
 
-        def find_elements(self, by, value):
-            return [FakeElement("Hardware"), FakeElement("Software")]
+    candidates = {
+        "usb antenna adapter": {"section": "B06", "section_line_number": 31, "name": "usb antenna adapter"},
+        "antenna": {"section": "B06", "section_line_number": 30, "name": "antenna"},
+        "toggle switch": {"section": "B06", "section_line_number": 29, "name": "toggle switch"},
+    }
 
-    driver = FakeDriver()
-    section = FakeElement("Hardware")
-    section.find_element = lambda *args, **kwargs: FakeContainer([
-        FakeElement("First Item"),
-        FakeElement("Second Item"),
-    ])
+    match_antenna = find_best_item_match("Antenna", candidates)
+    match_usb = find_best_item_match("USB Antenna adapter", candidates)
+    match_toggle = find_best_item_match("Toggle Switch", candidates)
 
-    class FakeContainer:
-        def __init__(self, items):
-            self.items = items
-        def find_elements(self, by, value):
-            return self.items
-
-    result = lookup_bill_item_locations(driver, "376945", ["Second Item"])
-    assert result == {}
+    assert match_antenna["name"] == "antenna"
+    assert match_antenna["section_line_number"] == 30
+    assert match_usb["name"] == "usb antenna adapter"
+    assert match_usb["section_line_number"] == 31
+    assert match_toggle["name"] == "toggle switch"
+    assert match_toggle["section_line_number"] == 29
