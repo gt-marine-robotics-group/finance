@@ -221,45 +221,62 @@ def lookup_bill_item_locations(driver, bill_no: str, item_names: list[str]) -> d
 
                 sec_items = []
 
-                # Strategy A: Find element nodes inside container (links, rows, list items)
-                line_item_elements = container.find_elements(
-                    By.XPATH,
-                    ".//a[contains(@ng-click, 'lineItem') or contains(@ng-click, 'LineItem')] | "
-                    ".//a[contains(@class, 'line') or contains(@class, 'item')] | "
-                    ".//tr[contains(@class, 'ng-scope') or contains(@ng-repeat, 'line')] | "
-                    ".//li[contains(@ng-repeat, 'line')] | "
-                    ".//div[contains(@class, 'line-item') or contains(@class, 'budget-item')] | "
-                    ".//a | .//td[1]"
-                )
-
-                for li in line_item_elements:
-                    txt = li.text.strip()
-                    norm = _normalize_text(txt)
-                    if norm and norm != _normalize_text(sec_name) and len(norm) >= 3:
-                        if not any(skip in norm for skip in ["add line item", "delete section", "section total", "edit section"]):
-                            if norm not in [item[1] for item in sec_items]:
-                                sec_items.append((txt, norm))
-
-                # Strategy B: Fallback to parsing container text lines if DOM node lookup returned nothing
-                if not sec_items:
-                    raw_text = container.text or ""
-                    lines = [ln.strip() for ln in raw_text.splitlines() if ln.strip()]
-                    for ln in lines:
-                        norm = _normalize_text(ln)
-                        if norm and norm != _normalize_text(sec_name) and len(norm) >= 3:
+                # Strategy 1: Parse container text lines with explicit line numbers (e.g. "34.\tToggle Swtich\tB06...")
+                raw_text = container.text or ""
+                lines = [ln.strip() for ln in raw_text.splitlines() if ln.strip()]
+                for ln in lines:
+                    m = re.match(r"^\s*(\d+)\.\s*([^\t\n\r]+)", ln)
+                    if m:
+                        explicit_num = int(m.group(1))
+                        raw_name = m.group(2).split("\t")[0].strip()
+                        norm = _normalize_text(raw_name)
+                        if norm and norm != _normalize_text(sec_name) and len(norm) >= 2:
                             if not any(skip in norm for skip in ["add line item", "delete section", "section total", "edit section"]):
-                                if not re.match(r'^\$?\d+[\d.,]*$', norm):
-                                    if norm not in [item[1] for item in sec_items]:
-                                        sec_items.append((ln, norm))
+                                sec_items.append((raw_name, norm, explicit_num))
 
-                for sec_line_idx, (orig_txt, norm_txt) in enumerate(sec_items, start=1):
+                # Strategy 2: Check table rows (tr) inside container
+                if not sec_items:
+                    rows = container.find_elements(By.TAG_NAME, "tr")
+                    for r in rows:
+                        cells = r.find_elements(By.TAG_NAME, "td")
+                        if len(cells) >= 2:
+                            c0_text = cells[0].text.strip()
+                            c1_text = cells[1].text.strip()
+                            m = re.match(r"^(\d+)\.?", c0_text)
+                            if m and c1_text:
+                                explicit_num = int(m.group(1))
+                                norm = _normalize_text(c1_text)
+                                sec_items.append((c1_text, norm, explicit_num))
+
+                # Strategy 3: Find element nodes inside container
+                if not sec_items:
+                    line_item_elements = container.find_elements(
+                        By.XPATH,
+                        ".//a[contains(@ng-click, 'lineItem') or contains(@ng-click, 'LineItem')] | "
+                        ".//tr[contains(@class, 'ng-scope') or contains(@ng-repeat, 'line')] | "
+                        ".//div[contains(@class, 'line-item') or contains(@class, 'budget-item')]"
+                    )
+                    for li in line_item_elements:
+                        txt = li.text.strip()
+                        norm = _normalize_text(txt)
+                        m = re.match(r"^(\d+)\.\s*(.*)", txt)
+                        explicit_num = int(m.group(1)) if m else None
+                        clean_txt = m.group(2).strip() if m else txt
+                        if norm and norm != _normalize_text(sec_name) and len(norm) >= 2:
+                            if not any(skip in norm for skip in ["add line item", "delete section", "section total", "edit section"]):
+                                sec_items.append((clean_txt, _normalize_text(clean_txt), explicit_num))
+
+                for sec_line_idx, item_tuple in enumerate(sec_items, start=1):
+                    orig_txt = item_tuple[0]
+                    norm_txt = item_tuple[1]
+                    explicit_num = item_tuple[2] if len(item_tuple) > 2 and item_tuple[2] is not None else sec_line_idx
+
                     if norm_txt not in by_name:
                         by_name[norm_txt] = {
                             "section": sec_name,
-                            "line_number": overall_line_counter,
-                            "section_line_number": sec_line_idx,
+                            "line_number": explicit_num,
+                            "section_line_number": explicit_num,
                         }
-                        overall_line_counter += 1
             except Exception:
                 pass
     except Exception:
