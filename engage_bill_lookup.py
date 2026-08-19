@@ -219,20 +219,44 @@ def lookup_bill_item_locations(driver, bill_no: str, item_names: list[str]) -> d
                 # Traverse up 3 parent levels to section container as in automation.py
                 container = anchor.find_element(By.XPATH, "./../../..")
 
-                sec_items = []
-
-                # Strategy 1: Parse container text lines with explicit line numbers (e.g. "34.\tToggle Swtich\tB06...")
+                # Strategy 1: Parse container text lines with explicit line numbers
                 raw_text = container.text or ""
                 lines = [ln.strip() for ln in raw_text.splitlines() if ln.strip()]
+
+                def _clean_item_name(raw_val: str) -> str:
+                    c = raw_val.split("\t")[0].strip()
+                    c = re.sub(r"\s+B\d{2}\s*-.*$", "", c, flags=re.I)
+                    c = re.sub(r"\s+\d+\s*x\s*\$?\d+.*$", "", c, flags=re.I)
+                    c = re.sub(r"\s+\$?\d+[\d.,]*$", "", c)
+                    return c.strip()
+
+                # Single-line format (tab or space separated)
                 for ln in lines:
-                    m = re.match(r"^\s*(\d+)\.\s*([^\t\n\r]+)", ln)
+                    m = re.match(r"^\s*(\d+)\.\s*([^\n\r]+)", ln)
                     if m:
                         explicit_num = int(m.group(1))
-                        raw_name = m.group(2).split("\t")[0].strip()
-                        norm = _normalize_text(raw_name)
+                        cleaned_name = _clean_item_name(m.group(2))
+                        norm = _normalize_text(cleaned_name)
                         if norm and norm != _normalize_text(sec_name) and len(norm) >= 2:
                             if not any(skip in norm for skip in ["add line item", "delete section", "section total", "edit section"]):
-                                sec_items.append((raw_name, norm, explicit_num))
+                                sec_items.append((cleaned_name, norm, explicit_num))
+
+                # Multiline format (line number on line i, item name on line i+1)
+                if not sec_items:
+                    i = 0
+                    while i < len(lines):
+                        ln = lines[i]
+                        m_single = re.match(r"^(\d+)\.?$", ln)
+                        if m_single and i + 1 < len(lines):
+                            explicit_num = int(m_single.group(1))
+                            name_candidate = _clean_item_name(lines[i + 1])
+                            norm = _normalize_text(name_candidate)
+                            if norm and len(norm) >= 2 and norm != _normalize_text(sec_name):
+                                if not any(skip in norm for skip in ["add line item", "delete section", "section total", "edit section"]):
+                                    if not re.match(r"^\d+\.?$", name_candidate) and not re.match(r"^B\d{2}\s*-", name_candidate):
+                                        sec_items.append((name_candidate, norm, explicit_num))
+                                        i += 1
+                        i += 1
 
                 # Strategy 2: Check table rows (tr) inside container
                 if not sec_items:
@@ -241,12 +265,13 @@ def lookup_bill_item_locations(driver, bill_no: str, item_names: list[str]) -> d
                         cells = r.find_elements(By.TAG_NAME, "td")
                         if len(cells) >= 2:
                             c0_text = cells[0].text.strip()
-                            c1_text = cells[1].text.strip()
+                            c1_text = _clean_item_name(cells[1].text.strip())
                             m = re.match(r"^(\d+)\.?", c0_text)
                             if m and c1_text:
                                 explicit_num = int(m.group(1))
                                 norm = _normalize_text(c1_text)
-                                sec_items.append((c1_text, norm, explicit_num))
+                                if norm and len(norm) >= 2 and norm != _normalize_text(sec_name):
+                                    sec_items.append((c1_text, norm, explicit_num))
 
                 # Strategy 3: Find element nodes inside container
                 if not sec_items:
@@ -258,13 +283,14 @@ def lookup_bill_item_locations(driver, bill_no: str, item_names: list[str]) -> d
                     )
                     for li in line_item_elements:
                         txt = li.text.strip()
-                        norm = _normalize_text(txt)
                         m = re.match(r"^(\d+)\.\s*(.*)", txt)
                         explicit_num = int(m.group(1)) if m else None
-                        clean_txt = m.group(2).strip() if m else txt
+                        raw_txt = m.group(2).strip() if m else txt
+                        cleaned_txt = _clean_item_name(raw_txt)
+                        norm = _normalize_text(cleaned_txt)
                         if norm and norm != _normalize_text(sec_name) and len(norm) >= 2:
                             if not any(skip in norm for skip in ["add line item", "delete section", "section total", "edit section"]):
-                                sec_items.append((clean_txt, _normalize_text(clean_txt), explicit_num))
+                                sec_items.append((cleaned_txt, norm, explicit_num))
 
                 for sec_line_idx, item_tuple in enumerate(sec_items, start=1):
                     orig_txt = item_tuple[0]
