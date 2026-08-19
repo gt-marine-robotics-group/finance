@@ -219,6 +219,8 @@ def lookup_bill_item_locations(driver, bill_no: str, item_names: list[str]) -> d
                 # Traverse up 3 parent levels to section container as in automation.py
                 container = anchor.find_element(By.XPATH, "./../../..")
 
+                sec_items = []
+
                 # Strategy 1: Parse container text lines with explicit line numbers
                 raw_text = container.text or ""
                 lines = [ln.strip() for ln in raw_text.splitlines() if ln.strip()]
