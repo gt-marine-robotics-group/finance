@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: mrg-finance
-Version: 0.1.6
+Version: 0.1.7
 Summary: MRG Finance CLI — bill requests, purchase automation, and price auditing
 Author-email: Georgia Tech Marine Robotics Group <ops@marinerobotics.gatech.edu>
 Requires-Python: >=3.10
