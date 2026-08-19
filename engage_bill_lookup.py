@@ -44,14 +44,91 @@ def find_line_number_in_bill_html(html: str, item_name: str) -> Optional[int]:
         return None
 
     normalized_target = _normalize_text(item_name)
+    
+    # Pass 1: Exact match
+    for idx, match in enumerate(matches, start=1):
+        text = _normalize_text(match)
+        if text == normalized_target:
+            return idx
+
+    # Pass 2: Clean alphanumeric match
+    target_clean = re.sub(r"[^a-z0-9]", "", normalized_target)
+    for idx, match in enumerate(matches, start=1):
+        text_clean = re.sub(r"[^a-z0-9]", "", _normalize_text(match))
+        if target_clean and text_clean == target_clean:
+            return idx
+
+    # Pass 3: Token / Substring with closest length
+    best_idx = None
+    best_len_diff = float("inf")
     for idx, match in enumerate(matches, start=1):
         text = _normalize_text(match)
         if not text:
             continue
         if normalized_target in text or text in normalized_target:
-            return idx
+            len_diff = abs(len(text) - len(normalized_target))
+            if len_diff < best_len_diff:
+                best_len_diff = len_diff
+                best_idx = idx
 
-    return None
+    return best_idx
+
+
+def find_best_item_match(target_name: str, candidate_dict: dict[str, dict]) -> Optional[dict]:
+    """
+    Match target item name against scraped Engage line item dictionary.
+    Prioritizes:
+    1. Exact normalized match (e.g. 'antenna' == 'antenna', 'toggle switch' == 'toggle switch')
+    2. Exact alphanumeric normalized match (ignoring punctuation/extra whitespace)
+    3. Longest common token set match (preferring closest string length)
+    4. Substring containment with closest length penalty (never match a short token to a composite name if exact exists)
+    """
+    if not target_name or not candidate_dict:
+        return None
+
+    target_norm = _normalize_text(target_name)
+    target_clean = re.sub(r"[^a-z0-9]", "", target_norm)
+
+    # Pass 1: Exact string match
+    if target_norm in candidate_dict:
+        return candidate_dict[target_norm]
+
+    # Pass 2: Clean alphanumeric match
+    for key, info in candidate_dict.items():
+        key_clean = re.sub(r"[^a-z0-9]", "", key)
+        if target_clean and key_clean and target_clean == key_clean:
+            return info
+
+    # Pass 3: Whole word / token matching
+    target_tokens = set(target_norm.split())
+    best_candidate = None
+    best_score = 0.0
+    best_len_diff = float("inf")
+
+    for key, info in candidate_dict.items():
+        key_tokens = set(key.split())
+        if target_tokens and (target_tokens == key_tokens or target_tokens.issubset(key_tokens) or key_tokens.issubset(target_tokens)):
+            len_diff = abs(len(key) - len(target_norm))
+            intersection = len(target_tokens & key_tokens)
+            union = len(target_tokens | key_tokens)
+            score = intersection / union if union else 0
+            if score > best_score or (score == best_score and len_diff < best_len_diff):
+                best_score = score
+                best_len_diff = len_diff
+                best_candidate = info
+
+    if best_candidate and best_score >= 0.5:
+        return best_candidate
+
+    # Pass 4: Substring containment with length penalty
+    for key, info in candidate_dict.items():
+        if target_norm in key or key in target_norm:
+            len_diff = abs(len(key) - len(target_norm))
+            if len_diff < best_len_diff:
+                best_len_diff = len_diff
+                best_candidate = info
+
+    return best_candidate
 
 
 def lookup_bill_item_line_numbers(driver, bill_no: str, item_names: list[str]) -> dict[str, int]:
@@ -176,19 +253,14 @@ def lookup_bill_item_locations(driver, bill_no: str, item_names: list[str]) -> d
 
     print(f"     ✅ Found {len(by_name)} total line items across {section_count} section(s) on Engage.")
 
-    # 4) Match target item names against extracted Engage line items
+    # 4) Match target item names against extracted Engage line items using multi-tiered matcher
     result = {}
     for item_name in item_names:
         if not item_name:
             continue
-        normalized = _normalize_text(item_name)
-        direct_match = None
-        for key, info in by_name.items():
-            if normalized in key or key in normalized:
-                direct_match = info
-                break
-        if direct_match:
-            result[item_name] = direct_match
+        match_info = find_best_item_match(item_name, by_name)
+        if match_info:
+            result[item_name] = match_info
 
     print(f"     🎯 Matched {len(result)} of {len(item_names)} requested item(s) to live Engage locations.")
     return result

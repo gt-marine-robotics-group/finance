@@ -20,7 +20,7 @@ Requires-Dist: pytest>=9.0.0
 The core features of this system include:
 - **Automatic Bill Submission**: Auto-fills Engage forms, uploads screenshot evidence, and includes a side-by-side review page.
 - **Automatic Purchase Requests**: Auto-fills Engage forms, dynamically finds section/line numbers, and automatically generates a Budget vs Current Price allocation `.xlsx` report. *(Note: Automated price scraping is primarily validated on Amazon).*
-- **Flexible Management**: All bills and orders can be managed manually on the master spreadsheet or through the interactive web dashboard.
+- **Flexible Management**: All bills and orders can be managed manually on the master spreadsheet or through the interactive web dashboard *(currently hosted in the background on the team's SIM PC)*.
 
 ---
 
@@ -87,8 +87,9 @@ When you are placing an order for items approved on a bill:
 ```bash
 mrg-finance purchase --fresh --order <ORDER_ID>
 ```
+> 💡 **Tip**: If you omit `--order <ORDER_ID>`, the CLI will launch an interactive menu for you to select an order. You can find the exact Order IDs on the `Ordering` sheet of `FY27_Bills_Budget.xlsx`.
 1. Checks live online prices and flags any overruns.
-2. Auto-adds items to an Amazon cart (opens in Incognito).
+2. Auto-adds items to an Amazon cart (opens in Incognito) *(Note: Currently broken)*.
 3. Generates the **Budget vs Quoted Detail Report** (`.xlsx`).
 4. Pastes the needed info for each line item (cost, bill number) into the Engage **Description** box. *(Note: full auto-filling of specific Engage form fields is still a work in progress).*
 5. ⚠️ **Final Actions Required**:
@@ -144,7 +145,7 @@ Launch the side-by-side screenshot & price review GUI locally.
 Check current online prices vs the approved allocation.
 - `--fresh`, `-f`: Sync latest changes from SharePoint before running.
 - `--bill BILL`, `-b BILL`: Target a specific Bill title to skip interactive selection.
-- `--cart`, `-c`: Automatically generate an Amazon cart link from the items.
+- `--cart`, `-c`: Automatically generate an Amazon cart link from the items *(Note: Currently broken)*.
 
 ### `mrg-finance screenshots`
 Scrape prices and take screenshots in the background.
