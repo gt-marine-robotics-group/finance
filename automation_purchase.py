@@ -123,9 +123,10 @@ bill_no = ""
 
 order_groups = {}
 for _, row in df_orders.iterrows():
-    order_id = str(row.get(oid_col, "")).strip()
-    item_name = str(row.get("Item Name", "")).strip()
-    bill_item_id = str(row.get("Bill Item ID", "")).replace(".0", "").strip()
+    r_dict = row.to_dict()
+    order_id = str(spreadsheet_utils.get_col_val(r_dict, "order_id") or row.get(oid_col, "")).strip()
+    item_name = str(spreadsheet_utils.get_col_val(r_dict, "item_name") or "").strip()
+    bill_item_id = str(spreadsheet_utils.get_col_val(r_dict, "bill_item_id") or "").replace(".0", "").strip()
 
     # Skip header separators or empty rows
     if not order_id or order_id.startswith("Order ") or not (bill_item_id or item_name):
@@ -133,7 +134,7 @@ for _, row in df_orders.iterrows():
 
     if order_id not in order_groups:
         order_groups[order_id] = []
-    order_groups[order_id].append(row)
+    order_groups[order_id].append(r_dict)
 
 if not order_groups:
     print("No active orders found in Ordering sheet.")
@@ -144,8 +145,8 @@ order_ids = list(order_groups.keys())
 print("\nAvailable Orders:")
 for i, oid in enumerate(order_ids, 1):
     items_in_o = order_groups[oid]
-    v_name = items_in_o[0].get("Vendor", "Unknown") if items_in_o else "Unknown"
-    print(f"  {i}. {oid} ({v_name}, {len(items_in_o)} items)")
+    v_name = spreadsheet_utils.get_col_val(items_in_o[0], "vendor") if items_in_o else "Unknown"
+    print(f"  {i}. {oid} ({v_name or 'Unknown'}, {len(items_in_o)} items)")
 
 if pre_selected_order:
     selected_order_id = pre_selected_order
@@ -165,7 +166,8 @@ if not order_rows:
 bill_title = selected_order_id
 vendor_name = ""
 for row in order_rows:
-    v = str(row.get("Vendor", "") or "").strip()
+    r_dict = row if isinstance(row, dict) else row.to_dict()
+    v = str(spreadsheet_utils.get_col_val(r_dict, "vendor") or "").strip()
     if v:
         vendor_name = v
         break
@@ -174,28 +176,22 @@ vendor_name = vendor_name or "Vendor"
 purchase_date = date.today().strftime("%Y-%m-%d")
 
 for i, row in enumerate(order_rows):
-    b_id = str(row.get("Bill Item ID", "")).replace(".0", "").strip()
-    b_row = bill_item_map.get(b_id, None)
-    has_bill_row = b_row is not None
+    r_dict = row if isinstance(row, dict) else row.to_dict()
+    b_id = str(spreadsheet_utils.get_col_val(r_dict, "bill_item_id") or "").replace(".0", "").strip()
+    b_row = bill_item_map.get(b_id, {})
+    has_bill_row = bool(b_row)
 
-    item_bill_no = ""
-    if has_bill_row:
-        item_bill_no = str(b_row.get("Bill No.", "")).replace(".0", "").strip()
-    if not item_bill_no or item_bill_no == "nan":
-        item_bill_no = str(row.get("Bill No.", "")).replace(".0", "").strip()
-    if not item_bill_no or item_bill_no == "nan":
-        item_bill_no = bill_no
-
+    item_bill_no = str(spreadsheet_utils.get_col_val(b_row, "bill_no") or spreadsheet_utils.get_col_val(r_dict, "bill_no") or bill_no or "").replace(".0", "").strip()
     if item_bill_no and not bill_no:
         bill_no = item_bill_no
 
-    item_name = str(row.get("Item Name", "") or (b_row.get("Item Name", "") if has_bill_row else "")).strip()
-    description = str(row.get("Description", "") or (b_row.get("Description", "") if has_bill_row else "")).strip()
-    link = str(row.get("Link", "") or (b_row.get("Link", "") if has_bill_row else "")).strip()
-    source_bill_title = str(b_row.get("Bill Title", "") if has_bill_row else "").strip() or str(row.get("Bill Title", "") or "").strip()
+    item_name = str(spreadsheet_utils.get_col_val(r_dict, "item_name") or spreadsheet_utils.get_col_val(b_row, "item_name") or "").strip()
+    description = str(spreadsheet_utils.get_col_val(r_dict, "description") or spreadsheet_utils.get_col_val(b_row, "description") or "").strip()
+    link = str(spreadsheet_utils.get_col_val(r_dict, "link") or spreadsheet_utils.get_col_val(b_row, "link") or "").strip()
+    source_bill_title = str(spreadsheet_utils.get_col_val(b_row, "bill_title") or spreadsheet_utils.get_col_val(r_dict, "bill_title") or "").strip()
 
-    cost = safe_float(b_row.get("Cost", 0) if has_bill_row else row.get("Allocation", 0))
-    qty = safe_int(row.get("Quantity", 1))
+    cost = safe_float(spreadsheet_utils.get_col_val(r_dict, "cost") or spreadsheet_utils.get_col_val(b_row, "cost") or spreadsheet_utils.get_col_val(r_dict, "allocation") or 0.0)
+    qty = safe_int(spreadsheet_utils.get_col_val(r_dict, "quantity") or 1)
     total = cost * qty
 
     bill_line_ref = f"Bill {item_bill_no or '?'}, Line {b_id or i+1}"
