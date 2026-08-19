@@ -796,6 +796,9 @@ if total_overflow_amount > 0.01:
                 for r_item in requests_to_submit:
                     item_name = r_item["item_name"]
                     live_cost = scraped_results.get(item_name)
+                    if live_cost is None:
+                        norm_n = item_name.strip().lower()
+                        live_cost = next((v for k, v in scraped_results.items() if k.strip().lower() == norm_n), None)
                     if live_cost is not None and live_cost > r_item["cost"] + 0.01:
                         diff = (live_cost - r_item["cost"]) * r_item["quantity"]
                         overflow_reasons.append(f"  - {item_name}: Allocated ${r_item['cost']:.2f} -> Quoted ${live_cost:.2f} (+${diff:.2f})")

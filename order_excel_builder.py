@@ -118,7 +118,13 @@ def generate_order_budget_vs_quoted_excel(
             qty = int(r.get("quantity", 1))
             alloc_cost = float(r.get("cost", 0.0))
 
-            live_val = scraped_results.get(item_name) if scraped_results else None
+            live_val = None
+            if scraped_results:
+                if item_name in scraped_results:
+                    live_val = scraped_results[item_name]
+                else:
+                    norm_target = item_name.strip().lower()
+                    live_val = next((v for k, v in scraped_results.items() if k.strip().lower() == norm_target), None)
             quoted_cost = float(live_val) if live_val is not None else alloc_cost
 
             r_idx = curr_row
