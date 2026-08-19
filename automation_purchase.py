@@ -409,9 +409,10 @@ if non_amazon_count > 0:
     print("   Please create a shopping cart directly on the vendor website and take a cart screenshot before submitting your purchase request.")
 
 
-# Ask about shipping/tax overflow
+# Ask about shipping/tax overflow (to be submitted on separate 2nd overflow request)
+manual_overflow_items = []
 print(f"\n  Do any items have shipping/tax overflow?")
-add_overflow = input("  Add overflow requests? [y/N]: ").strip().lower()
+add_overflow = input("  Add shipping/tax for a separate 2nd overflow request? [y/N]: ").strip().lower()
 if add_overflow == "y":
     while True:
         overflow_line = input("    Line # for overflow (or Enter to stop): ").strip()
@@ -421,19 +422,15 @@ if add_overflow == "y":
         overflow_desc = input("    Description (e.g. 'shipping', 'tax'): ").strip()
         try:
             amt = float(overflow_amount)
-            ref_item = next((r for r in requests_to_submit if r["bill_item_id"] == overflow_line), None)
+            ref_item = next((r for r in requests_to_submit if str(r.get("bill_item_id")) == overflow_line), None)
             item_name = ref_item["item_name"] if ref_item else f"Line {overflow_line}"
-            requests_to_submit.append({
+            manual_overflow_items.append({
                 "item_name": f"{item_name} - {overflow_desc}",
                 "description": f"{overflow_desc} for {item_name}",
-                "cost": amt,
-                "quantity": 1,
-                "total": amt,
+                "amount": amt,
                 "bill_line_ref": f"Bill {bill_no}, Line {overflow_line}",
-                "bill_item_id": overflow_line,
-                "is_overflow": True,
             })
-            print(f"    ✅ Added: ${amt:.2f} {overflow_desc} for Line {overflow_line}")
+            print(f"    ✅ Added to 2nd (Overflow) Request: ${amt:.2f} {overflow_desc} for Line {overflow_line}")
         except ValueError:
             print(f"    ⚠️ Invalid amount")
 
@@ -537,7 +534,12 @@ print("\n📋 Resolved Engage Line References:")
 for r in requests_to_submit:
     bill_no_for_item = str(r.get("bill_no") or bill_no or "").strip()
     b_id = str(r.get("bill_item_id") or "").strip()
-    location = (bill_line_cache.get(bill_no_for_item) or {}).get(r["item_name"])
+    cache_for_bill = bill_line_cache.get(bill_no_for_item) or {}
+    location = cache_for_bill.get(r["item_name"])
+    if not location and cache_for_bill:
+        import engage_bill_lookup
+        location = engage_bill_lookup.find_best_item_match(r["item_name"], cache_for_bill)
+
     if location:
         section_name = str(location.get("section") or "").strip()
         # Prioritize line position within section (section_line_number) over global bill count
@@ -569,7 +571,12 @@ sga_box_lines = []
 ref_list = []
 for r in requests_to_submit:
     bill_no_val = str(r.get("bill_no") or bill_no or "").strip()
-    loc = (bill_line_cache.get(bill_no_val) or {}).get(r["item_name"])
+    cache_for_bill = bill_line_cache.get(bill_no_val) or {}
+    loc = cache_for_bill.get(r["item_name"])
+    if not loc and cache_for_bill:
+        import engage_bill_lookup
+        loc = engage_bill_lookup.find_best_item_match(r["item_name"], cache_for_bill)
+
     line_id = loc.get("section_line_number") or loc.get("line_number") or r.get("bill_item_id") or "" if loc else r.get("bill_item_id") or ""
     sec = str(loc.get("section") or "").strip() if loc else ""
 
@@ -770,42 +777,83 @@ try:
 except Exception as e:
     print(f"  ❌ Error: {e}")
 
-# === Overflow Request (if price check found overrun) ===
-if has_scraped_data and total_scraped_live > grand_total + 0.01:
-    overflow_amount = total_scraped_live - grand_total
-    print(f"\n{'='*50}")
-    print(f"⚠️ Cost overflow detected: +${overflow_amount:.2f}")
-    print(f"  Allocated: ${grand_total:.2f}")
-    print(f"  Live cost: ${total_scraped_live:.2f}")
-    create_overflow = input(f"\nCreate a separate overflow purchase request for ${overflow_amount:.2f}? [Y/n]: ").strip().lower()
+# === Overflow Request (Price increase overruns and/or shipping/tax) ===
+manual_overflow_total = sum(item["amount"] for item in manual_overflow_items)
+price_overrun_total = max(0.0, total_scraped_live - grand_total) if (has_scraped_data and total_scraped_live > grand_total + 0.01) else 0.0
+total_overflow_amount = price_overrun_total + manual_overflow_total
+
+if total_overflow_amount > 0.01:
+    print(f"\n{'='*60}")
+    print(f"⚠️ Overflow detected for 2nd Purchase Request: +${total_overflow_amount:.2f}")
+    if price_overrun_total > 0:
+        print(f"  • Price increases over budget: +${price_overrun_total:.2f}")
+    if manual_overflow_total > 0:
+        print(f"  • Shipping / Tax fees:         +${manual_overflow_total:.2f}")
+    print(f"  • Primary Request:              ${grand_total:.2f}")
+    print(f"  • Total Combined Spend:         ${grand_total + total_overflow_amount:.2f}")
+    print(f"{'='*60}")
+
+    create_overflow = input(f"\nCreate a separate 2nd overflow purchase request for ${total_overflow_amount:.2f}? [Y/n]: ").strip().lower()
 
     if create_overflow in ("", "y", "yes"):
         try:
+            print(f"\n🌐 Navigating to Create Purchase Request form for 2nd (Overflow) Request: {PURCHASE_URL}")
             driver.get(PURCHASE_URL)
             time.sleep(3)
             WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "Subject")))
 
+            overflow_subject = f"Marine Robotics Group {vendor_name} Overflow Purchase Request {purchase_date}"
             subject = driver.find_element(By.ID, "Subject")
             subject.clear()
-            subject.send_keys(f"Overflow: {bill_title}")
+            subject.send_keys(overflow_subject)
+
+            # Build itemized explanation for overflow
+            overflow_reasons = []
+            if price_overrun_total > 0:
+                overflow_reasons.append(f"Price increase overflow for order {bill_title}. Original allocation: ${grand_total:.2f}, Live quoted cost: ${total_scraped_live:.2f}")
+                for r_item in requests_to_submit:
+                    item_name = r_item["item_name"]
+                    live_cost = scraped_results.get(item_name)
+                    if live_cost is not None and live_cost > r_item["cost"] + 0.01:
+                        diff = (live_cost - r_item["cost"]) * r_item["quantity"]
+                        overflow_reasons.append(f"  - {item_name}: Allocated ${r_item['cost']:.2f} -> Quoted ${live_cost:.2f} (+${diff:.2f})")
+
+            if manual_overflow_items:
+                overflow_reasons.append(f"Shipping / Tax fee allocations:")
+                for m_item in manual_overflow_items:
+                    overflow_reasons.append(f"  - {m_item['description']}: +${m_item['amount']:.2f} ({m_item['bill_line_ref']})")
+
+            overflow_desc_text = "\n".join(overflow_reasons)
 
             try:
                 desc_field = driver.find_element(By.ID, "Description")
                 desc_field.clear()
-                desc_field.send_keys(f"Price increase overflow for order {bill_title}. Original allocation: ${grand_total:.2f}, Current cost: ${total_scraped_live:.2f}")
+                desc_field.send_keys(overflow_desc_text)
             except Exception:
                 pass
 
             try:
                 amount_field = driver.find_element(By.ID, "Amount")
                 amount_field.clear()
-                amount_field.send_keys(f"{overflow_amount:.2f}")
+                amount_field.send_keys(f"{total_overflow_amount:.2f}")
             except Exception:
                 pass
 
-            print(f"\n  ⏸️  Overflow request pre-filled: ${overflow_amount:.2f}")
+            # Upload the Budget vs Quoted Excel detail report
+            file_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
+            if file_inputs and excel_detail_path and os.path.exists(excel_detail_path):
+                try:
+                    driver.execute_script("arguments[0].style.display='block';", file_inputs[0])
+                    file_inputs[0].send_keys(os.path.abspath(excel_detail_path))
+                    print(f"  📎 Uploaded Budget vs Quoted Excel detail ({os.path.basename(excel_detail_path)})")
+                    time.sleep(1.5)
+                except Exception:
+                    pass
+
+            print(f"\n  ⏸️  2nd (Overflow) Purchase Request pre-filled: ${total_overflow_amount:.2f}")
+            print(f"     Review fields, digitally sign, and click Submit on Engage.")
             input(f"     Press Enter after you submit the overflow request → ")
-            print(f"  ✅ Overflow request submitted")
+            print(f"  ✅ 2nd (Overflow) purchase request submitted")
         except Exception as e:
             print(f"  ❌ Overflow request error: {e}")
 

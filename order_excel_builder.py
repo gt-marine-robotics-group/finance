@@ -105,7 +105,11 @@ def generate_order_budget_vs_quoted_excel(
 
         for r in sec_items:
             item_name = r.get("item_name", "")
-            loc = (bill_line_cache.get(sec_bill) or {}).get(item_name) if bill_line_cache else None
+            sec_cache = bill_line_cache.get(sec_bill) or {} if bill_line_cache else {}
+            loc = sec_cache.get(item_name)
+            if not loc and sec_cache:
+                import engage_bill_lookup
+                loc = engage_bill_lookup.find_best_item_match(item_name, sec_cache)
             sec_line = loc.get("section_line_number") if loc else None
             line_str = f"Line {sec_line or global_line_counter}"
             global_line_counter += 1
