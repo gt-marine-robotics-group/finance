@@ -74,17 +74,32 @@ def find_line_number_in_bill_html(html: str, item_name: str) -> Optional[int]:
     return best_idx
 
 
+def _normalize_stem(word: str) -> str:
+    """Normalize plural endings and common suffixes for robust token comparison."""
+    w = word.lower().strip()
+    if w.endswith("ies") and len(w) > 4:
+        return w[:-3] + "y"
+    if w.endswith("es") and len(w) > 3 and not w.endswith("ses"):
+        return w[:-2]
+    if w.endswith("s") and not w.endswith("ss") and len(w) > 2:
+        return w[:-1]
+    return w
+
+
 def find_best_item_match(target_name: str, candidate_dict: dict[str, dict]) -> Optional[dict]:
     """
     Match target item name against scraped Engage line item dictionary.
     Prioritizes:
-    1. Exact normalized match (e.g. 'antenna' == 'antenna', 'toggle switch' == 'toggle switch')
+    1. Exact normalized match (e.g. 'antenna' == 'antenna')
     2. Exact alphanumeric normalized match (ignoring punctuation/extra whitespace)
-    3. Longest common token set match (preferring closest string length)
-    4. Substring containment with closest length penalty (never match a short token to a composite name if exact exists)
+    3. Stemmed token set match (handles plurals: 'toggle switch' == 'toggle switches')
+    4. Fuzzy SequenceMatcher ratio >= 0.65 (handles typos: 'rapsberry pi 4' == 'raspberry pi 4')
+    5. Substring containment with closest length penalty
     """
     if not target_name or not candidate_dict:
         return None
+
+    import difflib
 
     target_norm = _normalize_text(target_name)
     target_clean = re.sub(r"[^a-z0-9]", "", target_norm)
@@ -99,28 +114,45 @@ def find_best_item_match(target_name: str, candidate_dict: dict[str, dict]) -> O
         if target_clean and key_clean and target_clean == key_clean:
             return info
 
-    # Pass 3: Whole word / token matching
-    target_tokens = set(target_norm.split())
+    # Pass 3: Stemmed whole word / token matching
+    target_stems = set(_normalize_stem(w) for w in target_norm.split() if len(w) > 1)
     best_candidate = None
     best_score = 0.0
     best_len_diff = float("inf")
 
     for key, info in candidate_dict.items():
-        key_tokens = set(key.split())
-        if target_tokens and (target_tokens == key_tokens or target_tokens.issubset(key_tokens) or key_tokens.issubset(target_tokens)):
+        key_stems = set(_normalize_stem(w) for w in key.split() if len(w) > 1)
+        if target_stems and (target_stems == key_stems or target_stems.issubset(key_stems) or key_stems.issubset(target_stems)):
             len_diff = abs(len(key) - len(target_norm))
-            intersection = len(target_tokens & key_tokens)
-            union = len(target_tokens | key_tokens)
+            intersection = len(target_stems & key_stems)
+            union = len(target_stems | key_stems)
             score = intersection / union if union else 0
             if score > best_score or (score == best_score and len_diff < best_len_diff):
                 best_score = score
                 best_len_diff = len_diff
                 best_candidate = info
 
-    if best_candidate and best_score >= 0.5:
+    if best_candidate and best_score >= 0.4:
         return best_candidate
 
-    # Pass 4: Substring containment with length penalty
+    # Pass 4: Fuzzy sequence matching (handles typos, character swaps, word reorderings)
+    best_ratio = 0.0
+    for key, info in candidate_dict.items():
+        ratio = difflib.SequenceMatcher(None, target_norm, key).ratio()
+        stem_target = " ".join(sorted(target_stems))
+        stem_key = " ".join(sorted(_normalize_stem(w) for w in key.split() if len(w) > 1))
+        stem_ratio = difflib.SequenceMatcher(None, stem_target, stem_key).ratio() if stem_target and stem_key else 0.0
+        max_r = max(ratio, stem_ratio)
+        if max_r > best_ratio:
+            best_ratio = max_r
+            best_candidate = info
+
+    if best_candidate and best_ratio >= 0.65:
+        return best_candidate
+
+    # Pass 5: Substring containment with length penalty
+    best_len_diff = float("inf")
+    best_candidate = None
     for key, info in candidate_dict.items():
         if target_norm in key or key in target_norm:
             len_diff = abs(len(key) - len(target_norm))
