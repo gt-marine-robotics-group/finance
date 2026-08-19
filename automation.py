@@ -173,29 +173,37 @@ if not BILL_NO:
         except Exception as chrome_err:
             print(f"⚠️ Could not start Chrome for screenshots: {chrome_err}")
 
-    # Launch Side-by-Side Review GUI (auto-starts review_server on port 8321)
-    try:
-        from automation_screenshots import generate_review_html, find_screenshots_for_item, parse_price, REVIEW_HTML
-        review_data = []
-        for _, row in bill_items_df.iterrows():
-            item_name = str(row.get("Item Name", "")).strip()
-            url = str(row.get("Link", "")).strip()
-            csv_cost = str(row.get("Cost", "")).strip()
-            old_shot, new_shot = find_screenshots_for_item(BILL_NO, item_name)
-            parsed = parse_price(csv_cost)
-            status = "needs_review" if old_shot and new_shot else ("ok" if new_shot else "failed")
-            review_data.append({
-                "item_name": item_name, "url": url, "csv_cost": csv_cost,
-                "scraped_price": f"${parsed:.2f}" if parsed else "", "parsed_price": parsed,
-                "confidence": "high", "screenshot": os.path.basename(new_shot) if new_shot else None,
-                "old_screenshot": old_shot, "new_screenshot": new_shot, "status": status,
-            })
-        generate_review_html(review_data, BILL_NO, REVIEW_HTML)
-        from review_server import launch_review_server_and_browser
-        launch_review_server_and_browser(REVIEW_HTML)
-        input("\n   Press Enter after reviewing & saving prices on the review page → ")
-    except Exception as ex:
-        print(f"  ⚠️ Review GUI notice: {ex}")
+    # Launch Side-by-Side Review GUI (optional)
+    skip_review = any(arg in sys.argv for arg in ["--no-review", "--skip-review"])
+    if not skip_review:
+        open_gui = input("\n🖥️  Open interactive side-by-side review GUI? [y/N]: ").strip().lower()
+        if open_gui in ("y", "yes"):
+            try:
+                from automation_screenshots import generate_review_html, find_screenshots_for_item, parse_price, REVIEW_HTML
+                review_data = []
+                for _, row in bill_items_df.iterrows():
+                    item_name = str(row.get("Item Name", "")).strip()
+                    url = str(row.get("Link", "")).strip()
+                    csv_cost = str(row.get("Cost", "")).strip()
+                    old_shot, new_shot = find_screenshots_for_item(BILL_NO, item_name)
+                    parsed = parse_price(csv_cost)
+                    status = "needs_review" if old_shot and new_shot else ("ok" if new_shot else "failed")
+                    review_data.append({
+                        "item_name": item_name, "url": url, "csv_cost": csv_cost,
+                        "scraped_price": f"${parsed:.2f}" if parsed else "", "parsed_price": parsed,
+                        "confidence": "high", "screenshot": os.path.basename(new_shot) if new_shot else None,
+                        "old_screenshot": old_shot, "new_screenshot": new_shot, "status": status,
+                    })
+                generate_review_html(review_data, BILL_NO, REVIEW_HTML)
+                from review_server import launch_review_server_and_browser
+                launch_review_server_and_browser(REVIEW_HTML)
+                input("\n   Press Enter after reviewing & saving prices on the review page → ")
+            except Exception as ex:
+                print(f"  ⚠️ Review GUI notice: {ex}")
+        else:
+            print("  ⏩ Skipped review page generation.")
+    else:
+        print("  ⏩ Skipped review page generation (--no-review).")
     print("   Verify screenshots and prices on side-by-side review cards before proceeding.")
 
     del _df_temp, _titles

@@ -279,8 +279,10 @@ def cmd_bill_request(args):
     # This wraps the existing automation.py
     py_exe = get_python_executable()
     cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation.py")]
-    if args.fresh:
+    if getattr(args, "fresh", False):
         cmd.append("--fresh")
+    if getattr(args, "no_review", False):
+        cmd.append("--no-review")
     os.execv(py_exe, cmd)
 
 
@@ -365,6 +367,8 @@ def cmd_purchase(args):
     # Run the Engage automation with the selected order
     py_exe = get_python_executable()
     cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation_purchase.py"), "--order", selected_oid]
+    if getattr(args, "no_review", False):
+        cmd.append("--no-review")
     os.execv(py_exe, cmd)
 
 
@@ -599,6 +603,7 @@ Examples:
     p_ss.add_argument("--fresh", "-f", action="store_true", help="Sync from SharePoint first")
     p_ss.add_argument("--bill", "-b", help="Bill title (skips interactive selection)")
     p_ss.add_argument("--review-only", "-r", action="store_true", help="Launch review GUI without scraping")
+    p_ss.add_argument("--no-review", action="store_true", help="Skip opening side-by-side review GUI")
 
     # review
     p_rv = sub.add_parser("review", help="Launch side-by-side screenshot & price review GUI")
@@ -607,11 +612,13 @@ Examples:
     # bill-request
     p_br = sub.add_parser("bill-request", help="Submit bill to CampusLabs Engage")
     p_br.add_argument("--fresh", "-f", action="store_true", help="Sync from SharePoint first")
+    p_br.add_argument("--no-review", action="store_true", help="Skip opening side-by-side review GUI")
 
     # purchase
     p_pr = sub.add_parser("purchase", help="Submit purchase requests to Engage")
     p_pr.add_argument("--fresh", "-f", action="store_true", help="Sync from SharePoint first")
     p_pr.add_argument("--order", "-o", help="Order ID (skips interactive selection)")
+    p_pr.add_argument("--no-review", action="store_true", help="Skip opening side-by-side review GUI")
 
     # price-check
     p_pc = sub.add_parser("price-check", help="Check current prices vs allocation")

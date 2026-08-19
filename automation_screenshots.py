@@ -1351,8 +1351,16 @@ def sync_screenshots_to_sharepoint():
 
 if __name__ == "__main__":
     sync_screenshots_to_sharepoint()
-    from review_server import launch_review_server_and_browser
-    launch_review_server_and_browser(REVIEW_HTML)
-    input("\n   Press Enter when done reviewing & saving prices on the review page → ")
-    print("   ✅ Server complete. Changes saved.")
+    skip_review = any(arg in sys.argv for arg in ["--no-review", "--skip-review"])
+    if not skip_review:
+        open_gui = input("\n🖥️  Open interactive side-by-side review GUI? [y/N]: ").strip().lower()
+        if open_gui in ("y", "yes"):
+            from review_server import launch_review_server_and_browser
+            launch_review_server_and_browser(REVIEW_HTML)
+            input("\n   Press Enter when done reviewing & saving prices on the review page → ")
+            print("   ✅ Server complete. Changes saved.")
+        else:
+            print("  ⏩ Skipped review page generation.")
+    else:
+        print("  ⏩ Skipped review page generation (--no-review).")
 

@@ -105,11 +105,13 @@ You can view these options directly from your terminal by running `mrg-finance -
 ### `mrg-finance bill-request`
 Submit a bill to CampusLabs Engage for SGA approval.
 - `--fresh`, `-f`: Sync latest changes from SharePoint before running.
+- `--no-review`: Skip opening the interactive side-by-side review GUI.
 
 ### `mrg-finance purchase`
 Submit purchase requests to Engage.
 - `--fresh`, `-f`: Sync latest changes from SharePoint before running.
 - `--order ORDER`, `-o ORDER`: Pass a specific Order ID to skip interactive selection.
+- `--no-review`: Skip opening the interactive side-by-side review GUI.
 
 ### `mrg-finance report`
 Generate the Budget vs Quoted Full Detail Excel/CSV comparison report locally.
@@ -135,3 +137,4 @@ Scrape prices and take screenshots in the background.
 - `--fresh`, `-f`: Sync latest changes from SharePoint before running.
 - `--bill BILL`, `-b BILL`: Target a specific Bill title to skip interactive selection.
 - `--review-only`, `-r`: Launch review GUI without scraping new prices.
+- `--no-review`: Skip opening the interactive side-by-side review GUI.
