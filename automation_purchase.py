@@ -544,16 +544,26 @@ for r in requests_to_submit:
         section_name = str(location.get("section") or "").strip()
         # Prioritize line position within section (section_line_number) over global bill count
         line_id = location.get("section_line_number") or location.get("line_number") or b_id or str(requests_to_submit.index(r) + 1)
+        r["resolved_location"] = location
+        r["resolved_section"] = section_name
+        r["resolved_line_id"] = line_id
         if section_name and section_name != "Unknown Section":
             r["engage_line_ref"] = f"Bill {bill_no_for_item}, {section_name}, Line {line_id}"
+            r["sga_line_text"] = f"${r['total']:.2f}, Line {line_id}, Bill {bill_no_for_item}, {section_name}"
         else:
             r["engage_line_ref"] = f"Bill {bill_no_for_item}, Line {line_id}"
+            r["sga_line_text"] = f"${r['total']:.2f}, Line {line_id}, Bill {bill_no_for_item}"
         r["bill_line_ref"] = r["engage_line_ref"]
         print(f"  ✓ '{r['item_name']}' -> {r['engage_line_ref']}")
     else:
         # Keep original spreadsheet-derived bill_line_ref as fallback
-        r["engage_line_ref"] = None
         fallback_ref = f"Bill {bill_no_for_item}, Line {b_id}" if b_id else f"Bill {bill_no_for_item}"
+        r["resolved_location"] = None
+        r["resolved_section"] = ""
+        r["resolved_line_id"] = b_id
+        r["engage_line_ref"] = fallback_ref
+        r["bill_line_ref"] = fallback_ref
+        r["sga_line_text"] = f"${r['total']:.2f}, Line {b_id}, Bill {bill_no_for_item}" if b_id else f"${r['total']:.2f}, Bill {bill_no_for_item}"
         print(f"  ⚠️ '{r['item_name']}' -> Not matched on Engage (Fallback: {fallback_ref})")
 
 # === Submit Purchase Requests ===
@@ -566,41 +576,9 @@ order_subject = f"Marine Robotics Group {vendor_name} Purchase Request {purchase
 order_description = ""
 order_amount = grand_total
 
-# SGA Bill Box text: Each item with Price, Line Number, Bill Number, Section Name (NO item name included)
-sga_box_lines = []
-ref_list = []
-for r in requests_to_submit:
-    bill_no_val = str(r.get("bill_no") or bill_no or "").strip()
-    cache_for_bill = bill_line_cache.get(bill_no_val) or {}
-    loc = cache_for_bill.get(r["item_name"])
-    if not loc and cache_for_bill:
-        import engage_bill_lookup
-        loc = engage_bill_lookup.find_best_item_match(r["item_name"], cache_for_bill)
-
-    line_id = loc.get("section_line_number") or loc.get("line_number") or r.get("bill_item_id") or "" if loc else r.get("bill_item_id") or ""
-    sec = str(loc.get("section") or "").strip() if loc else ""
-
-    line_str = f"Line {line_id}" if line_id else ""
-    bill_str = f"Bill {bill_no_val}" if bill_no_val else ""
-
-    # SGA Box item text (price, line, bill, section — NO item name)
-    sga_parts = [f"${r['total']:.2f}"]
-    if line_str:
-        sga_parts.append(line_str)
-    if bill_str:
-        sga_parts.append(bill_str)
-    if sec and sec != "Unknown Section":
-        sga_parts.append(sec)
-    sga_box_lines.append(", ".join(sga_parts))
-
-    # Line, Bill, Section ref for Budget/Bill & Line # box
-    if sec and sec != "Unknown Section":
-        ref_list.append(f"Bill {bill_no_val}, {sec}, Line {line_id}")
-    else:
-        ref_list.append(f"Bill {bill_no_val}, Line {line_id}")
-
-sga_bill_box_text = "\n".join(sga_box_lines)
-order_bill_refs = ", ".join(ref_list)
+# Single source of truth for Engage form texts
+sga_bill_box_text = "\n".join(r["sga_line_text"] for r in requests_to_submit)
+order_bill_refs = ", ".join(r["engage_line_ref"] for r in requests_to_submit)
 
 # === Generate Budget vs Quoted Full Detail Excel & CSV Comparison Reports ===
 import order_excel_builder
