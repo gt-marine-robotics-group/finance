@@ -366,7 +366,7 @@ def cmd_purchase(args):
 
     # Run the Engage automation with the selected order
     py_exe = get_python_executable()
-    cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation_purchase.py"), "--order", selected_oid]
+    cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation_purchase.py"), "--order", selected_oid, "--excel-path", XLSX_PATH]
     if getattr(args, "no_review", False):
         cmd.append("--no-review")
     os.execv(py_exe, cmd)

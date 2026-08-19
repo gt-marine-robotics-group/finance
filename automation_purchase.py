@@ -26,11 +26,29 @@ except ModuleNotFoundError:
     from engage_bill_lookup import build_bill_url, lookup_bill_item_locations
 import getpass
 
-# === CONFIG ===
-XLSX_PATH = os.path.expanduser(
+# === CONFIG & PATHS ===
+CWD_XLSX = os.path.join(os.getcwd(), "FY27_Bills_Budget.xlsx")
+REPO_XLSX = os.path.expanduser("~/mrg/finance/FY27_Bills_Budget.xlsx")
+ONEDRIVE_XLSX = os.path.expanduser(
     "~/Library/CloudStorage/OneDrive-GeorgiaInstituteofTechnology/"
     "Documents - Marine Robotics Group/OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx"
 )
+
+if os.path.exists(CWD_XLSX):
+    DEFAULT_XLSX = CWD_XLSX
+elif os.path.exists(REPO_XLSX):
+    DEFAULT_XLSX = REPO_XLSX
+elif os.path.exists(ONEDRIVE_XLSX):
+    DEFAULT_XLSX = ONEDRIVE_XLSX
+else:
+    DEFAULT_XLSX = REPO_XLSX
+
+XLSX_PATH = os.environ.get("FINANCE_XLSX_PATH", DEFAULT_XLSX)
+if "--excel-path" in sys.argv:
+    idx = sys.argv.index("--excel-path")
+    if idx + 1 < len(sys.argv):
+        XLSX_PATH = sys.argv[idx + 1]
+
 SHEET_NAME = "Bills"
 DOWNLOAD_DIR = "downloads"
 PURCHASE_URL = "https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/Finance/CreatePurchaseRequest"
