@@ -159,7 +159,9 @@ if not BILL_NO:
                 print(f"   📸 Capturing '{m_name}'...", end=" ", flush=True)
                 try:
                     c_driver.get(m_url)
-                    time.sleep(4)
+                    time.sleep(2)
+                    import price_scraper
+                    price_scraper.dismiss_popups_and_interstitials(c_driver)
                     c_driver.save_screenshot(shot_path)
                     print(f"✅ Saved ({os.path.basename(shot_path)})")
                 except Exception as err:

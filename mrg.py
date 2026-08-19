@@ -231,7 +231,8 @@ def cmd_screenshots(args):
         except Exception:
             pass
         import time
-        time.sleep(4)
+        time.sleep(2)
+        price_scraper.dismiss_popups_and_interstitials(driver)
 
         # Screenshot
         safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in item_name)

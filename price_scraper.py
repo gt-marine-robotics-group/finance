@@ -199,6 +199,51 @@ def scrape_price_from_driver(driver) -> str:
     return ""
 
 
+def dismiss_popups_and_interstitials(driver):
+    """
+    Dismiss cookie popups, consent dialogs, and Amazon/vendor anti-bot 'Continue shopping' interstitials.
+    """
+    import time
+    try:
+        from selenium.webdriver.common.by import By
+        page_src = (driver.page_source or "").lower()
+        # 1. Amazon "Click the button below to continue shopping" interstitial
+        if "continue shopping" in page_src or "click the button below" in page_src:
+            btns = driver.find_elements(
+                By.XPATH,
+                "//button[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'continue shopping')] | "
+                "//input[contains(translate(@value, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'continue shopping')] | "
+                "//a[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'continue shopping')]"
+            )
+            for btn in btns:
+                try:
+                    if btn.is_displayed():
+                        btn.click()
+                        time.sleep(3)
+                        break
+                except Exception:
+                    continue
+
+        # 2. Standard cookie / consent / modal popups
+        for sel in [
+            '[id*="cookie"] button', '[class*="cookie"] button',
+            '[id*="consent"] button', 'button[class*="accept"]',
+            'button[class*="dismiss"]', 'button[aria-label*="close"]',
+            '#sp-cc-accept', '#a-autoid-0-announce'
+        ]:
+            try:
+                buttons = driver.find_elements(By.CSS_SELECTOR, sel)
+                for btn in buttons[:2]:
+                    if btn.is_displayed():
+                        btn.click()
+                        time.sleep(0.3)
+                        break
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+
 def extract_amazon_asin(url: str) -> str | None:
     """Extract 10-character Amazon ASIN from product URL."""
     if not isinstance(url, str) or not url.strip():
