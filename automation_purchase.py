@@ -533,6 +533,7 @@ for bill_number, item_names in bills_to_lookup.items():
     else:
         print(f"  ⚠️ Could not resolve live Engage bill sections/line numbers from bill {bill_number}; using spreadsheet reference fallback.")
 
+print("\n📋 Resolved Engage Line References:")
 for r in requests_to_submit:
     bill_no_for_item = str(r.get("bill_no") or bill_no or "").strip()
     b_id = str(r.get("bill_item_id") or "").strip()
@@ -546,9 +547,12 @@ for r in requests_to_submit:
         else:
             r["engage_line_ref"] = f"Bill {bill_no_for_item}, Line {line_id}"
         r["bill_line_ref"] = r["engage_line_ref"]
+        print(f"  ✓ '{r['item_name']}' -> {r['engage_line_ref']}")
     else:
         # Keep original spreadsheet-derived bill_line_ref as fallback
         r["engage_line_ref"] = None
+        fallback_ref = f"Bill {bill_no_for_item}, Line {b_id}" if b_id else f"Bill {bill_no_for_item}"
+        print(f"  ⚠️ '{r['item_name']}' -> Not matched on Engage (Fallback: {fallback_ref})")
 
 # === Submit Purchase Requests ===
 results = {"success": [], "failed": []}
