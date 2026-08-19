@@ -58,3 +58,20 @@ def test_find_best_item_match_prevents_substring_hijacking():
     assert match_usb["section_line_number"] == 31
     assert match_toggle["name"] == "toggle switch"
     assert match_toggle["section_line_number"] == 29
+
+
+def test_find_best_item_match_handles_engage_typos():
+    from engage_bill_lookup import find_best_item_match
+
+    candidates = {
+        "toggle swtich": {"section": "B06 - Non-Inventoried Items", "section_line_number": 34, "name": "Toggle Swtich"},
+        "raspberry pi 4": {"section": "B03 - General Inventoried Goods", "section_line_number": 1, "name": "Raspberry Pi 4"},
+    }
+
+    match_toggle = find_best_item_match("Toggle Switch", candidates)
+    assert match_toggle is not None
+    assert match_toggle["section_line_number"] == 34
+
+    match_rpi = find_best_item_match("Rapsberry Pi 4", candidates)
+    assert match_rpi is not None
+    assert match_rpi["section_line_number"] == 1
