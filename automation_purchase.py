@@ -365,43 +365,51 @@ if run_check in ("", "y", "yes"):
 else:
     print("  ⏩ Skipped live price check.")
 
-# === Launch Side-by-Side Order Review GUI ===
-try:
-    from automation_screenshots import generate_review_html, parse_price, REVIEW_HTML, resolve_review_screenshot_paths, calculate_review_status
-    from review_server import launch_review_server_and_browser
-    review_data = []
-    for item in requests_to_submit:
-        item_name = str(item.get("item_name", "")).strip()
-        url = str(item.get("link", "")).strip()
-        cost = str(item.get("cost", "")).strip()
-        source_bill_title = str(item.get("source_bill_title", "") or bill_title).strip()
-        old_shot, new_shot = resolve_review_screenshot_paths(item_name, source_bill_title=source_bill_title, order_id=selected_order_id)
-        live_price_val = scraped_results.get(item_name)
-        if live_price_val is None and url and url.startswith("http"):
-            try:
-                import price_scraper
-                scraped = price_scraper.scrape_item_price(url)
-                if scraped and scraped.get("current_price") is not None:
-                    live_price_val = float(scraped["current_price"])
-                    scraped_results[item_name] = live_price_val
-            except Exception:
-                pass
+# === Optional Launch of Side-by-Side Order Review GUI ===
+skip_review = any(arg in sys.argv for arg in ["--no-review", "--skip-review"])
+if not skip_review:
+    open_gui = input("\n🖥️  Open interactive side-by-side review GUI? [y/N]: ").strip().lower()
+    if open_gui in ("y", "yes"):
+        try:
+            from automation_screenshots import generate_review_html, parse_price, REVIEW_HTML, resolve_review_screenshot_paths, calculate_review_status
+            from review_server import launch_review_server_and_browser
+            review_data = []
+            for item in requests_to_submit:
+                item_name = str(item.get("item_name", "")).strip()
+                url = str(item.get("link", "")).strip()
+                cost = str(item.get("cost", "")).strip()
+                source_bill_title = str(item.get("source_bill_title", "") or bill_title).strip()
+                old_shot, new_shot = resolve_review_screenshot_paths(item_name, source_bill_title=source_bill_title, order_id=selected_order_id)
+                live_price_val = scraped_results.get(item_name)
+                if live_price_val is None and url and url.startswith("http"):
+                    try:
+                        import price_scraper
+                        scraped = price_scraper.scrape_item_price(url)
+                        if scraped and scraped.get("current_price") is not None:
+                            live_price_val = float(scraped["current_price"])
+                            scraped_results[item_name] = live_price_val
+                    except Exception:
+                        pass
 
-        parsed = live_price_val if live_price_val is not None else parse_price(cost)
-        scraped_str = f"${parsed:.2f}" if parsed is not None else f"${safe_float(cost):.2f}"
-        review_status = calculate_review_status(cost, parsed, screenshot_file=os.path.basename(new_shot) if new_shot else None)
-        review_data.append({
-            "item_name": item_name, "url": url, "csv_cost": cost,
-            "scraped_price": scraped_str, "parsed_price": parsed,
-            "confidence": "high", "screenshot": os.path.basename(new_shot) if new_shot else None,
-            "old_screenshot": old_shot, "new_screenshot": new_shot,
-            "status": review_status,
-        })
-    generate_review_html(review_data, f"Order: {selected_order_id}", REVIEW_HTML)
-    launch_review_server_and_browser(REVIEW_HTML)
-    input("\n   Press Enter after reviewing & saving prices on the review page → ")
-except Exception as ex:
-    print(f"  ⚠️ Review GUI notice: {ex}")
+                parsed = live_price_val if live_price_val is not None else parse_price(cost)
+                scraped_str = f"${parsed:.2f}" if parsed is not None else f"${safe_float(cost):.2f}"
+                review_status = calculate_review_status(cost, parsed, screenshot_file=os.path.basename(new_shot) if new_shot else None)
+                review_data.append({
+                    "item_name": item_name, "url": url, "csv_cost": cost,
+                    "scraped_price": scraped_str, "parsed_price": parsed,
+                    "confidence": "high", "screenshot": os.path.basename(new_shot) if new_shot else None,
+                    "old_screenshot": old_shot, "new_screenshot": new_shot,
+                    "status": review_status,
+                })
+            generate_review_html(review_data, f"Order: {selected_order_id}", REVIEW_HTML)
+            launch_review_server_and_browser(REVIEW_HTML)
+            input("\n   Press Enter after reviewing & saving prices on the review page → ")
+        except Exception as ex:
+            print(f"  ⚠️ Review GUI notice: {ex}")
+    else:
+        print("  ⏩ Skipped review page generation.")
+else:
+    print("  ⏩ Skipped review page generation (--no-review).")
 
 non_amazon_count = sum(1 for r in requests_to_submit if "amazon" not in str(r.get("link", "")).lower())
 if non_amazon_count > 0:
