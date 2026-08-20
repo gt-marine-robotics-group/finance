@@ -99,9 +99,9 @@ else:
     _df_temp = pd.read_csv(CSV_FILE)
 _df_temp = _df_temp.astype(object).fillna("")
 _df_temp.columns = _df_temp.columns.str.strip()
-_titles = [str(t).strip() for t in _df_temp["Bill Title"].unique()]
-_skip = ("nan", "request", "liquid", "misc", "")
-_titles = [t for t in _titles if t and not any(t.lower().startswith(s) for s in _skip)]
+_titles = [str(t).strip() for t in _df_temp["Bill Title"].unique() if str(t).strip()]
+_skip = ("nan", "request", "liquid", "misc")
+_titles = [t for t in _titles if not any(t.lower().startswith(s) for s in _skip)]
 
 if not BILL_NO:
     print("\nAvailable Bill Titles:")
