@@ -140,6 +140,57 @@ else:
     while not BILL_URL or not BILL_URL.startswith("http"):
         BILL_URL = input("Could not find Bill No. Enter Engage Edit URL manually: ").strip()
 
+
+def _find_screenshot(item_name, bill_title=""):
+    """Find screenshot file for an item using exact, sanitized, and alphanumeric normalized matching."""
+    if not item_name:
+        return None
+
+    import re
+    safe_name = re.sub(r'[<>:"/\\|?*]', '_', item_name)
+    safe_bill = "".join(c if c.isalnum() or c in " -_" else "_" for c in bill_title)
+    dirs_to_check = []
+    if bill_title:
+        dirs_to_check.append(os.path.join(SCREENSHOT_DIR, bill_title))
+        dirs_to_check.append(os.path.join(SCREENSHOT_DIR, safe_bill))
+    dirs_to_check.append(SCREENSHOT_DIR)
+
+    if os.path.isdir(SCREENSHOT_DIR):
+        for sub in os.listdir(SCREENSHOT_DIR):
+            sp = os.path.join(SCREENSHOT_DIR, sub)
+            if os.path.isdir(sp) and sp not in dirs_to_check:
+                dirs_to_check.append(sp)
+
+    alnum_target = re.sub(r'[^a-zA-Z0-9]+', '', item_name.lower())
+
+    for d in dirs_to_check:
+        if not os.path.isdir(d):
+            continue
+        for ext in [".png", ".jpg", ".jpeg", ".pdf"]:
+            exact = os.path.join(d, f"{safe_name}{ext}")
+            if os.path.exists(exact):
+                return exact
+            exact_orig = os.path.join(d, f"{item_name}{ext}")
+            if os.path.exists(exact_orig):
+                return exact_orig
+            alnum_fn = "".join(c if c.isalnum() or c in " -_" else "_" for c in item_name) + ext
+            alnum_path = os.path.join(d, alnum_fn)
+            if os.path.exists(alnum_path):
+                return alnum_path
+
+        # Alphanumeric fallback scan across all files in directory
+        try:
+            for f in os.listdir(d):
+                f_base, f_ext = os.path.splitext(f)
+                if f_ext.lower() in [".png", ".jpg", ".jpeg", ".pdf"]:
+                    if re.sub(r'[^a-zA-Z0-9]+', '', f_base.lower()) == alnum_target:
+                        return os.path.join(d, f)
+        except Exception:
+            pass
+
+    return None
+
+
 # Interactive Screenshot Audit & On-Demand Capture
 safe_bill = "".join(c if c.isalnum() or c in " -_" else "_" for c in BILL_NO)
 bill_items_df = _df_temp[_df_temp["Bill Title"].astype(str).str.strip().str.lower() == BILL_NO.lower()]
@@ -151,12 +202,13 @@ for _, row in bill_items_df.iterrows():
     item_name = str(row.get("Item Name", "")).strip()
     url = str(row.get("Link", "")).strip()
     if item_name:
-        safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in item_name)
-        shot_path = os.path.join(SCREENSHOT_DIR, safe_bill, f"{safe_name}.png")
-        if os.path.exists(shot_path):
-            existing_items.append((item_name, url, shot_path))
+        found_shot = _find_screenshot(item_name, BILL_NO)
+        if found_shot and os.path.exists(found_shot):
+            existing_items.append((item_name, url, found_shot))
         else:
-            missing_items.append((item_name, url, shot_path))
+            safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in item_name)
+            expected_shot = os.path.join(SCREENSHOT_DIR, safe_bill, f"{safe_name}.png")
+            missing_items.append((item_name, url, expected_shot))
 
 print(f"\n📸 Screenshot Audit for '{BILL_NO}':")
 print(f"   ✅ Existing ground-truth screenshots: {len(existing_items)}")
@@ -346,43 +398,6 @@ def count_section_items(driver, section_name):
     except Exception:
         return -1
 
-
-def _find_screenshot(item_name, bill_title=""):
-    """Find screenshot file for an item using exact and space-normalized flexible matching."""
-    if not item_name:
-        return None
-
-    import re
-    safe_name = re.sub(r'[<>:"/\\|?*]', '_', item_name)
-    dirs_to_check = []
-    if bill_title:
-        dirs_to_check.append(os.path.join(SCREENSHOT_DIR, bill_title))
-    dirs_to_check.append(SCREENSHOT_DIR)
-
-    if os.path.isdir(SCREENSHOT_DIR):
-        for sub in os.listdir(SCREENSHOT_DIR):
-            sp = os.path.join(SCREENSHOT_DIR, sub)
-            if os.path.isdir(sp) and sp not in dirs_to_check:
-                dirs_to_check.append(sp)
-
-    for d in dirs_to_check:
-        for ext in [".png", ".jpg", ".jpeg", ".pdf"]:
-            exact = os.path.join(d, f"{safe_name}{ext}")
-            if os.path.exists(exact):
-                return exact
-            exact_orig = os.path.join(d, f"{item_name}{ext}")
-            if os.path.exists(exact_orig):
-                return exact_orig
-
-            # Flexible whitespace/case match
-            norm_target = re.sub(r'\s+', ' ', f"{safe_name}{ext}").lower()
-            try:
-                for f in os.listdir(d):
-                    if re.sub(r'\s+', ' ', f).lower() == norm_target:
-                        return os.path.join(d, f)
-            except Exception:
-                pass
-    return None
 
 
 def clear_existing_line_items(driver, section_name):
