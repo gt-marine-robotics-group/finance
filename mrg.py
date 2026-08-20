@@ -278,7 +278,9 @@ def cmd_bill_request(args):
     """Submit a bill to CampusLabs Engage."""
     # This wraps the existing automation.py
     py_exe = get_python_executable()
-    cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation.py")]
+    cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation.py"), "--excel-path", XLSX_PATH]
+    if getattr(args, "bill", None):
+        cmd.extend(["--bill", args.bill])
     if getattr(args, "fresh", False):
         cmd.append("--fresh")
     if getattr(args, "no_review", False):
@@ -612,6 +614,7 @@ Examples:
     # bill-request
     p_br = sub.add_parser("bill-request", help="Submit bill to CampusLabs Engage")
     p_br.add_argument("--fresh", "-f", action="store_true", help="Sync from SharePoint first")
+    p_br.add_argument("--bill", "-b", help="Bill title (skips interactive selection)")
     p_br.add_argument("--no-review", action="store_true", help="Skip opening side-by-side review GUI")
 
     # purchase
