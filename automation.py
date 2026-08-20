@@ -137,87 +137,88 @@ if _bill_num:
     BILL_URL = f"https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/budgeting/requests#/edit/{_bill_num}"
     print(f"\n  → Bill URL: {BILL_URL}")
 else:
-    BILL_URL = input("Could not find Bill No. Enter URL manually: ").strip()
+    while not BILL_URL or not BILL_URL.startswith("http"):
+        BILL_URL = input("Could not find Bill No. Enter Engage Edit URL manually: ").strip()
 
 # Interactive Screenshot Audit & On-Demand Capture
 safe_bill = "".join(c if c.isalnum() or c in " -_" else "_" for c in BILL_NO)
 bill_items_df = _df_temp[_df_temp["Bill Title"].astype(str).str.strip().str.lower() == BILL_NO.lower()]
+
+missing_items = []
+existing_items = []
+
+for _, row in bill_items_df.iterrows():
+    item_name = str(row.get("Item Name", "")).strip()
+    url = str(row.get("Link", "")).strip()
+    if item_name:
+        safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in item_name)
+        shot_path = os.path.join(SCREENSHOT_DIR, safe_bill, f"{safe_name}.png")
+        if os.path.exists(shot_path):
+            existing_items.append((item_name, url, shot_path))
+        else:
+            missing_items.append((item_name, url, shot_path))
+
+print(f"\n📸 Screenshot Audit for '{BILL_NO}':")
+print(f"   ✅ Existing ground-truth screenshots: {len(existing_items)}")
+print(f"   ⚠️ Missing screenshots: {len(missing_items)}")
+
+items_to_capture = []
+if missing_items:
+    print("\nItems missing screenshots:")
+    for m_name, m_url, _ in missing_items:
+        print(f"   - {m_name} ({'Link available' if m_url else 'No link'})")
     
-    missing_items = []
-    existing_items = []
+    take_missing = input("\nCapture missing screenshots now via headless Chrome? (Y/n): ").strip().lower()
+    if take_missing in ("", "y", "yes"):
+        items_to_capture = missing_items
+else:
+    retake = input("\nAll screenshots exist! Re-capture screenshots anyway? (y/N): ").strip().lower()
+    if retake in ("y", "yes"):
+        items_to_capture = existing_items
+
+if items_to_capture:
+    print(f"\n🚀 Launching headless Chrome to capture {len(items_to_capture)} screenshot(s)...")
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service
     
-    for _, row in bill_items_df.iterrows():
-        item_name = str(row.get("Item Name", "")).strip()
-        url = str(row.get("Link", "")).strip()
-        if item_name:
-            safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in item_name)
-            shot_path = os.path.join(SCREENSHOT_DIR, safe_bill, f"{safe_name}.png")
-            if os.path.exists(shot_path):
-                existing_items.append((item_name, url, shot_path))
-            else:
-                missing_items.append((item_name, url, shot_path))
-
-    print(f"\n📸 Screenshot Audit for '{BILL_NO}':")
-    print(f"   ✅ Existing ground-truth screenshots: {len(existing_items)}")
-    print(f"   ⚠️ Missing screenshots: {len(missing_items)}")
-
-    items_to_capture = []
-    if missing_items:
-        print("\nItems missing screenshots:")
-        for m_name, m_url, _ in missing_items:
-            print(f"   - {m_name} ({'Link available' if m_url else 'No link'})")
+    c_opts = Options()
+    c_opts.add_argument("--headless=new")
+    c_opts.add_argument("--window-size=1920,1080")
+    c_opts.add_argument("--no-sandbox")
+    c_opts.add_argument("--disable-dev-shm-usage")
+    
+    try:
+        c_driver = webdriver.Chrome(service=Service(), options=c_opts)
+        c_driver.set_page_load_timeout(20)
         
-        take_missing = input("\nCapture missing screenshots now via headless Chrome? (Y/n): ").strip().lower()
-        if take_missing in ("", "y", "yes"):
-            items_to_capture = missing_items
-    else:
-        retake = input("\nAll screenshots exist! Re-capture screenshots anyway? (y/N): ").strip().lower()
-        if retake in ("y", "yes"):
-            items_to_capture = existing_items
-
-    if items_to_capture:
-        print(f"\n🚀 Launching headless Chrome to capture {len(items_to_capture)} screenshot(s)...")
-        from selenium import webdriver
-        from selenium.webdriver.chrome.options import Options
-        from selenium.webdriver.chrome.service import Service
+        bill_shot_dir = os.path.join(SCREENSHOT_DIR, safe_bill)
+        os.makedirs(bill_shot_dir, exist_ok=True)
         
-        c_opts = Options()
-        c_opts.add_argument("--headless=new")
-        c_opts.add_argument("--window-size=1920,1080")
-        c_opts.add_argument("--no-sandbox")
-        c_opts.add_argument("--disable-dev-shm-usage")
+        for m_name, m_url, shot_path in items_to_capture:
+            if not m_url or not m_url.startswith("http"):
+                print(f"   ⚠️ Skipping '{m_name}': no valid URL link")
+                continue
+            print(f"   📸 Capturing '{m_name}'...", end=" ", flush=True)
+            try:
+                c_driver.get(m_url)
+                time.sleep(2)
+                import price_scraper
+                price_scraper.dismiss_popups_and_interstitials(c_driver)
+                c_driver.save_screenshot(shot_path)
+                print(f"✅ Saved ({os.path.basename(shot_path)})")
+            except Exception as err:
+                print(f"❌ Failed: {err}")
         
-        try:
-            c_driver = webdriver.Chrome(service=Service(), options=c_opts)
-            c_driver.set_page_load_timeout(20)
-            
-            bill_shot_dir = os.path.join(SCREENSHOT_DIR, safe_bill)
-            os.makedirs(bill_shot_dir, exist_ok=True)
-            
-            for m_name, m_url, shot_path in items_to_capture:
-                if not m_url or not m_url.startswith("http"):
-                    print(f"   ⚠️ Skipping '{m_name}': no valid URL link")
-                    continue
-                print(f"   📸 Capturing '{m_name}'...", end=" ", flush=True)
-                try:
-                    c_driver.get(m_url)
-                    time.sleep(2)
-                    import price_scraper
-                    price_scraper.dismiss_popups_and_interstitials(c_driver)
-                    c_driver.save_screenshot(shot_path)
-                    print(f"✅ Saved ({os.path.basename(shot_path)})")
-                except Exception as err:
-                    print(f"❌ Failed: {err}")
-            
-            c_driver.quit()
-            from automation_screenshots import sync_screenshots_to_sharepoint
-            sync_screenshots_to_sharepoint()
-        except Exception as chrome_err:
-            print(f"⚠️ Could not start Chrome for screenshots: {chrome_err}")
+        c_driver.quit()
+        from automation_screenshots import sync_screenshots_to_sharepoint
+        sync_screenshots_to_sharepoint()
+    except Exception as chrome_err:
+        print(f"⚠️ Could not start Chrome for screenshots: {chrome_err}")
 
-    # Launch Side-by-Side Review GUI (optional)
-    skip_review = any(arg in sys.argv for arg in ["--no-review", "--skip-review"])
-    if not skip_review:
+# Launch Side-by-Side Review GUI (optional)
+skip_review = any(arg in sys.argv for arg in ["--no-review", "--skip-review"])
+if not skip_review:
         open_gui = input("\n🖥️  Open interactive side-by-side review GUI? [y/N]: ").strip().lower()
         if open_gui in ("y", "yes"):
             try:
@@ -527,7 +528,7 @@ login_button = driver.find_element(By.NAME, "submitbutton")
 login_button.click()
 print("\nComplete Duo MFA if prompted...")
 try:
-    WebDriverWait(driver, 180).until(EC.url_contains("gatech.campuslabs.com/engage"))
+    WebDriverWait(driver, 180).until(lambda d: bool(d.current_url and "gatech.campuslabs.com/engage" in d.current_url))
 except TimeoutException:
     print("  ⏳ Duo MFA wait timed out automatically.")
     input("  Press Enter after completing Duo MFA in your browser window → ")
