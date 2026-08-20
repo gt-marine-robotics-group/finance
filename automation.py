@@ -20,18 +20,44 @@ from selenium.common.exceptions import (
 from selenium.webdriver.common.action_chains import ActionChains
 import getpass
 
-# === CONFIG ===
-DEFAULT_XLSX = os.path.expanduser(
+# === CONFIG & PATHS ===
+CWD_XLSX = os.path.join(os.getcwd(), "FY27_Bills_Budget.xlsx")
+REPO_XLSX = os.path.expanduser("~/mrg/finance/FY27_Bills_Budget.xlsx")
+ONEDRIVE_XLSX = os.path.expanduser(
     "~/Library/CloudStorage/OneDrive-GeorgiaInstituteofTechnology/"
     "Documents - Marine Robotics Group/OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx"
 )
+
+if os.path.exists(CWD_XLSX):
+    DEFAULT_XLSX = CWD_XLSX
+elif os.path.exists(REPO_XLSX):
+    DEFAULT_XLSX = REPO_XLSX
+elif os.path.exists(ONEDRIVE_XLSX):
+    DEFAULT_XLSX = ONEDRIVE_XLSX
+else:
+    DEFAULT_XLSX = REPO_XLSX
+
 CSV_FILE = os.environ.get("FINANCE_XLSX_PATH", DEFAULT_XLSX)
+if "--excel-path" in sys.argv:
+    idx = sys.argv.index("--excel-path")
+    if idx + 1 < len(sys.argv):
+        CSV_FILE = sys.argv[idx + 1]
+
 SHEET_NAME = "Bills"
 SCREENSHOT_DIR = "screenshots"
 USERNAME = os.environ.get("ENGAGE_USERNAME", "")
 PASSWORD = ""
 BILL_URL = ""  # Auto-generated from Bill No. in spreadsheet
 BILL_NO = ""   # Will prompt — shows available options
+
+if "--bill" in sys.argv:
+    idx = sys.argv.index("--bill")
+    if idx + 1 < len(sys.argv):
+        BILL_NO = sys.argv[idx + 1]
+elif "-b" in sys.argv:
+    idx = sys.argv.index("-b")
+    if idx + 1 < len(sys.argv):
+        BILL_NO = sys.argv[idx + 1]
 
 # --- Fresh sync from SharePoint ---
 import sys
@@ -58,48 +84,64 @@ if "--fresh" in sys.argv or "-f" in sys.argv:
     )
     if result2.returncode == 0:
         print("✅ Screenshots synced")
-    sys.argv.remove("--fresh") if "--fresh" in sys.argv else sys.argv.remove("-f")
 
 # Prompt if empty
 if not USERNAME:
-    USERNAME = input("Enter your username: ")
+    USERNAME = input("Enter your GT username: ").strip()
 if not PASSWORD:
     PASSWORD = getpass.getpass("Enter GT password (for CampusLabs + Duo MFA): ")
+
+import spreadsheet_utils
+if CSV_FILE.endswith(".xlsx"):
+    ef = pd.ExcelFile(CSV_FILE)
+    _df_temp = spreadsheet_utils.read_sheet_robust(ef, ["Bills", "Bill", "Budget"])
+else:
+    _df_temp = pd.read_csv(CSV_FILE)
+_df_temp = _df_temp.astype(object).fillna("")
+_df_temp.columns = _df_temp.columns.str.strip()
+_titles = [str(t).strip() for t in _df_temp["Bill Title"].unique()]
+_skip = ("nan", "request", "liquid", "misc", "")
+_titles = [t for t in _titles if t and not any(t.lower().startswith(s) for s in _skip)]
+
 if not BILL_NO:
-    if CSV_FILE.endswith(".xlsx"):
-        _df_temp = pd.read_excel(CSV_FILE, sheet_name=SHEET_NAME)
-    else:
-        _df_temp = pd.read_csv(CSV_FILE)
-    _df_temp = _df_temp.astype(object).fillna("")
-    _df_temp.columns = _df_temp.columns.str.strip()
-    _titles = _df_temp["Bill Title"].astype(str).str.strip().unique()
-    _skip = ("nan", "request", "liquid", "misc")
-    _titles = [t for t in _titles if t and not any(t.lower().startswith(s) for s in _skip)]
     print("\nAvailable Bill Titles:")
     for i, t in enumerate(_titles, 1):
-        # Find bill number for this title
         _mask = _df_temp["Bill Title"].astype(str).str.strip().str.lower() == t.lower()
         _bill_nos = _df_temp[_mask]["Bill No."].astype(str).str.replace(".0", "", regex=False).str.strip().unique()
         _bill_no_str = _bill_nos[0] if len(_bill_nos) > 0 and _bill_nos[0] not in ("", "nan") else "?"
         count = _mask.sum()
         print(f"  {i}. {t} (Bill #{_bill_no_str}, {count} items)")
-    BILL_NO = input("\nEnter Bill Title (or number): ").strip()
-    if BILL_NO.isdigit() and 1 <= int(BILL_NO) <= len(_titles):
-        BILL_NO = _titles[int(BILL_NO) - 1]
+    
+    while not BILL_NO:
+        choice = input(f"\nSelect Bill Title [1-{len(_titles)}]: ").strip()
+        if choice.isdigit() and 1 <= int(choice) <= len(_titles):
+            BILL_NO = _titles[int(choice) - 1]
+        elif any(choice.lower() == t.lower() for t in _titles):
+            BILL_NO = next(t for t in _titles if choice.lower() == t.lower())
+        elif any(choice.lower() in t.lower() for t in _titles):
+            BILL_NO = next(t for t in _titles if choice.lower() in t.lower())
+        else:
+            print(f"⚠️ Invalid selection '{choice}'. Please enter a number between 1 and {len(_titles)}.")
+else:
+    # Match provided bill title
+    match = [t for t in _titles if BILL_NO.lower() in t.lower()]
+    if match:
+        BILL_NO = match[0]
+    print(f"\nUsing Bill: {BILL_NO}")
 
-    # Auto-generate BILL_URL from Bill No. in spreadsheet
-    _mask = _df_temp["Bill Title"].astype(str).str.strip().str.lower() == BILL_NO.lower()
-    _bill_nos = _df_temp[_mask]["Bill No."].astype(str).str.replace(".0", "", regex=False).str.strip().unique()
-    _bill_num = _bill_nos[0] if len(_bill_nos) > 0 and _bill_nos[0] not in ("", "nan") else ""
-    if _bill_num:
-        BILL_URL = f"https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/budgeting/requests#/edit/{_bill_num}"
-        print(f"\n  → Bill URL: {BILL_URL}")
-    else:
-        BILL_URL = input("Could not find Bill No. Enter URL manually: ").strip()
+# Auto-generate BILL_URL from Bill No. in spreadsheet
+_mask = _df_temp["Bill Title"].astype(str).str.strip().str.lower() == BILL_NO.lower()
+_bill_nos = _df_temp[_mask]["Bill No."].astype(str).str.replace(".0", "", regex=False).str.strip().unique()
+_bill_num = _bill_nos[0] if len(_bill_nos) > 0 and _bill_nos[0] not in ("", "nan") else ""
+if _bill_num:
+    BILL_URL = f"https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/budgeting/requests#/edit/{_bill_num}"
+    print(f"\n  → Bill URL: {BILL_URL}")
+else:
+    BILL_URL = input("Could not find Bill No. Enter URL manually: ").strip()
 
-    # Interactive Screenshot Audit & On-Demand Capture
-    safe_bill = "".join(c if c.isalnum() or c in " -_" else "_" for c in BILL_NO)
-    bill_items_df = _df_temp[_df_temp["Bill Title"].astype(str).str.strip().str.lower() == BILL_NO.lower()]
+# Interactive Screenshot Audit & On-Demand Capture
+safe_bill = "".join(c if c.isalnum() or c in " -_" else "_" for c in BILL_NO)
+bill_items_df = _df_temp[_df_temp["Bill Title"].astype(str).str.strip().str.lower() == BILL_NO.lower()]
     
     missing_items = []
     existing_items = []
