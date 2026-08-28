@@ -49,6 +49,13 @@ One of the most robust features is the ability to easily override the scraper. I
 screenshots/<Bill Title>/<Item Name>.png
 ```
 
+## 📋 Spreadsheet Setup (Before Running CLI)
+
+Ensure your items are entered in `FY27_Bills_Budget.xlsx` on SharePoint before running the tools:
+
+- **For Bill Requests (`Bills` Sheet)**: Add your proposed items under the target **`Bill Title`**. Fill in **`Item Name`**, **`Budget Section`** (e.g. `B03 - General Inventoried Goods`, `B06 - Non-Inventoried Items`), **`Cost`**, **`Quantity`**, and a valid product **`Link`** for automated screenshot capture. *(Leave formula columns like `Total Cost` untouched)*.
+- **For Purchase Requests (`Ordering` Sheet)**: Group items into an order by assigning an **`Order ID`** formatted as `YYMMDD_<vendor>_<gt_username>` (e.g., `260819_amazon_awu335`). Fill in **`Item Name`**, **`Vendor`**, **`Cost`**, **`Quantity`**, and **`Link`**.
+
 ---
 
 ## 🛒 Usage & Workflow
