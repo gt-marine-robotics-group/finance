@@ -32,8 +32,13 @@ finance/
 ├── tests/                     # Comprehensive pytest test suite (28+ tests)
 ├── web-app/                   # Flask web dashboard (runs on team SIM PC)
 ├── pyproject.toml             # uv package definition & CLI console script
-├── AGENTS.md                  # Operational manual and guidelines for AI agents
-└── agent_changes.md           # Chronological technical changelog & post-mortems
+└── docs/                      # Technical documentation, guides, and agent manuals
+    ├── agents.md              # Operational manual and guidelines for AI agents
+    ├── agent_changes.md       # Chronological technical changelog & post-mortems
+    ├── MANUAL_WORKFLOW.md     # Step-by-step manual Engage submission guide
+    ├── SPREADSHEET_GUIDE.md   # Schema & formula preservation rules
+    ├── TROUBLESHOOTING.md     # Common errors & driver troubleshooting
+    └── DEVELOPMENT.md         # System architecture & SIM PC web app guide
 ```
 
 ---
