@@ -16,6 +16,7 @@ This document provides a comprehensive, chronological, and architectural summary
   - `mrg-finance report`: Generate dynamic `Budget_vs_Quoted_Detail` Excel comparison sheets.
   - `mrg-finance review`: Standalone side-by-side review dashboard web server.
   - `mrg-finance doctor`: Diagnostic test suite verifying Python env, Selenium, Chrome, `rclone`, and SharePoint connectivity.
+- **AI Agent Guidelines (`AGENTS.md`)**: Added comprehensive operational guidelines, architectural blueprints, spreadsheet integrity rules, and guardrails for AI coding assistants.
 
 ### 📊 Dynamic Multi-Path Spreadsheet Resolution (`spreadsheet_utils.py`)
 - **Hierarchy of Resolution**: Ensured all scripts dynamically locate `FY27_Bills_Budget.xlsx` across environments:
@@ -67,6 +68,12 @@ This document provides a comprehensive, chronological, and architectural summary
 ### ⚡ Order Splitting & Overflow Handling
 - **Line Item Threshold Management**: Detects orders exceeding Engage line item limit per purchase request and automatically splits them into a primary request and a secondary overflow request.
 
+### 🔗 Persistent Link Writing to Order Table (`Share-A-Cart Link` & `Engage Request Link`)
+- **Table Integration**: Connected to Columns U (`Share-A-Cart Link`) and V (`Engage Request Link`) in table `OrderT` on the `Ordering` sheet.
+- **Automated Cart URL Persistence**: Writes the generated Share-A-Cart link across all item rows matching the active `Order ID` via `spreadsheet_utils.update_order_table_links()`.
+- **Submitted Engage Request Link Capture**: Captures the final submitted purchase request URL from the automated browser (or prompts for it) and writes it into `Engage Request Link` for all order rows.
+- **Bi-Directional Cloud Sync**: Automatically triggers `rclone` sync to push updated links directly to the master workbook on SharePoint upon completion.
+
 ---
 
 ## 🌐 4. Price Scraping & Review Dashboard (`price_scraper.py`, `review_server.py`)
@@ -100,6 +107,7 @@ This document provides a comprehensive, chronological, and architectural summary
 | `50c629d` | `automation.py` | `_skip = ("nan", "request", "liquid", "misc", "")` contained `""`, causing `startswith("")` to match and discard all bill titles (`[1-0]`). | Removed `""` from `_skip` and cleaned blank titles beforehand. |
 | `8425dba` | `automation.py` | `EC.url_contains` threw `TypeError` when `driver.current_url` was momentarily `None` during Duo MFA redirect. | Used null-safe lambda checking `bool(d.current_url and "..." in d.current_url)`. |
 | `9f23df0` | `automation.py` | Sanitization replaced `.` with `_` (e.g. `m2_5.png`), but preflight validator searched for `m2.5.png`, reporting existing screenshots as missing (`⚠️`). | Implemented alphanumeric normalization across all screenshot lookups. |
+| `Current` | `automation_purchase.py` & `spreadsheet_utils.py` | Order-level URLs (Share-A-Cart link and Engage submission link) were not persisted into the master spreadsheet. | Added auto-population of Columns U (`Share-A-Cart Link`) and V (`Engage Request Link`) on `OrderT` and cloud sync to SharePoint. |
 
 ---
 

@@ -30,6 +30,8 @@ COLUMN_ALIASES = {
     "link": ["link", "url", "product link", "item link", "product url"],
     "status": ["status", "state", "item status"],
     "order_id": ["order id", "order_id", "order #", "order number", "order_id (yymmdd_vendor_gburdell3)"],
+    "share_cart_link": ["share-a-cart link", "share-a-cart", "share a cart link", "share a cart", "cart link"],
+    "engage_request_link": ["engage request link", "engage link", "purchase request link", "engage url", "purchase request url"],
 }
 
 
@@ -261,3 +263,64 @@ def validate_budget_spreadsheet(xlsx_path: str) -> dict:
         results["summary"] = f"❌ Spreadsheet failed validation with {error_cnt} error(s) and {warn_cnt} warning(s)."
 
     return results
+
+
+def update_order_table_links(
+    excel_path: str,
+    order_id: str,
+    share_cart_url: str | None = None,
+    engage_request_url: str | None = None,
+) -> int:
+    """
+    Update Share-A-Cart Link and/or Engage Request Link for all rows matching order_id in Ordering sheet.
+    Preserves formulas, cell formats, and table definitions.
+    Returns the number of rows updated.
+    """
+    if not os.path.exists(excel_path) or not order_id:
+        return 0
+
+    wb = openpyxl.load_workbook(excel_path, data_only=False)
+    sheet_name = find_sheet_name(wb, ["Ordering", "Orders", "OrderT"])
+    if not sheet_name:
+        wb.close()
+        return 0
+
+    ws = wb[sheet_name]
+    header_row = 2
+    headers = [ws.cell(header_row, col).value for col in range(1, ws.max_column + 1)]
+
+    oid_col = None
+    cart_col = None
+    engage_col = None
+
+    for idx, h in enumerate(headers, start=1):
+        if not h:
+            continue
+        h_str = str(h).strip().lower()
+        if "order id" in h_str:
+            oid_col = idx
+        elif "share-a-cart" in h_str or "share a cart" in h_str:
+            cart_col = idx
+        elif "engage request" in h_str or "engage link" in h_str or "engage url" in h_str:
+            engage_col = idx
+
+    if not oid_col:
+        wb.close()
+        return 0
+
+    updated_count = 0
+    clean_target_oid = str(order_id).strip().lower()
+
+    for r in range(header_row + 1, ws.max_row + 1):
+        cell_oid = ws.cell(r, oid_col).value
+        if cell_oid and str(cell_oid).strip().lower() == clean_target_oid:
+            if share_cart_url and cart_col:
+                ws.cell(r, cart_col).value = str(share_cart_url).strip()
+            if engage_request_url and engage_col:
+                ws.cell(r, engage_col).value = str(engage_request_url).strip()
+            updated_count += 1
+
+    if updated_count > 0:
+        wb.save(excel_path)
+    wb.close()
+    return updated_count

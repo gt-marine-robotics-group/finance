@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mrg-finance"
-version = "0.2.6"
+version = "0.2.7"
 description = "MRG Finance CLI — bill requests, purchase automation, and price auditing"
 readme = "README.md"
 authors = [
@@ -38,6 +38,8 @@ py-modules = [
     "engage_bill_lookup",
     "spreadsheet_utils",
     "order_excel_builder",
+    "share_a_cart",
+    "engage_tools",
 ]
 packages = ["web-app", "web-app.routes"]
 

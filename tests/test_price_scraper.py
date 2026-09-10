@@ -47,14 +47,41 @@ def test_extract_amazon_asin():
     assert price_scraper.extract_amazon_asin("https://example.com") is None
 
 
-def test_generate_amazon_cart_url():
-    items = [
-        {"Link": "https://www.amazon.com/dp/B08N5WRWNW", "Quantity": 2},
-        {"Link": "https://www.amazon.com/dp/B012345678", "Quantity": 1},
-        {"Link": "https://www.mcmaster.com/123", "Quantity": 5},
-    ]
-    cart_url = price_scraper.generate_amazon_cart_url(items)
-    assert "ASIN.1=B08N5WRWNW" in cart_url
-    assert "Quantity.1=2" in cart_url
-    assert "ASIN.2=B012345678" in cart_url
-    assert "Quantity.2=1" in cart_url
+def test_check_and_set_amazon_quantity():
+    class MockElement:
+        def __init__(self, tag_name="select", text="", options=None, attributes=None):
+            self.tag_name = tag_name
+            self.text = text
+            self._options = options or []
+            self._attributes = attributes or {}
+
+        def get_attribute(self, name):
+            return self._attributes.get(name, "")
+
+        def find_elements(self, by, value):
+            return self._options
+
+    class MockOption:
+        def __init__(self, value):
+            self._val = value
+        def get_attribute(self, name):
+            return self._val if name == "value" else ""
+
+    class MockDriver:
+        def __init__(self, avail_text="Only 3 left in stock", options=["1", "2", "3"]):
+            self.avail_text = avail_text
+            self.options = [MockOption(v) for v in options]
+
+        def find_elements(self, by, value):
+            if value == "availability":
+                return [MockElement(text=self.avail_text)]
+            if value == "quantity":
+                return [MockElement(options=self.options)]
+            return []
+
+    # Test limit detected when stock is 3 and desired is 10
+    driver = MockDriver("Only 3 left in stock")
+    qty_set, is_limited, reason = price_scraper.check_and_set_amazon_quantity(driver, desired_qty=10)
+    assert is_limited is True
+    assert qty_set == 3
+    assert "3 left in stock" in reason

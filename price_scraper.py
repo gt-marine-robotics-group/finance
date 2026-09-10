@@ -245,13 +245,103 @@ def dismiss_popups_and_interstitials(driver):
 
 
 def extract_amazon_asin(url: str) -> str | None:
-    """Extract 10-character Amazon ASIN from product URL."""
+    """Extract 10-character Amazon ASIN from product URL or redirect."""
     if not isinstance(url, str) or not url.strip():
         return None
-    match = re.search(r"/(?:dp|gp/product)/([A-Z0-9]{10})", url, re.IGNORECASE)
+    # 1. Standard /dp/, /gp/product/, /d/, /product/, /gp/aw/d/
+    match = re.search(r"/(?:dp|gp/product|gp/aw/d|product|d)/([A-Z0-9]{10})", url, re.IGNORECASE)
     if match:
         return match.group(1).upper()
+    # 2. Standalone ASIN parameter or path
+    match2 = re.search(r"(?:/|[?&]asin=)([B0-9][A-Z0-9]{9})(?:[/?&]|$)", url, re.IGNORECASE)
+    if match2:
+        return match2.group(1).upper()
+    # 3. Shortlinks (a.co, amzn.to)
+    if "a.co" in url or "amzn.to" in url:
+        try:
+            import requests
+            r = requests.head(url, allow_redirects=True, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
+            final_url = r.url
+            match3 = re.search(r"/(?:dp|gp/product|gp/aw/d|product|d)/([A-Z0-9]{10})", final_url, re.IGNORECASE)
+            if match3:
+                return match3.group(1).upper()
+        except Exception:
+            pass
     return None
+
+
+def check_and_set_amazon_quantity(driver, desired_qty: int, item_name: str = "") -> tuple[int, bool, str]:
+    """
+    Checks available quantity and seller limit on Amazon page and sets the quantity.
+    Returns (actual_qty_set, is_limited, limit_reason).
+    """
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import Select
+    import re
+    import time
+
+    # 1. Check availability text for stock limits
+    try:
+        avail_elems = driver.find_elements(By.ID, "availability")
+        if avail_elems:
+            avail_text = avail_elems[0].text.strip()
+            stock_match = re.search(r"only\s+(\d+)\s+left in stock", avail_text, re.IGNORECASE)
+            if stock_match:
+                stock_left = int(stock_match.group(1))
+                if desired_qty > stock_left:
+                    # Try to select the stock_left
+                    try:
+                        qty_selects = driver.find_elements(By.ID, "quantity")
+                        if qty_selects:
+                            Select(qty_selects[0]).select_by_value(str(stock_left))
+                    except Exception:
+                        pass
+                    return stock_left, True, f"Only {stock_left} left in stock (requested {desired_qty})"
+    except Exception:
+        pass
+
+    # 2. Check quantity dropdown
+    try:
+        qty_selects = driver.find_elements(By.ID, "quantity")
+        if qty_selects:
+            sel = Select(qty_selects[0])
+            options = [opt.get_attribute("value") for opt in sel.options]
+            numeric_options = [int(v) for v in options if v and v.isdigit()]
+            if numeric_options:
+                max_selectable = max(numeric_options)
+                if desired_qty in numeric_options:
+                    sel.select_by_value(str(desired_qty))
+                    time.sleep(0.3)
+                    return desired_qty, False, ""
+                elif desired_qty > max_selectable:
+                    sel.select_by_value(str(max_selectable))
+                    time.sleep(0.3)
+                    return max_selectable, True, f"Seller maximum limit is {max_selectable} per customer/order (requested {desired_qty})"
+                else:
+                    sel.select_by_value(str(numeric_options[0]))
+                    time.sleep(0.3)
+                    return numeric_options[0], True, f"Requested quantity {desired_qty} not in available dropdown options {numeric_options}"
+    except Exception:
+        pass
+
+    # 3. Check number input box
+    try:
+        qty_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[id*="quantity"], input[name*="quantity"]')
+        if qty_inputs:
+            inp = qty_inputs[0]
+            max_attr = inp.get_attribute("max")
+            if max_attr and max_attr.isdigit() and desired_qty > int(max_attr):
+                inp.clear()
+                inp.send_keys(max_attr)
+                return int(max_attr), True, f"Maximum allowed input is {max_attr} (requested {desired_qty})"
+            else:
+                inp.clear()
+                inp.send_keys(str(desired_qty))
+                return desired_qty, False, ""
+    except Exception:
+        pass
+
+    return desired_qty, False, ""
 
 
 def generate_amazon_cart_url(items: list[dict]) -> str:
