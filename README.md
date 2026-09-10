@@ -94,14 +94,25 @@ Open the side-by-side review GUI without running browser automation:
 mrg-finance review
 ```
 
+### 4. Manual Workflow Alternative (Without CLI)
+If you need to submit bill or purchase requests manually on Engage without the CLI:
+- **Bill Requests**: Fill out the `Bills` sheet, take product screenshots into `screenshots/<Bill Title>/<Item Name>.png`, open [Engage Budgeting](https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/budgeting), enter the line items under the target section (`B03`/`B06`), upload each screenshot, and click Submit.
+- **Purchase Requests**: Build your cart on the vendor site, take a screenshot of the cart (`cart.png`), open [Create Purchase Request](https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/Finance/CreatePurchaseRequest), enter the bill and line references in the form, attach `cart.png` and your price comparison spreadsheet, sign, submit, and paste the resulting Engage URL into Column V (`Engage Request Link`) on the `Ordering` sheet.
+- 📖 **Full Guide**: See [**Manual Workflow Guide**](docs/MANUAL_WORKFLOW.md) for complete field-by-field instructions.
+
 ---
 
 ## 📚 Documentation Guides
 
-- [**In-Depth Setup & Extra Details**](SETUP_AND_DETAILS.md): Local editable setup, detailed `rclone` configuration, Amazon cart linking behavior, and screenshot naming rules.
-- [**Spreadsheet Guide**](SPREADSHEET_GUIDE.md): Master spreadsheet schema, formulas, and `doctor` diagnostic rules.
-- [**Troubleshooting**](TROUBLESHOOTING.md): Solutions for `rclone` sync errors, Chrome/Selenium driver issues, and MFA timeouts.
-- [**Development Guide**](DEVELOPMENT.md): System architecture, Flask web dashboard, and contributor code map.
+All specialized documentation and guides are organized in the [`docs/`](docs/) directory:
+
+- [**Manual Workflow Guide**](docs/MANUAL_WORKFLOW.md): Step-by-step instructions for submitting bills and purchase requests directly on Engage.
+- [**Spreadsheet Guide**](docs/SPREADSHEET_GUIDE.md): Master spreadsheet schema, formulas, and `doctor` diagnostic rules.
+- [**In-Depth Setup & Extra Details**](docs/SETUP_AND_DETAILS.md): Local editable setup, detailed `rclone` configuration, Amazon cart linking behavior, and screenshot naming rules.
+- [**Troubleshooting**](docs/TROUBLESHOOTING.md): Solutions for `rclone` sync errors, Chrome/Selenium driver issues, and MFA timeouts.
+- [**Development Guide**](docs/DEVELOPMENT.md): System architecture, Flask web dashboard, and contributor code map.
+- [**AI Agent Guidelines**](docs/agents.md): System specifications, constraints, and architecture manual for AI coding assistants.
+- [**Changelog & Technical History**](docs/agent_changes.md): Chronological record of refactors, feature additions, and post-mortems.
 
 ---
 
