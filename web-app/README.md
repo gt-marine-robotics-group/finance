@@ -2,6 +2,8 @@
 
 Mobile-friendly web app for adding items and organizing bill requests. Runs on the SIM PC, accessible from any phone on Tailscale.
 
+> 📖 **Full Developer & Architecture Guide**: See [docs/dev/DEVELOPMENT.md](../docs/dev/DEVELOPMENT.md) for Graph API details, systemd configuration, and system architecture.
+
 ## Setup (first time)
 
 ```bash

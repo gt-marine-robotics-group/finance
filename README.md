@@ -1,151 +1,138 @@
 # MRG Finance
 
-**Start with Excel. The command-line tool is optional.**
+> Georgia Tech Marine Robotics Group — Financial Workflow & Automation Suite
 
-A **budget request** (or **bill**) asks SGA to approve funding. A **purchase request** uses approved funding to arrange an order. Neither submits an order to a vendor.
+**All purchasing begins in Excel on SharePoint. The CLI tool is optional.**
 
-## 1. Fill in the shared Excel sheet
+Master Workbook: **[FY27_Bills_Budget.xlsx on SharePoint](https://gtvault.sharepoint.com/:x:/r/sites/MarineRoboticsGroup/Shared%20Documents/OPS-1%20Operations/FY27%20Finances/FY27_Bills_Budget.xlsx?d=w89396907686c491395b64a5ef042181c&csf=1&web=1&e=b5knap)** (sign in with your GT account).
 
-Open [FY27_Bills_Budget.xlsx on SharePoint](https://gtvault.sharepoint.com/:x:/r/sites/MarineRoboticsGroup/Shared%20Documents/OPS-1%20Operations/FY27%20Finances/FY27_Bills_Budget.xlsx?d=w89396907686c491395b64a5ef042181c&csf=1&web=1&e=b5knap) with your GT account. Edit in your browser and wait for changes to save. Ask the finance officer for access if needed.
+---
 
-| | Request funding | Prepare an approved purchase |
-| --- | --- | --- |
-| Sheet | `Bills` | `Ordering` |
-| One row per… | Product you want funded. | Product you want to order. |
-| Group rows with… | The same `Bill Title`. | The same `Order ID`, e.g. `260910_amazon_gburdell3` = date, vendor, your GT username. Use a separate order for each vendor. |
-| You fill in… | `Bill Title`, `Item Name`, `Vendor`, `Description`, `Budget Section`, `Quantity`, `Cost`, `Link`, `Person Requesting`. | `Order ID`, `Bill Item ID` copied exactly from `Bills`, `Quantity`, `Purchaser`, `Status`. |
-| Excel fills in… | `Bill Item ID` and `Total Cost`. | Bill number/title, item name, vendor, cost, total cost, allocation, and budget section. **Do not type into these fields.** |
+## 🔄 The Tandem Spreadsheet Workflow
 
-Use empty rows inside the existing tables. In `Ordering`, headings are on row 2 and data starts on row 3. Enter the price of **one unit or pack** in `Cost`: quantity 3 × cost $12.50 = total $37.50. Ask the finance officer which budget section to use if unsure.
+The club's financial lifecycle operates in two sequential stages across two sheets:
 
-For funding, save a product screenshot showing the item, price, and pack size. For purchases, confirm approval and remaining funding, build the vendor cart, and check quantities and current prices. Resolve price differences with the finance officer; keep the approved budget figures intact.
+```mermaid
+flowchart LR
+    A["1. Bills Sheet\n(Request SGA Funding)"] -->|SGA Approves Bill| B["Copy Bill Item ID\n(e.g. B03-01)"]
+    B --> C["2. Ordering Sheet\n(Spend Approved Funds)"]
+    C -->|Excel formulas auto-populate| D["Submit to Engage\n(Manual or CLI)"]
+    D -->|Record URLs| E["Share-A-Cart & Engage Links\n(Saved to Columns U & V)"]
+```
 
-**After submission:** record the actual `Bill No.` and status on the bill's rows. For an order, put the submitted URL in `Engage Request Link` (V) and any cart link in `Share-A-Cart Link` (U) on **every row with that Order ID**. Update status as approval, ordering, and delivery progress.
+### Sheet Comparison: `Bills` vs `Ordering`
 
-### Submit manually — no installation needed
+| Attribute | 1. `Bills` Sheet (`BillsT`) | 2. `Ordering` Sheet (`OrderT`) |
+| :--- | :--- | :--- |
+| **Role** | **Where money comes from** (SGA funding approval). | **Where money goes** (Specific vendor order). |
+| **One row represents…** | A product you want funded in an upcoming bill. | A product you are actively ordering right now. |
+| **Row Grouping Key** | **`Bill Title`** (e.g. `RobotX Testing Equipment Bill`). | **`Order ID`** (`YYMMDD_vendor_gtusername`, e.g. `260910_amazon_gburdell3`). |
+| **The Connecting Key** | **Defines `Bill Item ID`** (Col A, e.g. `B03-01`). | **Paste `Bill Item ID`** copied from `Bills` (Col B). |
+| **What YOU fill in** | `Bill Title`, `Item Name`, `Vendor`, `Description`, `Budget Section` (`B03`/`B06`), `Quantity`, `Cost` (unit price), product `Link`, `Person Requesting`. | 1. Enter `Order ID` on every row in this cart<br>2. **Paste `Bill Item ID` from `Bills`**<br>3. Enter `Quantity` (to buy now), `Purchaser`, and `Status`. |
+| **What EXCEL fills in** | `Bill Item ID` (Col A) and `Total Cost` (Col K). | **Everything else!** Bill No., Bill Title, Item Name, Vendor, Cost, Total Cost, Allocation, Budget Section via `=INDEX(MATCH(...))`. |
+| **Golden Rule** | **Never type over formula columns (A & K).** | **Never type over lookup columns (C–G, I–J, O).** Only paste the `Bill Item ID`! |
+| **After Submission** | Once SGA passes the bill, record the official **`Bill No.`** on all item rows. | Paste **`Share-A-Cart Link`** (Col U) and **`Engage Request Link`** (Col V) across all order rows. |
 
-| Request | Where to go | What to do |
-| --- | --- | --- |
-| Budget / bill | [MRG Budgeting in Engage](https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/budgeting) | Create/open a draft with the same bill title and correct fiscal year. Add each item under its budget section with quantity, unit cost, and quote screenshot. Check the total, then submit. |
-| Purchase | [Create Purchase Request in Engage](https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/Finance/CreatePurchaseRequest) | Enter the order amount, funding account/category, and approved bill/line references. Attach the cart screenshot and a separate Budget vs Quoted spreadsheet, complete the required fields, sign, and submit. |
+---
 
-Sign in with GT credentials and Duo. An Engage line number must be checked on the approved bill; it is not an Excel row number. After purchase-request approval, coordinate actual ordering with the finance officer.
+## 🚀 How to Submit: 2 Options
+
+### Option A: Submit Manually on Engage (No Software Installation)
+
+1. **For Budget / Bill Requests:**
+   - Open [MRG Budgeting in Engage](https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/budgeting) and create a draft with your `Bill Title`.
+   - Add items under their respective budget sections (`B03 - General Inventoried Goods` for assets/tools; `B06 - Non-Inventoried Items` for consumables/supplies).
+   - Attach a product screenshot for each item showing name and unit price. Submit, then write the assigned `Bill No.` into Excel.
+2. **For Purchase Requests:**
+   - Build your vendor cart and take a cart screenshot (`cart.png`).
+   - Open [Create Purchase Request in Engage](https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/Finance/CreatePurchaseRequest).
+   - Enter vendor, amount, funding account, and approved SGA bill & line numbers.
+   - Attach `cart.png` and a Budget vs Quoted comparison spreadsheet, sign, and submit.
+   - Paste the confirmation URL into **`Engage Request Link`** (Col V) and cart link into **`Share-A-Cart Link`** (Col U) on all order rows.
+
+📖 *Full field-by-field instructions: [Spreadsheet & Manual Workflow Guide](docs/user/WORKFLOW_GUIDE.md).*
+
+---
+
+### Option B: Use the Automated CLI (`mrg-finance`)
+
+The command-line tool automates screenshot verification, live price checking, comparison report generation, and Engage form filling. *(You still review in the browser and click Submit yourself.)*
+
+#### Quick CLI Reference
+
+Always verify your spreadsheet before submitting:
+```bash
+mrg-finance doctor --fresh
+```
+
+| Task | Command | Description |
+| :--- | :--- | :--- |
+| **Bill Request** | `mrg-finance bill-request --fresh` | Audits quote screenshots and autofills line items into your Engage budget draft. |
+| **Purchase Request** | `mrg-finance purchase --fresh` | Checks prices, opens vendor cart, creates comparison Excel sheet, and autofills Engage form. |
+| **Report Only** | `mrg-finance report --fresh` | Generates `Budget_vs_Quoted_Detail_<Order ID>.xlsx` for your order without browser automation. |
+| **Visual Review** | `mrg-finance review --bill "<Title>"` | Launches local side-by-side card GUI (`http://localhost:8321`) to inspect screenshots and diff prices. |
+
+> [!NOTE]
+> In a purchase run, press **Enter** in your terminal only after you click **Submit** on Engage. The tool will capture or prompt for your confirmation URL and automatically save both links back to SharePoint.
 
 <details>
-<summary>What goes in the screenshots and price comparison?</summary>
+<summary><b>First-Time CLI Installation & SharePoint Setup</b></summary>
 
-Save evidence in the shared finance folder under `screenshots/<Bill Title>/<Item Name>.png` for product quotes and `screenshots/<Order ID>/cart.png` for carts. Replace the placeholders with the actual title, item, or order ID. Screenshots should show the correct variant, pack size, price, and quantities.
-
-Make a separate Budget vs Quoted workbook with one row per item: item name, approved Engage bill/section/line, approved unit price and quantity, current quoted unit price and quantity, both totals, and their difference. Include it even when prices match. Identify shipping and tax separately and confirm how they will be funded. A cart link does not replace the screenshot.
-
-If a calculated Excel field is blank or wrong, check the copied `Bill Item ID`, then recalculate and save in Excel. Do not type over the formula; ask the finance officer to help restore it or extend the table when needed.
-
-For complete field rules, see the [Spreadsheet Guide](docs/SPREADSHEET_GUIDE.md) and [Engage Form Reference](docs/MANUAL_WORKFLOW.md).
-
-</details>
-
-## 2. Optional: install the command-line tool
-
-The CLI prepares screenshots, reports, and Engage forms. **You still review and click Submit yourself.** Use Terminal on macOS/Linux or PowerShell on Windows.
-
-<details>
-<summary>First-time installation and SharePoint connection</summary>
-
-You need [Git](https://git-scm.com/downloads) and access to this GitHub repository. Install [uv](https://docs.astral.sh/uv/getting-started/installation/), which manages Python and the tool.
-
-macOS / Linux:
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and install `mrg-finance` globally:
 
 ```bash
+# macOS / Linux:
 curl -LsSf https://astral.sh/uv/install.sh | sh
-```
+uv tool install --python 3.12 git+https://github.com/gt-marine-robotics-group/finance.git
+uv tool update-shell
 
-Windows PowerShell:
-
-```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
-
-Reopen your terminal, then run:
-
-```text
+# Windows PowerShell:
+irm https://astral.sh/uv/install.ps1 | iex
 uv tool install --python 3.12 git+https://github.com/gt-marine-robotics-group/finance.git
 uv tool update-shell
 ```
 
-Reopen the terminal again and run `mrg-finance --help`. You should see the available commands.
+**Connect SharePoint via `rclone` (One-time):**
+1. Install [rclone](https://rclone.org/install/) and run `rclone config`.
+2. Create remote named `onedrive` &rarr; type **Microsoft OneDrive** &rarr; complete GT SSO & Duo login in browser &rarr; select **SharePoint site** (`https://gtvault.sharepoint.com/sites/MarineRoboticsGroup`) &rarr; select **Documents**.
+3. Verify connection:
+   ```bash
+   rclone ls "onedrive:OPS-1 Operations/FY27 Finances"
+   ```
 
-Install [rclone](https://rclone.org/install/) to connect shared files, then run `rclone config`. Create a remote named `onedrive`, choose **Microsoft OneDrive**, leave client credentials at their defaults, and sign in with GT/Duo. Choose **SharePoint site**, enter `https://gtvault.sharepoint.com/sites/MarineRoboticsGroup`, and select **Documents**. Select menu entries by name, since their numbers can change. [Official connection reference](https://rclone.org/onedrive/).
-
-Check the connection:
-
-```text
-rclone ls "onedrive:OPS-1 Operations/FY27 Finances"
-```
-
-You should see `FY27_Bills_Budget.xlsx`. If it is missing, ask the finance officer to check your access and library selection.
-
-</details>
-
-Create a local folder for finance work and download the shared workbook into it, keeping the name `FY27_Bills_Budget.xlsx`. Run commands from this folder each time.
-
-<details>
-<summary>How to open the working folder in your terminal</summary>
-
-Type `cd ` followed by the full path to your folder in quotes. For example:
-
-```text
-cd "/full/path/to/your/finance-folder"
-```
-
-Then point the helpers at your downloaded workbook. Repeat this in each new terminal session.
-
-macOS / Linux:
-
+**Working Directory:**
+Create a dedicated folder (e.g. `~/mrg-finance-work`), download `FY27_Bills_Budget.xlsx` into it, and set:
 ```bash
+# macOS / Linux:
 export FINANCE_XLSX_PATH="$PWD/FY27_Bills_Budget.xlsx"
-```
 
-Windows PowerShell:
-
-```powershell
+# Windows PowerShell:
 $env:FINANCE_XLSX_PATH = Join-Path (Get-Location).Path "FY27_Bills_Budget.xlsx"
 ```
 
-Run `mrg-finance doctor` and check that its `Target file` is your intended workbook.
-
 </details>
-
-## 3. Run a budget or purchase request
-
-Save your shared-sheet edits first. `--fresh` attempts to download the latest shared files; read the sync result before continuing.
-
-```text
-mrg-finance doctor --fresh
-```
-
-Fix reported data errors, then choose a request:
-
-| Task | Command | What you do |
-| --- | --- | --- |
-| Budget / bill | `mrg-finance bill-request --fresh` | Create/open an Engage draft first. Select your bill in the terminal; have the draft's edit URL ready if `Bill No.` is blank. Follow the screenshot and GT/Duo prompts, review any option to clear draft items, then check and submit in Engage. |
-| Purchase | `mrg-finance purchase --fresh` | Select your order. Follow the price and GT/Duo prompts. Check the cart, bill/line references, amount, account/category, and both attachments. Complete any missing fields, sign, and submit in Engage. |
-| Comparison report only | `mrg-finance report --fresh` | Select your order. Open the generated file at the printed path and verify quoted prices and Engage references before attaching it. |
-
-If the cart or form automation fails, finish those steps manually using the workflow above. In a purchase run, **press Enter in the terminal only after submitting in Engage**, then verify or paste the confirmation URL when prompted. Check SharePoint afterward to confirm the links reached all order rows.
 
 <details>
-<summary>Common problems and extra options</summary>
+<summary><b>Troubleshooting & Common Fixes</b></summary>
 
-- **Command not found:** reopen the terminal after installation. For `mrg-finance`, run `uv tool update-shell` and reopen again.
-- **Sync fails or old data appears:** confirm Excel has saved and check `rclone ls` using the command above. For expired login, run `rclone config reconnect onedrive:`. A failed sync can leave the tool using an older copy; verify the workbook before continuing.
-- **Missing or wrong calculated values:** check the source ID and save/recalculate in Excel. Python reads saved results; it does not calculate Excel formulas.
-- **Vendor page blocks screenshots or prices:** capture the evidence in your normal browser. Check the report against the actual quote; failed scraping may fall back to budget prices.
-- **Missing form fields or attachments:** fill them manually. If details were placed in Description, copy them to the required fields and check the cart link is still present.
-- **Choose a request directly:** add `--bill "Exact Bill Title"` to `bill-request`, or `--order "260910_amazon_gburdell3"` to `purchase`.
-- **More commands:** `mrg-finance --help` lists screenshot, review, and price-check tools. The review page can save price edits to the workbook; check changes before saving.
-- **Update:** rerun the installation command with `--force --refresh` after `uv tool install`.
-- **Detailed guides:** For advanced rclone setup and extra commands, see [CLI Guide](docs/CLI_GUIDE.md). For common error fixes, see [Troubleshooting](docs/TROUBLESHOOTING.md).
+- **`mrg-finance: command not found`:** Run `uv tool update-shell`, then restart your terminal.
+- **Lookup columns show `#N/A`:** The `Bill Item ID` entered in `Ordering` does not match any ID in `Bills`. Copy it directly from Column A of `Bills`.
+- **`rclone` size or hash mismatch warnings:** Normal SharePoint behavior; tool automatically passes `--ignore-checksum --ignore-size --update`.
+- **Duo MFA times out:** You have 180 seconds to approve the push. Keep your mobile device unlocked.
+- **Form question structure changed on Engage:** Purchase automation safely falls back to pasting unmapped breakdown lines into the main **Description** box.
+
+📖 *Full troubleshooting guide: [CLI & Troubleshooting Guide](docs/user/CLI_GUIDE.md).*
 
 </details>
 
-Maintaining the software? See [Development](docs/DEVELOPMENT.md). Coding agents: read [agents.md](docs/agents.md).
+---
+
+## 📚 Documentation Index
+
+| Category | Document | Description |
+| :--- | :--- | :--- |
+| **User Guides** | [Spreadsheet & Manual Workflow Guide](docs/user/WORKFLOW_GUIDE.md) | Full schema, tandem lifecycle, formula rules, and manual Engage submission |
+| | [CLI & Troubleshooting Guide](docs/user/CLI_GUIDE.md) | Installation, rclone setup, CLI command reference, and error troubleshooting |
+| **Development** | [Developer & Web App Guide](docs/dev/DEVELOPMENT.md) | System architecture, SIM PC deployment, systemd, and Microsoft Graph API |
+| **AI Assistants** | [AI Agent Guidelines](docs/agents/agents.md) | Agent system specifications, spreadsheet safety rules, and operational blueprints |
+| | [Technical Changelog](docs/agents/agent_changes.md) | Chronological development record, refactors, and regression post-mortems |
