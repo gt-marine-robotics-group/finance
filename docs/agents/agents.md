@@ -16,7 +16,7 @@ The MRG Finance system automates financial workflows for the Georgia Tech Marine
 
 ## 🏗️ 2. Repository Architecture & File Blueprint
 
-```
+```text
 finance/
 ├── mrg.py                     # Unified CLI entrypoint (mrg-finance binary)
 ├── automation.py              # CampusLabs Engage bill submission automation
@@ -29,17 +29,18 @@ finance/
 ├── review_server.py           # Local HTTP server for review.html & Excel sync
 ├── review.html                # Side-by-side card visual inspection interface
 ├── FY27_Bills_Budget.xlsx     # Local mirror of SharePoint master workbook
-├── tests/                     # Comprehensive pytest test suite (28+ tests)
+├── tests/                     # Comprehensive pytest test suite (32 tests)
 ├── web-app/                   # Flask web dashboard (runs on team SIM PC)
 ├── pyproject.toml             # uv package definition & CLI console script
 └── docs/                      # Technical documentation, guides, and agent manuals
-    ├── CLI_GUIDE.md           # CLI reference, rclone connection, and advanced commands
-    ├── agents.md              # Operational manual and guidelines for AI agents
-    ├── agent_changes.md       # Chronological technical changelog & post-mortems
-    ├── MANUAL_WORKFLOW.md     # Step-by-step manual Engage submission guide
-    ├── SPREADSHEET_GUIDE.md   # Schema & formula preservation rules
-    ├── TROUBLESHOOTING.md     # Common errors & driver troubleshooting
-    └── DEVELOPMENT.md         # System architecture & SIM PC web app guide
+    ├── user/                  # End-user guides
+    │   ├── WORKFLOW_GUIDE.md  # Complete spreadsheet tandem guide & manual Engage reference
+    │   └── CLI_GUIDE.md       # CLI reference, rclone connection, and troubleshooting
+    ├── dev/                   # Developer & operator documentation
+    │   └── DEVELOPMENT.md     # System architecture & SIM PC web app guide
+    └── agents/                # AI agent manual & changelog
+        ├── agents.md          # Operational manual and guidelines for AI agents
+        └── agent_changes.md   # Chronological technical changelog & post-mortems
 ```
 
 ---

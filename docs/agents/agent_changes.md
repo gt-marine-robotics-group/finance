@@ -16,7 +16,7 @@ This document provides a comprehensive, chronological, and architectural summary
   - `mrg-finance report`: Generate dynamic `Budget_vs_Quoted_Detail` Excel comparison sheets.
   - `mrg-finance review`: Standalone side-by-side review dashboard web server.
   - `mrg-finance doctor`: Diagnostic test suite verifying Python env, Selenium, Chrome, `rclone`, and SharePoint connectivity.
-- **AI Agent Guidelines (`AGENTS.md`)**: Added comprehensive operational guidelines, architectural blueprints, spreadsheet integrity rules, and guardrails for AI coding assistants.
+- **AI Agent Guidelines (`docs/agents/agents.md`)**: Added comprehensive operational guidelines, architectural blueprints, spreadsheet integrity rules, and guardrails for AI coding assistants.
 
 ### 📊 Dynamic Multi-Path Spreadsheet Resolution (`spreadsheet_utils.py`)
 - **Hierarchy of Resolution**: Ensured all scripts dynamically locate `FY27_Bills_Budget.xlsx` across environments:
@@ -107,8 +107,8 @@ This document provides a comprehensive, chronological, and architectural summary
 | `50c629d` | `automation.py` | `_skip = ("nan", "request", "liquid", "misc", "")` contained `""`, causing `startswith("")` to match and discard all bill titles (`[1-0]`). | Removed `""` from `_skip` and cleaned blank titles beforehand. |
 | `8425dba` | `automation.py` | `EC.url_contains` threw `TypeError` when `driver.current_url` was momentarily `None` during Duo MFA redirect. | Used null-safe lambda checking `bool(d.current_url and "..." in d.current_url)`. |
 | `9f23df0` | `automation.py` | Sanitization replaced `.` with `_` (e.g. `m2_5.png`), but preflight validator searched for `m2.5.png`, reporting existing screenshots as missing (`⚠️`). | Implemented alphanumeric normalization across all screenshot lookups. |
-| `Current` | `automation_purchase.py` & `spreadsheet_utils.py` | Order-level URLs (Share-A-Cart link and Engage submission link) were not persisted into the master spreadsheet. | Added auto-population of Columns U (`Share-A-Cart Link`) and V (`Engage Request Link`) on `OrderT` and cloud sync to SharePoint. |
-| `Current` | Documentation Suite | Excessive doc verbosity and redundant files made onboarding difficult. | Streamlined README to at-a-glance 3-step workflow, consolidated documentation into `docs/` (`CLI_GUIDE.md`, `MANUAL_WORKFLOW.md`, `SPREADSHEET_GUIDE.md`, `TROUBLESHOOTING.md`, `DEVELOPMENT.md`, `agents.md`, `agent_changes.md`), and validated all cross-links. |
+| `45b9f9d` | `automation_purchase.py` & `spreadsheet_utils.py` | Order-level URLs (Share-A-Cart link and Engage submission link) were not persisted into the master spreadsheet. | Added auto-population of Columns U (`Share-A-Cart Link`) and V (`Engage Request Link`) on `OrderT` and cloud sync to SharePoint. |
+| `Current` | Documentation Suite | Documentation was scattered and fragmented across 7+ redundant files. | Refactored `docs/` into logical subdirectories (`docs/user/`, `docs/dev/`, `docs/agents/`), consolidated duplicate docs, and updated README with at-a-glance tandem sheet lifecycle. |
 
 ---
 
