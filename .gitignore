@@ -12,5 +12,5 @@ FY27_Bills_Budget.xlsx
 .agents/
 build/
 *.egg-info/
-
-
+.aider*
+scratch/

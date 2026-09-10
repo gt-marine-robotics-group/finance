@@ -3,11 +3,13 @@ automation.py
 automation_purchase.py
 automation_screenshots.py
 engage_bill_lookup.py
+engage_tools.py
 mrg.py
 order_excel_builder.py
 price_scraper.py
 pyproject.toml
 review_server.py
+share_a_cart.py
 spreadsheet_utils.py
 mrg_finance.egg-info/PKG-INFO
 mrg_finance.egg-info/SOURCES.txt
@@ -19,6 +21,8 @@ tests/test_app_routes.py
 tests/test_engage_bill_lookup.py
 tests/test_order_excel_builder.py
 tests/test_price_scraper.py
+tests/test_pyproject_packaging.py
+tests/test_share_a_cart.py
 tests/test_xlsx_manager.py
 web-app/app.py
 web-app/screenshot_worker.py

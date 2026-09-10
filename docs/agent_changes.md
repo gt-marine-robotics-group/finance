@@ -108,13 +108,16 @@ This document provides a comprehensive, chronological, and architectural summary
 | `8425dba` | `automation.py` | `EC.url_contains` threw `TypeError` when `driver.current_url` was momentarily `None` during Duo MFA redirect. | Used null-safe lambda checking `bool(d.current_url and "..." in d.current_url)`. |
 | `9f23df0` | `automation.py` | Sanitization replaced `.` with `_` (e.g. `m2_5.png`), but preflight validator searched for `m2.5.png`, reporting existing screenshots as missing (`⚠️`). | Implemented alphanumeric normalization across all screenshot lookups. |
 | `Current` | `automation_purchase.py` & `spreadsheet_utils.py` | Order-level URLs (Share-A-Cart link and Engage submission link) were not persisted into the master spreadsheet. | Added auto-population of Columns U (`Share-A-Cart Link`) and V (`Engage Request Link`) on `OrderT` and cloud sync to SharePoint. |
+| `Current` | Documentation Suite | Excessive doc verbosity and redundant files made onboarding difficult. | Streamlined README to at-a-glance 3-step workflow, consolidated documentation into `docs/` (`CLI_GUIDE.md`, `MANUAL_WORKFLOW.md`, `SPREADSHEET_GUIDE.md`, `TROUBLESHOOTING.md`, `DEVELOPMENT.md`, `agents.md`, `agent_changes.md`), and validated all cross-links. |
 
 ---
 
 ## 🧪 7. Test Suite Status
-- All **28 unit tests** in `tests/` pass with zero failures:
+- All **32 unit tests** in `tests/` pass with zero failures:
   - `tests/test_app_routes.py` (13 tests)
   - `tests/test_engage_bill_lookup.py` (5 tests)
   - `tests/test_order_excel_builder.py` (2 tests)
   - `tests/test_price_scraper.py` (5 tests)
+  - `tests/test_pyproject_packaging.py` (1 test)
+  - `tests/test_share_a_cart.py` (3 tests)
   - `tests/test_xlsx_manager.py` (3 tests)

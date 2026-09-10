@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: mrg-finance
-Version: 0.2.5
+Version: 0.2.7
 Summary: MRG Finance CLI — bill requests, purchase automation, and price auditing
 Author-email: Georgia Tech Marine Robotics Group <ops@marinerobotics.gatech.edu>
 Requires-Python: >=3.10
@@ -66,6 +66,13 @@ One of the most robust features is the ability to easily override the scraper. I
 screenshots/<Bill Title>/<Item Name>.png
 ```
 
+## 📋 Spreadsheet Setup (Before Running CLI)
+
+Ensure your items are entered in `FY27_Bills_Budget.xlsx` on SharePoint before running the tools:
+
+- **For Bill Requests (`Bills` Sheet)**: Add your proposed items under the target **`Bill Title`**. Fill in **`Item Name`**, **`Budget Section`** (e.g. `B03 - General Inventoried Goods`, `B06 - Non-Inventoried Items`), **`Cost`**, **`Quantity`**, and a valid product **`Link`** for automated screenshot capture. *(Leave formula columns like `Total Cost` untouched)*.
+- **For Purchase Requests (`Ordering` Sheet)**: Group items into an order by assigning an **`Order ID`** formatted as `YYMMDD_<vendor>_<gt_username>` (e.g., `260819_amazon_awu335`). Fill in **`Item Name`**, **`Vendor`**, **`Cost`**, **`Quantity`**, and **`Link`**.
+
 ---
 
 ## 🛒 Usage & Workflow
@@ -104,14 +111,25 @@ Open the side-by-side review GUI without running browser automation:
 mrg-finance review
 ```
 
+### 4. Manual Workflow Alternative (Without CLI)
+If you need to submit bill or purchase requests manually on Engage without the CLI:
+- **Bill Requests**: Fill out the `Bills` sheet, take product screenshots into `screenshots/<Bill Title>/<Item Name>.png`, open [Engage Budgeting](https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/budgeting), enter the line items under the target section (`B03`/`B06`), upload each screenshot, and click Submit.
+- **Purchase Requests**: Build your cart on the vendor site, take a screenshot of the cart (`cart.png`), open [Create Purchase Request](https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/Finance/CreatePurchaseRequest), enter the bill and line references in the form, attach `cart.png` and your price comparison spreadsheet, sign, submit, and paste the resulting Engage URL into Column V (`Engage Request Link`) on the `Ordering` sheet.
+- 📖 **Full Guide**: See [**Manual Workflow Guide**](docs/MANUAL_WORKFLOW.md) for complete field-by-field instructions.
+
 ---
 
 ## 📚 Documentation Guides
 
-- [**In-Depth Setup & Extra Details**](SETUP_AND_DETAILS.md): Local editable setup, detailed `rclone` configuration, Amazon cart linking behavior, and screenshot naming rules.
-- [**Spreadsheet Guide**](SPREADSHEET_GUIDE.md): Master spreadsheet schema, formulas, and `doctor` diagnostic rules.
-- [**Troubleshooting**](TROUBLESHOOTING.md): Solutions for `rclone` sync errors, Chrome/Selenium driver issues, and MFA timeouts.
-- [**Development Guide**](DEVELOPMENT.md): System architecture, Flask web dashboard, and contributor code map.
+All specialized documentation and guides are organized in the [`docs/`](docs/) directory:
+
+- [**Manual Workflow Guide**](docs/MANUAL_WORKFLOW.md): Step-by-step instructions for submitting bills and purchase requests directly on Engage.
+- [**Spreadsheet Guide**](docs/SPREADSHEET_GUIDE.md): Master spreadsheet schema, formulas, and `doctor` diagnostic rules.
+- [**In-Depth Setup & Extra Details**](docs/SETUP_AND_DETAILS.md): Local editable setup, detailed `rclone` configuration, Amazon cart linking behavior, and screenshot naming rules.
+- [**Troubleshooting**](docs/TROUBLESHOOTING.md): Solutions for `rclone` sync errors, Chrome/Selenium driver issues, and MFA timeouts.
+- [**Development Guide**](docs/DEVELOPMENT.md): System architecture, Flask web dashboard, and contributor code map.
+- [**AI Agent Guidelines**](docs/agents.md): System specifications, constraints, and architecture manual for AI coding assistants.
+- [**Changelog & Technical History**](docs/agent_changes.md): Chronological record of refactors, feature additions, and post-mortems.
 
 ---
 
