@@ -107,8 +107,8 @@ This document provides a comprehensive, chronological, and architectural summary
 | `50c629d` | `automation.py` | `_skip = ("nan", "request", "liquid", "misc", "")` contained `""`, causing `startswith("")` to match and discard all bill titles (`[1-0]`). | Removed `""` from `_skip` and cleaned blank titles beforehand. |
 | `8425dba` | `automation.py` | `EC.url_contains` threw `TypeError` when `driver.current_url` was momentarily `None` during Duo MFA redirect. | Used null-safe lambda checking `bool(d.current_url and "..." in d.current_url)`. |
 | `9f23df0` | `automation.py` | Sanitization replaced `.` with `_` (e.g. `m2_5.png`), but preflight validator searched for `m2.5.png`, reporting existing screenshots as missing (`⚠️`). | Implemented alphanumeric normalization across all screenshot lookups. |
-| `45b9f9d` | `automation_purchase.py` & `spreadsheet_utils.py` | Order-level URLs (Share-A-Cart link and Engage submission link) were not persisted into the master spreadsheet. | Added auto-population of Columns U (`Share-A-Cart Link`) and V (`Engage Request Link`) on `OrderT` and cloud sync to SharePoint. |
 | `Current` | Documentation Suite | Documentation was scattered and fragmented across 7+ redundant files. | Refactored `docs/` into logical subdirectories (`docs/user/`, `docs/dev/`, `docs/agents/`), consolidated duplicate docs, and updated README with at-a-glance tandem sheet lifecycle. |
+| `Current` | Repo Cleanup | Stray artifacts (`mrg_finance.egg-info`, `scratch/`, and `web-app/.venv` symlink) were tracked in git. | Untracked and removed build artifacts, temporary scratch files, and virtual environment symlinks from repository tracking. |
 
 ---
 
