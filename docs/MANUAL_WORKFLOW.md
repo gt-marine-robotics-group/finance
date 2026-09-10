@@ -1,134 +1,64 @@
-# 📋 Manual Finance & Purchasing Workflow Guide
+# Engage form reference
 
-This guide details how to perform SGA Bill Requests and Purchase Requests **manually** on Georgia Tech CampusLabs Engage without using the `mrg-finance` CLI tool. Use this guide if you are submitting orders manually, testing the workflow, or overriding automated steps.
+Follow the [README workflow](../README.md#1-fill-in-the-shared-excel-sheet) to prepare the workbook. This page provides submission details for people filling in Engage manually or completing fields left by the CLI.
 
----
+The field names below reflect the forms targeted by this repository. Follow the required fields shown in the live form if the wording changes.
 
-## 📑 Prerequisites & Master Spreadsheet Setup
+## Budget request details
 
-All financial requests trace back to **`FY27_Bills_Budget.xlsx`** on SharePoint.
+Open [MRG Budgeting](https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/budgeting), sign in with your GT account and Duo, and create or open the intended draft.
 
-🔗 **Direct SharePoint Link**: [FY27_Bills_Budget.xlsx](https://gtvault.sharepoint.com/:x:/r/sites/MarineRoboticsGroup/Shared%20Documents/OPS-1%20Operations/FY27%20Finances/FY27_Bills_Budget.xlsx?d=w89396907686c491395b64a5ef042181c&csf=1&web=1&e=b5knap)
+| Form area | What to enter or verify |
+| --- | --- |
+| Request header | Organization: Marine Robotics Group; the intended fiscal year; the same title used in `Bills`. |
+| Budget section | The item's `Budget Section`, such as B03 or B06. Confirm the category with the finance officer if unsure. |
+| Item | Name, purpose/description, quantity, and unit cost from `Bills`. |
+| Quote attachment | A product screenshot showing the item, price, and unit or pack size. |
+| Final review | Each intended item appears once; quantities, evidence, and total match the workbook. |
 
----
+Save each item, complete any remaining required questions, and submit. Record the actual request number and status on every item row in that bill. Update the status again when the approval decision arrives.
 
-## 📝 Workflow 1: Manual SGA Bill Request Submission
+The bill CLI needs an existing draft: if there is no `Bill No.` in the workbook, it prompts for the draft's full edit-page URL. Copy it from your browser; do not guess the number.
 
-Use this workflow when submitting a proposed budget bill to SGA for funding allocation before purchasing items.
+## Purchase request details
 
-### Step 1: Draft Items in the `Bills` Sheet
-1. Open `FY27_Bills_Budget.xlsx` and go to the **`Bills`** sheet.
-2. Add your items under your target **`Bill Title`** (e.g., `Marine Robotics Group RobotX Testing Equipment Bill`):
-   - **`Bill Title`**: Exact name of the proposed bill.
-   - **`Item Name`**: Descriptive component or product name.
-   - **`Budget Section`**: SGA category (most common: `B03 - General Inventoried Goods` or `B06 - Non-Inventoried Items`).
-   - **`Cost`**: Unit price quote in USD.
-   - **`Quantity`**: Number of units requested.
-   - **`Link`**: Direct vendor product page URL.
-   - ⚠️ *Note: Leave formula columns like `Bill Item ID` (Column A) and `Total Cost` (Column K) untouched.*
+Open [Create Purchase Request](https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/Finance/CreatePurchaseRequest).
 
-### Step 2: Capture Quote Screenshots
-1. Open each product link in your browser.
-2. Take a clear screenshot of the product page showing:
-   - Item title/name
-   - Current unit price
-   - Quantity or package specifications
-3. Save each screenshot to your local folder:
-   ```text
-   screenshots/<Bill Title>/<Item Name>.png
-   ```
+| Field | What to enter |
+| --- | --- |
+| Subject | For example, `Marine Robotics Group Amazon Purchase Request 2026-09-10`. Use the actual vendor and date. |
+| Requested amount | The amount being requested, reconciled with the cart and comparison report. Resolve shipping, tax, or price differences with the finance officer. |
+| Description | Order context and the Share-A-Cart link, if available. |
+| Category / Account | The category and funding account confirmed for this purchase. |
+| Budget/Bill # and Request Line # | Each item's verified reference in the approved Engage bill, for example `Bill 344042, Line 34`. |
+| SGA bill breakdown | The requested amount per line, bill number, and budget section. For example, `$49.95, Line 34, Bill 344042, B06 - Non-Inventoried Items`. |
+| Signature | Your full name, as requested by the form. |
 
-### Step 3: Create the Budget Request on Engage
-1. Go to **CampusLabs Engage Budgeting**:
-   `https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/budgeting`
-2. Log in using your **GT credentials** and complete **Duo MFA**.
-3. Click **"Create Request"** (or select your draft request under the Budgeting tab).
-4. Fill in the request header details (Title, Organization: Marine Robotics Group, Fiscal Year: FY27).
+Example numbers are illustrative. Check line references against the approved bill in Engage; never substitute an Excel row number. If automation used the Description box as a fallback, copy the information into the required fields and check that the cart link is still present.
 
-### Step 4: Add Line Items to the Budget Tab
-1. Click the **"Budget"** tab.
-2. For each category section (e.g. `B03` or `B06`):
-   - Click **"Add Item"**.
-   - Enter **Name**, **Description**, **Quantity**, and **Unit Cost**.
-   - Upload the corresponding quote screenshot from `screenshots/<Bill Title>/<Item Name>.png`.
-   - Click **"Save"**.
-3. Repeat for all line items.
+### Cart evidence
 
-### Step 5: Review & Submit
-1. Verify the grand total on Engage matches your master spreadsheet calculation.
-2. Click **"Submit"** to route the bill to SGA for review.
-3. Once SGA approves the bill, record the official **`Bill No.`** (e.g., `376945`) in Column C of the `Bills` sheet for all items in that bill.
+Build the cart on the vendor's website with the exact products, variants, and quantities. Capture all items and the total in readable screenshots. For use with the CLI, save the cart image as `screenshots/<Order ID>/cart.png` in your working folder.
 
----
+A cart link and a cart screenshot serve different purposes. Keep the screenshot even if a Share-A-Cart link is available. Verify that a shared link reproduces the intended items and quantities before passing it on.
 
-## 🛒 Workflow 2: Manual Purchase Request Submission
+### Budget vs Quoted comparison
 
-Use this workflow when purchasing items that have already received SGA bill approval.
+Create a separate workbook for the comparison, even when the quoted prices match the budget. Include these columns:
 
-### Step 1: Group Items in the `Ordering` Sheet
-1. Open `FY27_Bills_Budget.xlsx` and go to the **`Ordering`** sheet.
-2. Add a new row for each item you plan to order:
-   - **`Order ID`**: Format as `YYMMDD_<vendor>_<gt_username>` (e.g., `260910_amazon_awu335`).
-   - **`Bill Item ID`**: ID referencing the approved item from the `Bills` sheet. (Calculated columns like `Bill No.`, `Bill Title`, `Item Name`, and `Cost` will auto-populate).
-   - **`Quantity`**: Number of units to order.
-   - **`Vendor`**: Vendor name (e.g. `Amazon`, `McMaster-Carr`).
-   - **`Purchaser`**: Your GT username.
-   - **`Status`**: Set to `pending purchase`.
+| Column | Meaning |
+| --- | --- |
+| Item / bill / section / line | Product and its verified reference in the approved Engage bill. |
+| Approved unit cost / quantity / total | The approved basis for the items being requested. |
+| Quoted unit cost / quantity / total | The current vendor quote for those items. |
+| Difference | Quoted total minus approved total; a positive value means an overrun. |
 
-### Step 2: Build the Shopping Cart & Capture Cart Screenshot
-1. Log into your vendor account (e.g., Amazon, McMaster) in your standard browser.
-2. Add all items from the order with their exact quantities to your cart.
-3. Navigate to the shopping cart page (`https://www.amazon.com/gp/cart/view.html`).
-4. Take a full-window screenshot showing all items, quantities, and the subtotal:
-   - Save the image to: `screenshots/<Order ID>/cart.png`
-   - *(This is mandatory Upload #1 required by GT Finance).*
+For each side, extended total = unit cost × quantity. Sum item totals once, and identify shipping or tax separately. Make the report and request amount agree with the funding arrangement confirmed by the finance officer.
 
-### Step 3: (Optional) Generate Share-A-Cart Link
-1. If using the [Share-A-Cart browser extension](https://share-a-cart.com):
-   - Open your shopping cart in Chrome.
-   - Click the **Share-A-Cart** extension icon and click **"Create Cart"**.
-   - Copy the generated URL (`https://share-a-cart.com/get/<ID>`).
-2. Paste this URL into Column U (**`Share-A-Cart Link`**) on the `Ordering` sheet for that order.
+The optional [report command](CLI_GUIDE.md#other-commands) creates this workbook, but you must verify its prices and line references before attaching it. If scraping fails, a report can contain budget prices as fallback values.
 
-### Step 4: Prepare the Budget vs Quoted Comparison
-If current live prices differ from the approved bill allocation:
-1. Create an Excel sheet comparing:
-   - Item Name | Bill # & Line # | Approved Unit Cost | Live Quoted Cost | Variance | Extended Total
-2. *(Alternatively, run `mrg-finance report --order <Order ID>` to generate this file automatically as `Budget_vs_Quoted_Detail_<Order ID>.xlsx`).*
-3. *(This is mandatory Upload #2 required by GT Finance).*
+### Attach and finish
 
-### Step 5: Open & Fill the Engage Purchase Request Form
-1. Go to **Create Purchase Request**:
-   `https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/Finance/CreatePurchaseRequest`
-2. Log in with your **GT credentials** and complete **Duo MFA**.
-3. Complete the form fields:
-   - **Subject**: `Marine Robotics Group <Vendor> Purchase Request <Date>` (e.g. `Marine Robotics Group Amazon Purchase Request 2026-09-10`).
-   - **Requested Amount**: Total order dollar amount.
-   - **Description**: Include cart details and Share-A-Cart link:
-     ```text
-     Share-A-Cart Link:
-     https://share-a-cart.com/get/...
-     ```
-   - **Category**: Supplies / Materials / Equipment (as approved by SGA).
-   - **Account**: Select your organization's SGA or Agency account.
-   - **What is the Budget/Bill # and Request Line #?**:
-     - List each item's bill number and line reference:
-       `Bill 344042, Line 34; Bill 344042, Line 35`
-   - **SGA Bill Box** (*"Include Bill # and total reimbursement amount below ($ Per line item)"*):
-     - Itemize the dollar breakdown:
-       `$49.95, Line 34, Bill 344042, B06 - Non-Inventoried Items`
-       `$49.95, Line 35, Bill 344042, B06 - Non-Inventoried Items`
+Attach the cart screenshot and Budget vs Quoted workbook, then complete any other documents or fields requested by the live form. Review, sign, and click Submit.
 
-### Step 6: Attach Mandatory Documentation
-1. **Attachment #1**: Upload your cart screenshot (`cart.png`).
-2. **Attachment #2**: Upload your Budget vs Quoted Excel detail report (`.xlsx`).
-
-### Step 7: Digitally Sign & Submit
-1. Type your legal full name in the digital signature text box at the bottom of the form.
-2. Click **"Submit Request"**.
-
-### Step 8: Update Master Spreadsheet
-1. Once submitted, copy the confirmation page URL from your browser address bar:
-   `https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/Finance/ViewPurchaseRequest/<ID>`
-2. Paste this link into Column V (**`Engage Request Link`**) in `FY27_Bills_Budget.xlsx` on the `Ordering` sheet for all rows of that order.
-3. Save the spreadsheet so your team lead and financial advisor can review and approve it.
+After the confirmation page appears, copy its URL into `Engage Request Link` on every `Ordering` row for the order. Put any cart link into `Share-A-Cart Link` on those same rows. Update the order status, wait for approval, and coordinate the actual purchase with the finance officer.

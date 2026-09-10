@@ -1,60 +1,68 @@
-# 📊 Master Budget Spreadsheet Guide (`FY27_Bills_Budget.xlsx`)
+# Spreadsheet reference
 
-This guide explains how `FY27_Bills_Budget.xlsx` on SharePoint serves as the authoritative database for the Georgia Tech Marine Robotics Group finance system, how line items and orders are structured, and how `mrg-finance` maintains data integrity.
+[Start with the spreadsheet workflow in the README](../README.md#1-fill-in-the-shared-excel-sheet). This page is a reference for fields, formulas, and troubleshooting; SharePoint holds the master workbook.
 
-🔗 **Direct SharePoint Link**: [FY27_Bills_Budget.xlsx (SharePoint Web View)](https://gtvault.sharepoint.com/:x:/r/sites/MarineRoboticsGroup/Shared%20Documents/OPS-1%20Operations/FY27%20Finances/FY27_Bills_Budget.xlsx?d=w89396907686c491395b64a5ef042181c&csf=1&web=1&e=b5knap)
+## Tables and identifiers
 
----
+| Sheet / Excel table | Meaning |
+| --- | --- |
+| `Bills` / `BillsT` | Proposed and approved bill items. Items in the same request share a `Bill Title` and, once assigned, a `Bill No.`. |
+| `Ordering` / `OrderT` | Purchase items. Rows in the same order share an `Order ID`. |
+| `Test` / `TestTable` | Optional backlog before items are assigned to a bill. |
 
-## 📑 Sheet Structure & Schema
+These identifiers have different jobs:
 
-### 1. `Bills` Sheet (Master Approved Line Items)
-The **`Bills`** sheet stores all approved SGA budget bill line items. Every row represents an approved hardware component, tool, or service.
+| Identifier | Where it comes from | How to use it |
+| --- | --- | --- |
+| `Bill No.` | The relevant Engage budget request. | Record the actual request number on all of the bill's item rows. A number alone does not mean the bill is approved. |
+| `Bill Item ID` | A formula in `Bills`. | Copy the displayed value into `Ordering` to link to that item. Do not construct an ID yourself or assume a particular format. |
+| `Order ID` | The person preparing an order. | Use `YYMMDD_vendor_gtusername`, repeated on all rows in that order. |
+| Engage line number | The item's location in the approved Engage bill. | Verify in Engage before using it on a purchase request. It is not the Excel row number. |
 
-| Column Name | Data Type | Required? | Example Value | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| `Bill Item ID` | String | **Yes** | `376851_1` | Unique identifier formatted as `<Bill_No>_<Line_No>`. Must be unique across all rows. |
-| `Bill No.` | String / Int | **Yes** | `376851` | SGA Bill Number assigned by Georgia Tech CampusLabs Engage. |
-| `Bill Title` | String | **Yes** | `RobotX Testing Equipment Bill` | Title of the approved SGA bill. |
-| `Item Name` | String | **Yes** | `Radio Transmitter` | Description or product name of the item. |
-| `Budget Section` | String | **Yes** | `B03 - General Inventoried Goods` | SGA Budget Category section name. |
-| `Cost` | Float / Currency | **Yes** | `$299.99` | Approved unit allocation price. |
-| `Link` | String / URL | **Yes** | `https://www.amazon.com/dp/...` | Direct vendor product URL (Amazon, McMaster, DigiKey, etc.). |
+## Editable and calculated fields
 
----
+Use column **names** to identify fields. Do not paste entire rows over an existing table: that can replace formulas with plain text or numbers.
 
-### 2. `Ordering` Sheet (Vendor Order Groupings `OrderT`)
-The **`Ordering`** sheet groups specific line items from the `Bills` sheet into actionable vendor purchase requests.
+### Bills
 
-| Column Name | Data Type | Required? | Example Value | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| `Order ID` | String | **Yes** | `260811_amazon_awu335` | Unique order grouping string. Format: `YYMMDD_<vendor>_<gt_username>`. |
-| `Bill Item ID` | String | **Yes** | `376851_1` | References target line item in `Bills` sheet. |
-| `Quantity` | Integer | **Yes** | `2` | Number of units to order. |
-| `Vendor` | String | **Yes** | `Amazon` | Vendor name (`Amazon`, `McMaster-Carr`, `DigiKey`, etc.). |
-| `Allocation` | Float | Optional | `$599.98` | Extended approved cost (`Cost * Quantity`). |
+| Fields | Editing rule |
+| --- | --- |
+| `Bill Title`, `Item Name`, `Vendor`, `Description`, `Budget Section`, `Quantity`, `Cost`, `Link`, `Person Requesting` | Enter the proposed item details. Keep approved budget figures intact; record later price quotes in a separate comparison report. |
+| `Bill No.`, `Status` | Update to reflect the actual Engage request and its stage. |
+| `Bill Item ID` (A), `Total Cost` (K) | Formula columns. Do not overwrite. |
+| Any other cell containing a formula | Preserve the formula, including summary or remaining-allocation fields. |
 
----
+`Cost` is a unit or pack price; `Quantity` counts those same units or packs. Do not enter an extended total as the unit cost.
 
-## 🩺 Pre-Flight Spreadsheet Health Rules (`mrg-finance doctor`)
+### Ordering
 
-Before running automated bill or purchase request submissions, `mrg-finance doctor` audits the spreadsheet for common human editing errors:
+`OrderT` spans columns A–V. Row 1 contains summary totals, row 2 contains headers, and data starts at row 3.
 
-1. 🔍 **Duplicate Bill Item IDs**:
-   - Every row in `Bills` must have a unique `Bill Item ID`. Duplicate IDs cause item mapping collisions during order building.
-2. 🔗 **Broken Order References**:
-   - Every `Bill Item ID` in `Ordering` must exist in `Bills`. Broken references are flagged with exact row numbers.
-3. 🌐 **Invalid or Missing Product Links**:
-   - Product links must begin with `http://` or `https://`. Missing or incomplete URLs (e.g., `jlcpcb.com` missing `https://`) are flagged.
-4. 💵 **$0.00 Cost Allocations**:
-   - Items with `$0.00` approved cost are flagged to prevent zero-amount submission errors.
-5. 📄 **Dynamic Header Row Offsets**:
-   - `spreadsheet_utils` scans the first 10 rows of any sheet to automatically locate the true header row, tolerating extra title or blank rows inserted above data.
+| Columns / fields | Editing rule |
+| --- | --- |
+| A: `Order ID (YYMMDD_vendor_gburdell3)` | Enter the order's shared ID. |
+| B: `Bill Item ID` | Copy the referenced item's ID from `Bills`. |
+| H: `Quantity` | Enter the quantity to purchase. |
+| `Purchaser`, `Status`, instructions and other non-formula input fields | Fill in the applicable tracking details. |
+| C–G: `Bill No.`, `Bill Title`, `Item Name`, `Vendor`, `Cost` | Calculated from the source item. Do not overwrite. |
+| I–J: `Total Cost`, `Allocation`; O: `Budget Section` | Calculated fields. Do not overwrite or replace with a current quote. |
+| U: `Share-A-Cart Link`; V: `Engage Request Link` | Enter the order-level URL on **every row** with the same Order ID. |
 
----
+The order quantity may differ from the bill quantity. Check remaining funding and previous orders before purchasing; the displayed allocation is not, by itself, approval to spend again.
 
-## 🛡️ Formula & Formatting Preservation
+## When a calculated field is wrong
 
-When the Web Dashboard (`http://localhost:5000`) or Side-by-Side Review Inspector (`http://localhost:8321`) writes price updates back to `FY27_Bills_Budget.xlsx`:
-- **Formula Integrity**: Cell formulas (`=IFERROR(...)`, `=SUM(...)`) are preserved without being overwritten by static values.
-- **Openpyxl Engine**: Cell updates are applied directly to target cells without corrupting adjacent columns, borders, or zebra striping.
+1. Check the `Bill Item ID` in `Ordering` against the displayed ID in `Bills`. Remove accidental spaces and make sure the source item still exists.
+2. Select the affected cell and check Excel's formula bar. If a formula has been replaced, undo your edit or ask the finance officer to restore the formula from a correct neighboring row or version history.
+3. Recalculate and save in Excel. Python tools read saved formula results and do not calculate Excel formulas themselves.
+4. If the input details are wrong, correct the source item with the finance officer. Do not patch a calculated `Ordering` cell by typing over it.
+
+Use existing empty table rows. If there are no suitable rows with formulas, ask the workbook maintainer to extend the table and its formulas. Keep totals, separator rows, table names, and headers intact.
+
+## What the CLI diagnostic checks
+
+`mrg-finance doctor` checks workbook readability, the presence of the Bills sheet, duplicate bill-item IDs, missing item names or bill numbers, nonpositive costs, nonstandard nonempty links, and order references it can compare with bill IDs.
+
+It does not verify funding approval, remaining spending authority, vendor availability, every formula, or live Engage line numbers. It also does not flag every missing product link. Review the source rows even when the diagnostic reports no issues.
+
+For code that reads or writes the workbook, see [agents.md](agents.md) and [Development](DEVELOPMENT.md).

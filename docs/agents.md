@@ -33,6 +33,7 @@ finance/
 ├── web-app/                   # Flask web dashboard (runs on team SIM PC)
 ├── pyproject.toml             # uv package definition & CLI console script
 └── docs/                      # Technical documentation, guides, and agent manuals
+    ├── CLI_GUIDE.md           # CLI reference, rclone connection, and advanced commands
     ├── agents.md              # Operational manual and guidelines for AI agents
     ├── agent_changes.md       # Chronological technical changelog & post-mortems
     ├── MANUAL_WORKFLOW.md     # Step-by-step manual Engage submission guide
