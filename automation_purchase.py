@@ -250,10 +250,12 @@ print(f"   Live price check verifies whether online prices have changed since bi
 has_scraped_data = False
 total_scraped_live = 0.0
 scraped_results = {}
+share_cart_url = None
 
 run_check = input("\n🔍 Check live online prices against approved budget allocations? (Y/n): ").strip().lower()
 if run_check in ("", "y", "yes"):
     import price_scraper
+    import share_a_cart
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
     from selenium.webdriver.chrome.service import Service
@@ -264,14 +266,23 @@ if run_check in ("", "y", "yes"):
     has_overrun = False
 
     c_opts = Options()
-    c_opts.add_argument("--headless=new")
-    c_opts.add_argument("--window-size=1920,1080")
+    ext_path = share_a_cart.find_share_a_cart_extension()
+    if ext_path:
+        if ext_path.endswith(".crx"):
+            c_opts.add_extension(ext_path)
+        else:
+            c_opts.add_argument(f"--load-extension={ext_path}")
+        print(f"  🧩 Loaded Share-A-Cart extension from {ext_path}")
+
+    # Launch Chrome for Testing visibly with tabs
+    c_opts.add_argument("--window-size=1600,1000")
     c_opts.add_argument("--no-sandbox")
     c_opts.add_argument("--disable-dev-shm-usage")
+    c_opts.add_experimental_option("detach", True)
 
     try:
         c_driver = webdriver.Chrome(service=Service(), options=c_opts)
-        c_driver.set_page_load_timeout(20)
+        c_driver.set_page_load_timeout(25)
     except Exception:
         c_driver = None
 
@@ -281,7 +292,7 @@ if run_check in ("", "y", "yes"):
     print(f"\n{'Item Name':<35} {'Allocated':<12} {'Live Price':<12} {'Status'}")
     print("-" * 75)
 
-    for r in requests_to_submit:
+    for idx, r in enumerate(requests_to_submit):
         url = r.get("link", "")
         item_name = r["item_name"]
         alloc_unit = r["cost"]
@@ -301,24 +312,121 @@ if run_check in ("", "y", "yes"):
                 try:
                     safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in item_name)
                     shot_path = os.path.join(order_shot_dir, f"{safe_name}.png")
-                    c_driver.get(url)
+                    
+                    if idx == 0:
+                        c_driver.get(url)
+                    else:
+                        c_driver.execute_script("window.open(arguments[0], '_blank');", url)
+                        c_driver.switch_to.window(c_driver.window_handles[-1])
+
                     time.sleep(2)
                     price_scraper.dismiss_popups_and_interstitials(c_driver)
                     c_driver.save_screenshot(shot_path)
                     print(f"  📸 Saved screenshot for '{item_name}' -> {shot_path}")
 
-                    # Automatically add Amazon items to shopping cart
-                    if "amazon" in url.lower():
+                    # Extract resolved URL and exact ASIN from live page
+                    r["resolved_url"] = c_driver.current_url
+                    asin_found = None
+                    try:
+                        asin_inputs = c_driver.find_elements(By.ID, "ASIN") or c_driver.find_elements(By.NAME, "ASIN") or c_driver.find_elements(By.NAME, "asin")
+                        if asin_inputs:
+                            asin_found = asin_inputs[0].get_attribute("value")
+                    except Exception:
+                        pass
+                    if not asin_found:
+                        asin_found = price_scraper.extract_amazon_asin(c_driver.current_url) or price_scraper.extract_amazon_asin(url)
+                    if asin_found:
+                        r["asin"] = asin_found
+
+                    # If fast HTTP scraper failed or got blocked, extract price from live Selenium DOM
+                    if live_unit is None:
                         try:
-                            # Adjust quantity if > 1
-                            if r.get("quantity", 1) > 1:
-                                try:
-                                    qty_select = c_driver.find_elements(By.ID, "quantity")
-                                    if qty_select:
-                                        Select(qty_select[0]).select_by_value(str(r["quantity"]))
-                                        time.sleep(0.5)
-                                except Exception:
-                                    pass
+                            d_price_str = price_scraper.scrape_price_from_driver(c_driver)
+                            if d_price_str:
+                                p_val = price_scraper.parse_price(d_price_str)
+                                if p_val is not None:
+                                    live_unit = p_val
+                                    has_scraped_data = True
+                                    scraped_results[item_name] = live_unit
+                        except Exception:
+                            pass
+
+                    # 1. Check for Cost Overrun FIRST (before adding to cart)
+                    unit_delta = (live_unit - alloc_unit) if live_unit is not None else 0.0
+                    if live_unit is not None and unit_delta > 0.01:
+                        has_overrun = True
+                        print(f"⚠️  Cost Overrun for '{item_name}': Allocated ${alloc_unit:.2f}, Live ${live_unit:.2f} (+${unit_delta * r['quantity']:.2f} total over)")
+                        new_url = input("   👉 Enter substitute product link (or Enter to keep current): ").strip()
+                        if new_url:
+                            print("   🔍 Loading substitute product & checking live price...")
+                            try:
+                                c_driver.get(new_url)
+                                time.sleep(2)
+                                price_scraper.dismiss_popups_and_interstitials(c_driver)
+                                c_driver.save_screenshot(shot_path)
+                                r["link"] = new_url
+                                r["resolved_url"] = c_driver.current_url
+                                sub_asin = price_scraper.extract_amazon_asin(c_driver.current_url)
+                                if sub_asin:
+                                    r["asin"] = sub_asin
+                                d_price_str = price_scraper.scrape_price_from_driver(c_driver)
+                                sub_price = price_scraper.parse_price(d_price_str) if d_price_str else None
+                                if sub_price is None:
+                                    scraped = price_scraper.scrape_item_price(new_url)
+                                    if scraped and scraped.get("current_price") is not None:
+                                        sub_price = float(scraped["current_price"])
+
+                                if sub_price is not None:
+                                    sub_delta = sub_price - alloc_unit
+                                    live_unit = sub_price
+                                    unit_delta = sub_delta
+                                    scraped_results[item_name] = live_unit
+                                    if sub_delta <= 0.01:
+                                        print(f"   ✅ Substitute accepted: ${sub_price:.2f} (Under allocation by ${-sub_delta:.2f})")
+                                    else:
+                                        print(f"   ⚠️ Substitute price is ${sub_price:.2f} (+${sub_delta:.2f} over budget). Using substitute.")
+                                else:
+                                    print("   ℹ️ Could not automatically verify substitute price. Using link.")
+                            except Exception as e:
+                                print(f"   ⚠️ Failed to process substitute link: {e}")
+
+                    # 2. Check seller quantity limits and add final product to shopping cart
+                    if "amazon" in r["link"].lower():
+                        try:
+                            actual_qty, is_limited, limit_reason = price_scraper.check_and_set_amazon_quantity(
+                                c_driver, desired_qty=r["quantity"], item_name=item_name
+                            )
+                            if is_limited:
+                                print(f"\n⚠️  QUANTITY LIMIT DETECTED on '{item_name}':")
+                                print(f"   Requested: {r['quantity']} units | Max Available: {actual_qty} units")
+                                print(f"   Reason: {limit_reason}")
+                                sub_qty_link = input("   👉 Enter substitute product link with full stock (or Enter to accept limit): ").strip()
+                                if sub_qty_link:
+                                    print("   🔍 Checking substitute product...")
+                                    try:
+                                        c_driver.get(sub_qty_link)
+                                        time.sleep(2)
+                                        price_scraper.dismiss_popups_and_interstitials(c_driver)
+                                        c_driver.save_screenshot(shot_path)
+                                        r["link"] = sub_qty_link
+                                        r["resolved_url"] = c_driver.current_url
+                                        sub_asin = price_scraper.extract_amazon_asin(c_driver.current_url)
+                                        if sub_asin:
+                                            r["asin"] = sub_asin
+                                        d_price = price_scraper.scrape_price_from_driver(c_driver)
+                                        if d_price:
+                                            live_unit = price_scraper.parse_price(d_price)
+                                            scraped_results[item_name] = live_unit
+                                        sub_actual_qty, _, _ = price_scraper.check_and_set_amazon_quantity(
+                                            c_driver, desired_qty=r["quantity"], item_name=item_name
+                                        )
+                                        actual_qty = sub_actual_qty
+                                    except Exception as e:
+                                        print(f"   ⚠️ Could not load substitute link: {e}")
+                                else:
+                                    print(f"   ⏩ Adjusting '{item_name}' quantity from {r['quantity']} -> {actual_qty}")
+                                    r["quantity"] = actual_qty
+                                    r["total"] = r["cost"] * actual_qty
 
                             add_btns = c_driver.find_elements(
                                 By.XPATH,
@@ -333,7 +441,7 @@ if run_check in ("", "y", "yes"):
                         except Exception:
                             pass
                 except Exception as exc:
-                    print(f"  ⚠️ Failed to capture screenshot for '{item_name}' ({url}): {exc}")
+                    print(f"  ⚠️ Failed to process '{item_name}' ({url}): {exc}")
 
         unit_delta = (live_unit - alloc_unit) if live_unit is not None else 0.0
 
@@ -351,19 +459,35 @@ if run_check in ("", "y", "yes"):
             total_scraped_live += r["total"]
             print(f"{r['item_name']:<35} ${alloc_unit:<11.2f} {'—':<11} ℹ️ Scrape unavailable")
 
-    # Navigate to Amazon Cart View and capture cart.png
+    # Open Amazon Cart View in a new tab and capture cart.png
     if c_driver:
         has_amazon = any("amazon" in r.get("link", "").lower() for r in requests_to_submit)
         if has_amazon:
             try:
-                print("\n🛒 Navigating to Amazon Cart View & capturing cart.png screenshot...")
-                c_driver.get("https://www.amazon.com/gp/cart/view.html")
+                print("\n🛒 Navigating to Amazon Cart View in Chrome for Testing...")
+                c_driver.execute_script("window.open('https://www.amazon.com/gp/cart/view.html', '_blank');")
+                c_driver.switch_to.window(c_driver.window_handles[-1])
                 time.sleep(3)
                 cart_shot_path = os.path.join(order_shot_dir, "cart.png")
                 c_driver.save_screenshot(cart_shot_path)
                 print(f"  📸 Saved Amazon cart screenshot -> {cart_shot_path}")
             except Exception as e:
                 print(f"  ⚠️ Could not capture cart screenshot: {e}")
+
+        # Automatically generate Share-A-Cart link via Share-A-Cart API
+        share_cart_url = share_a_cart.create_share_a_cart_link(
+            requests_to_submit,
+            vendor_name=vendor_name,
+            order_title=f"MRG {selected_order_id} ({bill_title})"
+        )
+        if share_cart_url:
+            print(f"\n🛒 Automatically Created Share-A-Cart Link: {share_cart_url}")
+            try:
+                cnt = spreadsheet_utils.update_order_table_links(XLSX_PATH, selected_order_id, share_cart_url=share_cart_url)
+                if cnt > 0:
+                    print(f"  📝 Saved Share-A-Cart link to Ordering sheet ({cnt} rows)")
+            except Exception as e:
+                print(f"  ⚠️ Notice: Could not save Share-A-Cart link to spreadsheet: {e}")
 
         c_driver.quit()
 
@@ -378,6 +502,23 @@ if run_check in ("", "y", "yes"):
             print("✅ Live prices match approved bill allocations 100%.")
 else:
     print("  ⏩ Skipped live price check.")
+
+# Automatically create Share-A-Cart link if skipped price check
+if not share_cart_url:
+    import share_a_cart
+    share_cart_url = share_a_cart.create_share_a_cart_link(
+        requests_to_submit,
+        vendor_name=vendor_name,
+        order_title=f"MRG {selected_order_id} ({bill_title})"
+    )
+    if share_cart_url:
+        print(f"\n🛒 Automatically Created Share-A-Cart Link: {share_cart_url}")
+        try:
+            cnt = spreadsheet_utils.update_order_table_links(XLSX_PATH, selected_order_id, share_cart_url=share_cart_url)
+            if cnt > 0:
+                print(f"  📝 Saved Share-A-Cart link to Ordering sheet ({cnt} rows)")
+        except Exception as e:
+            print(f"  ⚠️ Notice: Could not save Share-A-Cart link to spreadsheet: {e}")
 
 # === Optional Launch of Side-by-Side Order Review GUI ===
 skip_review = any(arg in sys.argv for arg in ["--no-review", "--skip-review"])
@@ -641,11 +782,15 @@ try:
     subject.clear()
     subject.send_keys(order_subject)
 
-    # Fill Description (left completely blank as requested)
+    # Fill Description
     try:
         desc_field = driver.find_element(By.ID, "Description")
         desc_field.clear()
-        print("  📝 Description field left blank as requested")
+        if share_cart_url:
+            desc_field.send_keys(f"Share-A-Cart Link:\n{share_cart_url}")
+            print(f"  📝 Injected Share-A-Cart link into Description field: {share_cart_url}")
+        else:
+            print("  📝 Description field left blank as requested")
     except Exception:
         pass
 
@@ -773,6 +918,42 @@ try:
     print(f"     Bill #{bill_no}")
     input(f"     Press Enter after you submit this purchase request → ")
     print(f"  ✅ Purchase request submitted")
+
+    # Capture Engage Purchase Request URL
+    engage_url = None
+    try:
+        if driver:
+            curr = driver.current_url
+            if curr and "CreatePurchaseRequest" not in curr and "campuslabs.com/engage" in curr:
+                engage_url = curr
+    except Exception:
+        pass
+
+    prompt_default = f" [{engage_url}]" if engage_url else ""
+    user_engage = input(f"  👉 Enter submitted Engage Request URL (or Enter to {f'use {engage_url}' if engage_url else 'skip'}): ").strip()
+    if user_engage:
+        engage_url = user_engage
+
+    if engage_url:
+        try:
+            cnt = spreadsheet_utils.update_order_table_links(XLSX_PATH, selected_order_id, engage_request_url=engage_url)
+            if cnt > 0:
+                print(f"  📝 Saved Engage Request link to Ordering sheet ({cnt} rows): {engage_url}")
+        except Exception as e:
+            print(f"  ⚠️ Could not save Engage link to spreadsheet: {e}")
+
+    # Sync updated spreadsheet to SharePoint via rclone
+    try:
+        import subprocess
+        print("☁️ Syncing updated spreadsheet to SharePoint...")
+        subprocess.run(
+            ["rclone", "copy", "--ignore-checksum", "--ignore-size", "--update",
+             XLSX_PATH, "onedrive:OPS-1 Operations/FY27 Finances"],
+            capture_output=True, text=True, timeout=30
+        )
+        print("  ✅ Spreadsheet synced to SharePoint!")
+    except Exception as e:
+        print(f"  ℹ️ SharePoint sync notice: {e}")
 
 except Exception as e:
     print(f"  ❌ Error: {e}")
