@@ -24,24 +24,11 @@ dependencies = [
 ]
 
 [project.scripts]
-mrg-finance = "mrg:main"
+mrg-finance = "mrg_finance.cli:main"
 
 [tool.setuptools]
-py-modules = [
-    "mrg",
-    "automation",
-    "automation_purchase",
-    "automation_screenshots",
-    "review_server",
-    "price_scraper",
-    "screenshot_worker",
-    "engage_bill_lookup",
-    "spreadsheet_utils",
-    "order_excel_builder",
-    "share_a_cart",
-    "engage_tools",
-]
-packages = ["web-app", "web-app.routes"]
+packages = ["mrg_finance", "web-app", "web-app.routes"]
 
 [tool.setuptools.package-data]
+mrg_finance = ["*.html"]
 "web-app" = ["templates/*", "templates/**/*", "static/*", "static/**/*"]
