@@ -4,7 +4,7 @@ Everything starts in the shared spreadsheet: **[FY27_Bills_Budget.xlsx on ShareP
 
 ---
 
-## 📋 Step-by-Step Guide
+## Guide
 
 ### Step 1: Request Funding (`Bills` sheet)
 > *Do this when you want SGA to approve budget for future purchases.*
