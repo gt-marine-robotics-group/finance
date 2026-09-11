@@ -128,12 +128,13 @@ def fresh_sync():
 
 def load_xlsx():
     """Load the xlsx and return filtered dataframe."""
-    import pandas as pd
+    import spreadsheet_utils
     import warnings
     warnings.filterwarnings('ignore')
 
-    df = pd.read_excel(XLSX_PATH, sheet_name=SHEET_NAME).astype(object).fillna("")
-    df.columns = df.columns.str.strip()
+    df = spreadsheet_utils.read_sheet_robust(XLSX_PATH, [SHEET_NAME, "Bill", "Budget"])
+    if df.empty:
+        return df
 
     # Filter to real items
     df_valid = df[
@@ -148,13 +149,11 @@ def load_xlsx():
 
 def load_ordering():
     """Load the Ordering sheet from local xlsx."""
-    import pandas as pd
+    import spreadsheet_utils
     import warnings
     warnings.filterwarnings('ignore')
 
-    df = pd.read_excel(XLSX_PATH, sheet_name=ORDERING_SHEET, header=1).astype(object).fillna("")
-    df.columns = df.columns.str.strip()
-    return df
+    return spreadsheet_utils.read_sheet_robust(XLSX_PATH, [ORDERING_SHEET, "Orders", "OrderT"])
 
 
 def select_bill(df, bill_title=None):
@@ -188,87 +187,15 @@ def select_bill(df, bill_title=None):
 # ============================================================
 def cmd_screenshots(args):
     """Scrape prices and capture full-page product screenshots for a bill."""
-    df = load_xlsx()
-    bill_title = select_bill(df, getattr(args, "bill", None))
-    print(f"\n📸 Processing screenshots for: {bill_title}")
-
-    bill_items = df[df["Bill Title"].astype(str).str.strip().str.lower() == bill_title.lower()]
-    print(f"Found {len(bill_items)} items")
-
-    bill_dir = os.path.join(SCREENSHOT_DIR, bill_title)
-    os.makedirs(bill_dir, exist_ok=True)
-
-    driver = None
-    try:
-        from selenium import webdriver
-        from selenium.webdriver.chrome.options import Options
-        from selenium.webdriver.chrome.service import Service
-
-        chrome_options = Options()
-        chrome_options.add_argument("--headless=new")
-        chrome_options.add_argument("--window-size=1920,1080")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        service = Service()
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.set_page_load_timeout(20)
-    except Exception as e:
-        print(f"⚠️ Headless Chrome driver initialization warning: {e}")
-        driver = None
-
-    for _, row in bill_items.iterrows():
-        item_name = str(row.get("Item Name", "")).strip()
-        url = str(row.get("Link", "")).strip()
-        if not item_name or not url or not url.startswith("http"):
-            continue
-
-        if not driver:
-            continue
-
-        print(f"  {item_name}...", end=" ", flush=True)
-        try:
-            driver.get(url)
-        except Exception:
-            pass
-        import time
-        time.sleep(2)
-        price_scraper.dismiss_popups_and_interstitials(driver)
-
-        # Screenshot
-        safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in item_name)
-        filepath = os.path.join(bill_dir, f"{safe_name}.png")
-
-        if not getattr(args, "force", False) and os.path.exists(filepath):
-            print(f"  ℹ️ {item_name}: screenshot already exists (skipping to preserve ground truth)")
-            continue
-
-        driver.save_screenshot(filepath)
-
-        # Scrape price
-        price_text = price_scraper.scrape_price_from_driver(driver)
-        print(f"✅ {price_text or 'no price'}")
-
-    if driver:
-        driver.quit()
-    print(f"\n✅ Screenshots saved locally to: {bill_dir}")
-    upload_screenshots_to_sharepoint(bill_title, bill_dir)
-
-
-def upload_screenshots_to_sharepoint(bill_title, bill_dir):
-    """Auto-upload newly captured local screenshots to SharePoint/OneDrive via rclone."""
-    remote_path = f"onedrive:OPS-1 Operations/FY27 Finances/screenshots/{bill_title}"
-    print(f"☁️ Syncing local screenshots to SharePoint ({remote_path})...")
-    try:
-        r = subprocess.run(
-            ["rclone", "copy", "--ignore-checksum", "--ignore-size", "--update", bill_dir, remote_path],
-            capture_output=True, text=True, timeout=60
-        )
-        if r.returncode == 0:
-            print(f"  ✅ Screenshots successfully synced to SharePoint!")
-        else:
-            print(f"  ℹ️ rclone upload notice: {r.stderr.strip()}")
-    except Exception as e:
-        print(f"  ℹ️ Screenshots saved locally. (SharePoint sync skipped: {e})")
+    py_exe = get_python_executable()
+    cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation_screenshots.py")]
+    if getattr(args, "bill", None):
+        cmd.extend(["--bill", args.bill])
+    if getattr(args, "review_only", False):
+        cmd.append("--review-only")
+    if getattr(args, "no_review", False):
+        cmd.append("--no-review")
+    subprocess.run(cmd)
 
 
 # ============================================================
@@ -477,11 +404,9 @@ def cmd_price_check(args):
     # Generate Amazon cart link for all Amazon items
     amazon_items = []
     for r in results:
-        url_str = str(r.get("url", "")).lower()
-        if "amazon" in url_str:
-            asin_match = re.search(r'/(?:dp|gp/product)/([A-Z0-9]{10})', url_str)
-            if asin_match:
-                amazon_items.append((asin_match.group(1), r["qty"]))
+        asin = price_scraper.extract_amazon_asin(str(r.get("url", "")))
+        if asin:
+            amazon_items.append((asin, r["qty"]))
 
     if amazon_items:
         params = [f"ASIN.{i}={asin}&Quantity.{i}={qty}" for i, (asin, qty) in enumerate(amazon_items, 1)]
