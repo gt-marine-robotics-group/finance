@@ -32,10 +32,15 @@ import sys
 import subprocess
 import argparse
 
-import price_scraper
-
 # === Paths ===
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
+try:
+    from mrg_finance import price_scraper
+except ImportError:
+    import price_scraper
 CWD_XLSX = os.path.join(os.getcwd(), "FY27_Bills_Budget.xlsx")
 REPO_XLSX = os.path.expanduser("~/mrg/finance/FY27_Bills_Budget.xlsx")
 ONEDRIVE_XLSX = os.path.expanduser(
