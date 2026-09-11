@@ -7,16 +7,21 @@ def find_share_a_cart_extension() -> Optional[str]:
     Search for Share-A-Cart extension files (.crx or unpacked extension directories)
     in the finance/extensions directory or known paths.
     """
-    ext_dir = os.path.join(os.path.dirname(__file__), "extensions")
-    if os.path.exists(ext_dir):
-        for item in os.listdir(ext_dir):
-            full_path = os.path.join(ext_dir, item)
-            # Check for .crx file
-            if item.endswith(".crx"):
-                return full_path
-            # Check for unpacked extension directory
-            if os.path.isdir(full_path) and os.path.exists(os.path.join(full_path, "manifest.json")):
-                return full_path
+    pkg_dir = os.path.dirname(os.path.abspath(__file__))
+    candidate_dirs = [
+        os.path.join(os.path.dirname(pkg_dir), "extensions"),
+        os.path.join(pkg_dir, "extensions"),
+    ]
+    for ext_dir in candidate_dirs:
+        if os.path.exists(ext_dir):
+            for item in os.listdir(ext_dir):
+                full_path = os.path.join(ext_dir, item)
+                # Check for .crx file
+                if item.endswith(".crx"):
+                    return full_path
+                # Check for unpacked extension directory
+                if os.path.isdir(full_path) and os.path.exists(os.path.join(full_path, "manifest.json")):
+                    return full_path
     return None
 
 def normalize_share_a_cart_url(raw_input: str) -> Optional[str]:
