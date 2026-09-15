@@ -217,7 +217,8 @@ def cmd_bill_request(args):
         cmd.append("--fresh")
     if getattr(args, "no_review", False):
         cmd.append("--no-review")
-    os.execv(py_exe, cmd)
+    res = subprocess.run(cmd)
+    sys.exit(res.returncode)
 
 
 # ============================================================
@@ -303,7 +304,8 @@ def cmd_purchase(args):
     cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation_purchase.py"), "--order", selected_oid, "--excel-path", XLSX_PATH]
     if getattr(args, "no_review", False):
         cmd.append("--no-review")
-    os.execv(py_exe, cmd)
+    res = subprocess.run(cmd)
+    sys.exit(res.returncode)
 
 
 # ============================================================
