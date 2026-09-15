@@ -262,7 +262,7 @@ The repository includes a mobile-friendly Flask web application located in [`web
 To run the web app locally:
 ```bash
 python web-app/app.py
-# Access http://localhost:5000 (Default password: dev-password)
+# Access http://localhost:5000 (Set LOGIN_PASSWORD in your environment)
 ```
 
 ---

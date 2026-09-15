@@ -614,7 +614,8 @@ def test_simulated_web_app_dashboard_workflow(ground_truth_workbook, monkeypatch
         assert "/login" in r_unauth.headers["Location"]
         
         # 2. Login
-        r_login = client.post("/login", data={"password": "dev-password", "name": "Test Operator"}, follow_redirects=True)
+        login_pw = os.environ.get("LOGIN_PASSWORD", "dev-password")
+        r_login = client.post("/login", data={"password": login_pw, "name": "Test Operator"}, follow_redirects=True)
         assert r_login.status_code == 200
         assert b"MRG Purchasing" in r_login.data
         
