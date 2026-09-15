@@ -10,12 +10,14 @@ All team purchasing begins in the master shared workbook:
 ## 📑 Table of Contents
 1. [Installation from Scratch](#-installation-from-scratch)
 2. [Complete Uninstall & Reset](#-complete-uninstall--reset)
-3. [One-Time SharePoint Connection (`rclone`)](#-one-time-sharepoint-connection-rclone)
-4. [Running Tests from Scratch](#-running-tests-from-scratch)
-5. [CLI Commands Reference](#-cli-commands-reference)
-6. [Spreadsheet Workflow Guide](#-spreadsheet-workflow-guide)
-7. [Mobile Purchasing Web App](#-mobile-purchasing-web-app)
-8. [Troubleshooting & FAQs](#-troubleshooting--faqs)
+3. [Working Outside of rclone (Manual & Direct Workflows)](#-working-outside-of-rclone-manual--direct-workflows)
+4. [Working Completely Offline (Air-Gapped / No Internet)](#-working-completely-offline-air-gapped--no-internet)
+5. [Optional: Automated SharePoint Sync (rclone)](#-optional-automated-sharepoint-sync-rclone)
+6. [Running Tests from Scratch](#-running-tests-from-scratch)
+7. [CLI Commands Reference](#-cli-commands-reference)
+8. [Spreadsheet Workflow Guide](#-spreadsheet-workflow-guide)
+9. [Mobile Purchasing Web App](#-mobile-purchasing-web-app)
+10. [Troubleshooting & FAQs](#-troubleshooting--faqs)
 
 ---
 
@@ -84,9 +86,90 @@ rm -rf .venv build dist *.egg-info __pycache__ mrg_finance/__pycache__ .pytest_c
 
 ---
 
-## ☁️ One-Time SharePoint Connection (`rclone`)
+## 📁 Working Outside of rclone (Manual & Direct Workflows)
 
-The CLI uses `rclone` to synchronize the master `FY27_Bills_Budget.xlsx` spreadsheet and screenshots directly with Georgia Tech's SharePoint vault.
+You **do not need `rclone`** to use `mrg-finance`. `rclone` is strictly optional convenience automation invoked only when passing the `--fresh` (`-f`) flag.
+
+If you prefer not to set up `rclone`, simply **omit `--fresh` from all commands**. The CLI uses a built-in search hierarchy to locate your spreadsheet automatically:
+
+### 1. Spreadsheet Auto-Discovery Hierarchy
+The CLI checks the following locations in order:
+1. **Current Working Directory**: `./FY27_Bills_Budget.xlsx`
+2. **Repository Root**: `~/mrg/finance/FY27_Bills_Budget.xlsx`
+3. **Native Desktop OneDrive Sync** *(Mac/Windows)*:
+   - macOS: `~/Library/CloudStorage/OneDrive-GeorgiaInstituteofTechnology/Documents - Marine Robotics Group/OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx`
+   - Windows: Automatically detected in your user OneDrive sync root.
+4. **Custom Path Environment Variable**:
+   You can point the CLI to any file on your computer by setting:
+   ```bash
+   export FINANCE_XLSX_PATH="/path/to/my_custom_budget.xlsx"
+   ```
+
+### 2. Manual Workflow Without `rclone`
+* **Getting the Spreadsheet**:
+  1. Open [FY27_Bills_Budget.xlsx on SharePoint](https://gtvault.sharepoint.com/:x:/r/sites/MarineRoboticsGroup/Shared%20Documents/OPS-1%20Operations/FY27%20Finances/FY27_Bills_Budget.xlsx?d=w89396907686c491395b64a5ef042181c&csf=1&web=1&e=b5knap) in your browser.
+  2. Click **File > Save As > Download a Copy** (`FY27_Bills_Budget.xlsx`).
+  3. Move it into your working folder or repo root.
+* **Running Commands**:
+  Run CLI commands directly without `--fresh`:
+  ```bash
+  mrg-finance doctor
+  mrg-finance price-check --bill "Marine Robotics Group RobotX Testing Equipment Bill"
+  mrg-finance report --order 260811_amazon_awu335
+  mrg-finance review --bill "Marine Robotics Group RobotX Testing Equipment Bill"
+  ```
+* **Saving Changes Back to the Team**:
+  - If you edit the spreadsheet locally in Excel, drag and drop the updated file back to SharePoint to replace it.
+  - Or, if you use the native Microsoft OneDrive desktop sync client, changes sync automatically in the background without needing any CLI commands.
+* **Managing Screenshots**:
+  - The CLI saves all captured screenshots locally to `screenshots/<bill_or_order_name>/`.
+  - You can manually drag and drop this folder into the SharePoint web folder `OPS-1 Operations/FY27 Finances/screenshots`.
+
+---
+
+## ✈️ Working Completely Offline (Air-Gapped / No Internet)
+
+If you are traveling, working in the field without internet, or on an air-gapped machine, the tool continues to function offline.
+
+### What Works 100% Offline:
+1. **Spreadsheet Health Audits (`mrg-finance doctor`)**:
+   - Evaluates local `.xlsx` files using `openpyxl` and `pandas`.
+   - Validates row formulas, non-zero costs, missing bill numbers, and formatting without making any network requests.
+2. **The Entire Automated Test Suite (`uv run pytest`)**:
+   - Constructs deterministic in-memory mock workbooks and verifies all 8 simulated workflows completely offline in ~1 second.
+3. **Audit Report Generation (`mrg-finance report --order <ID>`)**:
+   - Reads your local `Ordering` sheet and generates formatted comparison `.xlsx` and `.csv` audit spreadsheets in `screenshots/<order_id>/`.
+   - **Offline Scrape Fallback**: If vendor websites are unreachable because you are offline, the reporting engine automatically falls back to your budgeted baseline costs to ensure report generation never fails.
+4. **Local Review GUI (`mrg-finance review --bill "..."`)**:
+   - Starts a lightweight local web server on `http://127.0.0.1:8321` that serves cached local screenshots and pricing cards offline.
+5. **Local Spreadsheet Editing**:
+   - Open and edit `FY27_Bills_Budget.xlsx` offline in Microsoft Excel, LibreOffice, or Apple Numbers.
+
+### What Requires an Internet Connection:
+* **Live Price Scraping (`price-check`, `screenshots`)**: Scraping current prices from Amazon or vendor websites requires internet connectivity.
+* **Automated Engage Submissions (`bill-request`, `purchase`)**: Logging into Georgia Tech's CampusLabs Engage portal requires internet access and Duo 2FA.
+
+### Recommended Offline-to-Online Protocol:
+```mermaid
+flowchart LR
+    subgraph Offline["Offline (No Internet)"]
+        O1["Edit FY27_Bills_Budget.xlsx"] --> O2["mrg-finance doctor<br/>(Validate formatting)"]
+        O2 --> O3["mrg-finance report --order ...<br/>(Generate audit reports)"]
+        O3 --> O4["mrg-finance review --bill ...<br/>(Inspect local cards)"]
+    end
+    subgraph Online["Online (Reconnected)"]
+        O4 --> ON1["mrg-finance price-check<br/>(Live price check)"]
+        ON1 --> ON2["mrg-finance purchase<br/>(Engage submission)"]
+    end
+```
+1. **While Offline**: Edit your rows, run `mrg-finance doctor` to confirm formatting is valid, and run `mrg-finance report` to compile comparison reports.
+2. **Once Back Online**: Run `mrg-finance price-check` to verify live prices, and execute `mrg-finance purchase` or `mrg-finance bill-request` to submit directly to Engage (or upload manually).
+
+---
+
+## ☁️ Optional: Automated SharePoint Sync (`rclone`)
+
+If you want the CLI to automatically download the latest spreadsheet and upload captured screenshots directly to Georgia Tech SharePoint using the `--fresh` flag, configure `rclone` once:
 
 ### 1. Install `rclone`
 * **macOS**: `brew install rclone`
@@ -127,7 +210,7 @@ rclone copy --ignore-checksum --ignore-size --update "onedrive:OPS-1 Operations/
 ```
 
 > [!TIP]
-> All CLI commands accept a `--fresh` (`-f`) flag (e.g. `mrg-finance doctor --fresh`). When provided, the CLI will automatically pull the newest spreadsheet and screenshots from SharePoint via `rclone` before running.
+> When `rclone` is configured, adding `--fresh` (`-f`) to any CLI command (e.g. `mrg-finance doctor --fresh`) automatically pulls the newest spreadsheet and screenshots from SharePoint before executing.
 
 ---
 
@@ -158,7 +241,7 @@ usage: mrg-finance {report,screenshots,review,bill-request,purchase,price-check,
 ```
 
 ### 1. `mrg-finance doctor [--fresh]`
-Runs diagnostic health checks on `FY27_Bills_Budget.xlsx`. Detects missing bill numbers, blank URLs, non-positive unit costs, and formula syntax errors before submitting to Georgia Tech.
+Runs diagnostic health checks on `FY27_Bills_Budget.xlsx`. Detects missing bill numbers, blank URLs, non-positive unit costs, and formula syntax errors before submitting to Georgia Tech. *(Works 100% offline without `--fresh`).*
 
 ### 2. `mrg-finance price-check [--bill <TITLE>] [--cart] [--fresh]`
 Scrapes live prices for all items in a bill using headless Chrome, prints a color-coded terminal table with allocated cost, current cost, and deltas (`+$1.00`, `-$1.00`), calculates total overruns, and generates a **1-Click Multi-Item Amazon Cart URL** (`ASIN.1=...&Quantity.1=...`).
@@ -168,12 +251,13 @@ Builds the official Budget vs Quoted audit report required by SGA for purchase o
 - Summary KPI cards: Total Budgeted, Total Quoted, Net Variance.
 - Full line-item comparison table with conditional formatting.
 - Category breakdowns (Supplies vs Equipment vs Overhead).
+*(Works offline; falls back to budgeted costs if vendor websites cannot be reached).*
 
 ### 4. `mrg-finance review [--bill <TITLE>]`
-Launches the lightweight local review web interface on `http://127.0.0.1:8321/review.html`. Displays side-by-side product cards with captured screenshots, live scraped prices, and budgeted allocations for manual approval.
+Launches the lightweight local review web interface on `http://127.0.0.1:8321/review.html`. Displays side-by-side product cards with captured screenshots, live scraped prices, and budgeted allocations for manual approval. *(Works 100% offline).*
 
 ### 5. `mrg-finance screenshots [--bill <TITLE>] [--fresh] [--no-review] [--review-only]`
-Captures full-page product screenshots for items in a bill, scrapes prices with confidence scores, saves them to `screenshots/<bill_title>/`, syncs them to SharePoint, and launches the visual review interface.
+Captures full-page product screenshots for items in a bill, scrapes prices with confidence scores, saves them to `screenshots/<bill_title>/`, syncs them to SharePoint (if configured), and launches the visual review interface.
 
 ### 6. `mrg-finance bill-request [--bill <TITLE>] [--fresh] [--no-review]`
 Full automated submission of an SGA funding bill to CampusLabs Engage. Navigates Engage forms, fills line items (`Item Name`, `Cost`, `Quantity`), and uploads screenshot attachments.
@@ -228,18 +312,23 @@ python web-app/app.py
 
 ## ❓ Troubleshooting & FAQs
 
-### Token Expired or OAuth Error on `rclone`
-If SharePoint synchronization reports an authorization error:
+### Working Outside rclone / Token Issues
+If you do not have `rclone` configured, simply omit `--fresh` from all CLI commands. The CLI will load the local `FY27_Bills_Budget.xlsx` file directly. If you have rclone configured and see an OAuth error, run:
 ```bash
 rclone config reconnect onedrive:
 ```
-Follow the browser prompt to re-authenticate with your Georgia Tech credentials and approve Duo 2FA.
+
+### Custom Spreadsheet Location
+If your spreadsheet is stored in a custom folder or flash drive, specify it with:
+```bash
+export FINANCE_XLSX_PATH="/path/to/my_budget.xlsx"
+```
 
 ### Headless Chrome / Selenium Issues
 Selenium automatically manages the appropriate `chromedriver` binary matching your local Google Chrome installation. Ensure Google Chrome is installed on your system.
 
 ### Viewing Saved Reports & Screenshots
-All generated screenshots and audit spreadsheets are stored in `screenshots/<bill_or_order_name>/` and automatically mirrored to SharePoint when configured.
+All generated screenshots and audit spreadsheets are stored in `screenshots/<bill_or_order_name>/` and automatically mirrored to SharePoint when `rclone` is configured.
 
 ---
 
