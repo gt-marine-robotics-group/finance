@@ -664,3 +664,66 @@ def test_packaging_and_cli_dispatch_integrity():
     # Check CLI functions exist
     for cmd in ["cmd_report", "cmd_screenshots", "cmd_review", "cmd_bill_request", "cmd_purchase", "cmd_price_check", "cmd_doctor"]:
         assert hasattr(cli, cmd), f"CLI command function {cmd} must exist"
+
+
+# ==============================================================================
+# WORKFLOW SIMULATION 9: PURCHASE UNCALCULATED FORMULA FALLBACK & WEBDRIVER SCOPE
+# ==============================================================================
+
+def test_purchase_uncalculated_formula_fallback_and_webdriver_scope(tmp_path, monkeypatch):
+    """
+    Tests regression shields for:
+    1. Uncalculated Excel formulas in Ordering sheet (vendor/allocation empty strings -> fallback to Bills)
+    2. Selenium webdriver module-level scope (no UnboundLocalError when live price check is skipped)
+    """
+    # 1. Construct workbook with uncalculated Ordering row formulas
+    wb = openpyxl.Workbook()
+    ws_bills = wb.active
+    ws_bills.title = "Bills"
+    ws_bills.append(["FY27 BUDGET BILLS"])
+    ws_bills.append(["Bill Item ID", "Bill No.", "Bill Title", "Item Name", "Vendor", "Cost", "Quantity", "Total Cost", "Status"])
+    ws_bills.append(["501", "376851", "RobotX", "Brushless Thruster ESC", "Blue Robotics", 119.50, 2, 239.00, "Approved"])
+
+    ws_orders = wb.create_sheet(title="Ordering")
+    ws_orders.append(["TOTALS", "", "", "", "", "", "", "", ""])
+    ws_orders.append(["Order ID (YYMMDD_vendor_gburdell3)", "Bill Item ID", "Bill No.", "Item Name", "Vendor", "Cost", "Quantity", "Total Cost", "Allocation", "Status"])
+    # Empty string values simulating uncalculated formulas
+    ws_orders.append(["260929_bluerobotics_cray66", "501", "", "", "", "", 2, "", "", "pending purchase"])
+
+    test_xlsx = str(tmp_path / "test_uncalc.xlsx")
+    wb.save(test_xlsx)
+    wb.close()
+
+    monkeypatch.setenv("FINANCE_XLSX_PATH", test_xlsx)
+
+    # 2. Test cmd_purchase listing with mock inputs
+    from unittest.mock import MagicMock
+    args = MagicMock()
+    args.order = None
+    args.fresh = False
+    args.no_review = False
+
+    # Mock user input to select order 1 and then cancel submit ("n")
+    inputs = iter(["1", "n"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.cmd_purchase(args)
+    assert exc_info.value.code == 0
+
+    # 3. Test automation_purchase.py execution when live price check is skipped ("n")
+    # Ensuring options = webdriver.ChromeOptions() has valid webdriver in scope
+    args_automation = ["automation_purchase.py", "--order", "260929_bluerobotics_cray66", "--excel-path", test_xlsx]
+    monkeypatch.setattr(sys, "argv", args_automation)
+    monkeypatch.setenv("ENGAGE_USERNAME", "testuser")
+    monkeypatch.setenv("ENGAGE_PASSWORD", "testpass")
+    monkeypatch.setattr("getpass.getpass", lambda prompt="": "testpass")
+
+    # Mock inputs: live price check "n", confirm submit "n" (exits cleanly before launching browser)
+    auto_inputs = iter(["n", "n"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(auto_inputs))
+
+    with pytest.raises(SystemExit) as exc_info_auto:
+        automation_purchase.main()
+    assert exc_info_auto.value.code == 0
+

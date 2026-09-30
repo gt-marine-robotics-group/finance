@@ -226,12 +226,24 @@ def cmd_bill_request(args):
 # ============================================================
 def cmd_purchase(args):
     """Create purchase requests on Engage from the Ordering sheet."""
+    import spreadsheet_utils
+
     df_order = load_ordering()
 
     if df_order.empty:
         print("No pending orders found in the Ordering sheet.")
         print("Use the web app to create orders first (Create New Order → select items → Submit)")
         sys.exit(0)
+
+    # Load Bills sheet to resolve missing/uncalculated formula fields
+    df_bills = load_xlsx()
+    bill_item_map = {}
+    if not df_bills.empty:
+        for _, b_row in df_bills.iterrows():
+            b_dict = b_row.to_dict()
+            b_id = spreadsheet_utils.clean_id(spreadsheet_utils.get_col_val(b_dict, "bill_item_id"))
+            if b_id:
+                bill_item_map[b_id] = b_dict
 
     oid_col = next((c for c in df_order.columns if isinstance(c, str) and "Order ID" in c), "Order ID")
     status_col = next((c for c in df_order.columns if c.strip().lower() == "status"), "Status")
@@ -248,6 +260,55 @@ def cmd_purchase(args):
         print("Use the web app to create orders first (Create New Order → select items → Submit)")
         sys.exit(0)
 
+    def _resolve_item(it_row):
+        d = it_row.to_dict() if hasattr(it_row, "to_dict") else dict(it_row)
+        b_id = spreadsheet_utils.clean_id(spreadsheet_utils.get_col_val(d, "bill_item_id"))
+        b_dict = bill_item_map.get(b_id, {})
+
+        name = (
+            spreadsheet_utils.get_col_val(d, "item_name")
+            or spreadsheet_utils.get_col_val(b_dict, "item_name")
+            or ""
+        )
+        vendor = (
+            spreadsheet_utils.get_col_val(d, "vendor")
+            or spreadsheet_utils.get_col_val(b_dict, "vendor")
+            or ""
+        )
+        qty = spreadsheet_utils.safe_float(
+            spreadsheet_utils.get_col_val(d, "quantity")
+            or spreadsheet_utils.get_col_val(b_dict, "quantity")
+            or 1.0,
+            default=1.0,
+        )
+        alloc_raw = spreadsheet_utils.get_col_val(d, "allocation")
+        alloc_val = spreadsheet_utils.safe_float(alloc_raw, default=0.0) if alloc_raw else 0.0
+        if alloc_val == 0.0:
+            total_raw = spreadsheet_utils.get_col_val(d, "total_cost") or spreadsheet_utils.get_col_val(b_dict, "total_cost")
+            total_val = spreadsheet_utils.safe_float(total_raw, default=0.0) if total_raw else 0.0
+            if total_val > 0.0:
+                alloc_val = total_val
+            else:
+                unit_cost_raw = spreadsheet_utils.get_col_val(d, "cost") or spreadsheet_utils.get_col_val(b_dict, "cost")
+                unit_cost = spreadsheet_utils.safe_float(unit_cost_raw, default=0.0) if unit_cost_raw else 0.0
+                alloc_val = unit_cost * qty
+
+        return {
+            "name": name,
+            "vendor": vendor,
+            "qty": qty,
+            "allocation": alloc_val,
+        }
+
+    def _extract_vendor(oid, resolved_items):
+        for it in resolved_items:
+            if it["vendor"]:
+                return it["vendor"]
+        parts = oid.split("_")
+        if len(parts) >= 3 and parts[1]:
+            return parts[1].capitalize()
+        return "Unknown"
+
     # Group by Order ID
     orders = {}
     for _, row in df_pending.iterrows():
@@ -259,8 +320,9 @@ def cmd_purchase(args):
     print(f"\nPending Orders ({len(orders)}):\n")
     order_list = list(orders.items())
     for i, (oid, items) in enumerate(order_list, 1):
-        vendor = str(items[0].get("Vendor", "")).strip() or "Unknown"
-        total = sum(float(str(it.get("Allocation", 0)).replace("$", "").replace(",", "") or 0) for it in items)
+        resolved = [_resolve_item(it) for it in items]
+        vendor = _extract_vendor(oid, resolved)
+        total = sum(it["allocation"] for it in resolved)
         print(f"  {i}. {oid} — {vendor} — {len(items)} items — ${total:.2f}")
 
     if args.order:
@@ -277,7 +339,8 @@ def cmd_purchase(args):
         sys.exit(1)
 
     order_items = orders[selected_oid]
-    vendor = str(order_items[0].get("Vendor", "")).strip()
+    resolved_order_items = [_resolve_item(it) for it in order_items]
+    vendor = _extract_vendor(selected_oid, resolved_order_items)
 
     print(f"\n{'='*60}")
     print(f"Purchase Request: {selected_oid}")
@@ -285,13 +348,13 @@ def cmd_purchase(args):
     print(f"{'='*60}")
     print(f"\n{'Item':<35} {'Qty':<5} {'Allocation':<12}")
     print("-" * 55)
-    total = 0
-    for it in order_items:
-        name = str(it.get("Item Name", ""))[:34]
-        qty = str(it.get("Quantity", ""))
-        alloc = float(str(it.get("Allocation", 0)).replace("$", "").replace(",", "") or 0)
+    total = 0.0
+    for it in resolved_order_items:
+        name = it["name"][:34]
+        qty_str = str(int(it["qty"])) if it["qty"].is_integer() else f"{it['qty']:.1f}"
+        alloc = it["allocation"]
         total += alloc
-        print(f"  {name:<33} {qty:<5} ${alloc:.2f}")
+        print(f"  {name:<33} {qty_str:<5} ${alloc:.2f}")
     print(f"\n  Total: ${total:.2f}")
 
     confirm = input(f"\nSubmit purchase request to Engage? [Y/n]: ").strip().lower()

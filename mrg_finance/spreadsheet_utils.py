@@ -25,8 +25,9 @@ COLUMN_ALIASES = {
     "vendor": ["vendor", "supplier", "merchant"],
     "description": ["description", "desc", "details", "notes"],
     "quantity": ["quantity", "qty", "count"],
-    "cost": ["cost", "unit cost", "cost ($)", "price", "allocation"],
+    "cost": ["cost", "unit cost", "cost ($)", "price"],
     "total_cost": ["total cost", "total_cost", "total", "total ($)"],
+    "allocation": ["allocation", "remaining allocation", "budget allocation"],
     "link": ["link", "url", "product link", "item link", "product url"],
     "status": ["status", "state", "item status"],
     "order_id": ["order id", "order_id", "order #", "order number", "order_id (yymmdd_vendor_gburdell3)"],
@@ -113,7 +114,7 @@ def get_col_val(row_dict: dict, canonical_key: str, default: str = "") -> str:
     # 2. Substring match fallback
     for alias in aliases:
         for k, v in norm_row.items():
-            if alias in k or k in alias:
+            if alias in k:
                 return clean_str(v)
     return default
 

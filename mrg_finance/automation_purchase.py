@@ -7,6 +7,8 @@ import time
 from datetime import date
 import pandas as pd
 from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -53,7 +55,7 @@ SHEET_NAME = "Bills"
 DOWNLOAD_DIR = "downloads"
 PURCHASE_URL = "https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/Finance/CreatePurchaseRequest"
 USERNAME = os.environ.get("ENGAGE_USERNAME", "")
-PASSWORD = ""
+PASSWORD = os.environ.get("ENGAGE_PASSWORD", "")
 
 
 
@@ -192,10 +194,16 @@ def main():
     vendor_name = ""
     for row in order_rows:
         r_dict = row if isinstance(row, dict) else row.to_dict()
-        v = str(spreadsheet_utils.get_col_val(r_dict, "vendor") or "").strip()
+        b_id = str(spreadsheet_utils.get_col_val(r_dict, "bill_item_id") or "").replace(".0", "").strip()
+        b_row = bill_item_map.get(b_id, {})
+        v = str(spreadsheet_utils.get_col_val(r_dict, "vendor") or spreadsheet_utils.get_col_val(b_row, "vendor") or "").strip()
         if v:
             vendor_name = v
             break
+    if not vendor_name:
+        parts = selected_order_id.split("_")
+        if len(parts) >= 3 and parts[1]:
+            vendor_name = parts[1].capitalize()
     vendor_name = vendor_name or "Vendor"
 
     purchase_date = date.today().strftime("%Y-%m-%d")
@@ -263,9 +271,6 @@ def main():
     if run_check in ("", "y", "yes"):
         import price_scraper
         import share_a_cart
-        from selenium import webdriver
-        from selenium.webdriver.chrome.options import Options
-        from selenium.webdriver.chrome.service import Service
 
         print(f"\n🔍 Checking live online prices and capturing current product screenshots...")
         total_scraped_live = 0.0
