@@ -291,6 +291,8 @@ Selenium automatically manages the appropriate `chromedriver` binary matching yo
 ---
 
 ## 📚 Detailed Reference Guides
+- [Bill Request Automation Guide](docs/user/BILL_REQUEST_GUIDE.md) — Step-by-step interactive walkthrough for `mrg-finance bill-request`, GT Duo MFA, form autofill, and quote screenshots.
+- [Purchase Request Automation Guide](docs/user/PURCHASE_GUIDE.md) — Step-by-step interactive walkthrough for `mrg-finance purchase`, price auditing, cart creation, Engage line lookups, and mandatory attachments (`cart.png` + Excel detail report).
 - [Spreadsheet & Manual Workflow Guide](docs/user/WORKFLOW_GUIDE.md) — Comprehensive schema, formulas, column reference, and manual Engage walkthrough.
 - [CLI & Troubleshooting Guide](docs/user/CLI_GUIDE.md) — Full CLI flags, custom paths, and troubleshooting FAQs.
 - [Developer & Architecture Guide](docs/dev/DEVELOPMENT.md) — System architecture, simulation test suites, SIM PC deployment, and Graph API.
