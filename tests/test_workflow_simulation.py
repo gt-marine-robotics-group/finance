@@ -695,6 +695,8 @@ def test_purchase_uncalculated_formula_fallback_and_webdriver_scope(tmp_path, mo
     wb.close()
 
     monkeypatch.setenv("FINANCE_XLSX_PATH", test_xlsx)
+    monkeypatch.setattr(cli, "XLSX_PATH", test_xlsx)
+    monkeypatch.setattr(automation_purchase, "XLSX_PATH", test_xlsx)
 
     # 2. Test cmd_purchase listing with mock inputs
     from unittest.mock import MagicMock
@@ -719,9 +721,8 @@ def test_purchase_uncalculated_formula_fallback_and_webdriver_scope(tmp_path, mo
     monkeypatch.setenv("ENGAGE_PASSWORD", "testpass")
     monkeypatch.setattr("getpass.getpass", lambda prompt="": "testpass")
 
-    # Mock inputs: live price check "n", confirm submit "n" (exits cleanly before launching browser)
-    auto_inputs = iter(["n", "n"])
-    monkeypatch.setattr("builtins.input", lambda prompt="": next(auto_inputs))
+    # Mock inputs: live price check "n", overflow "n", confirm submit "n" (exits cleanly before launching browser)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "n")
 
     with pytest.raises(SystemExit) as exc_info_auto:
         automation_purchase.main()

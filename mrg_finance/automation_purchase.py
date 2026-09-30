@@ -79,8 +79,36 @@ def safe_int(val, default=0):
 def main():
     global XLSX_PATH, USERNAME, PASSWORD
 
-    # --- Fresh sync from SharePoint ---
+    # Dynamically resolve XLSX_PATH
     import sys
+    if "--excel-path" in sys.argv:
+        idx = sys.argv.index("--excel-path")
+        if idx + 1 < len(sys.argv):
+            XLSX_PATH = sys.argv[idx + 1]
+    elif os.environ.get("FINANCE_XLSX_PATH"):
+        XLSX_PATH = os.environ["FINANCE_XLSX_PATH"]
+    else:
+        cwd_xlsx = os.path.join(os.getcwd(), "FY27_Bills_Budget.xlsx")
+        repo_xlsx = os.path.expanduser("~/mrg/finance/FY27_Bills_Budget.xlsx")
+        onedrive_xlsx = os.path.expanduser(
+            "~/Library/CloudStorage/OneDrive-GeorgiaInstituteofTechnology/"
+            "Documents - Marine Robotics Group/OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx"
+        )
+        if os.path.exists(cwd_xlsx):
+            XLSX_PATH = cwd_xlsx
+        elif os.path.exists(repo_xlsx):
+            XLSX_PATH = repo_xlsx
+        elif os.path.exists(onedrive_xlsx):
+            XLSX_PATH = onedrive_xlsx
+        else:
+            XLSX_PATH = repo_xlsx
+
+    if not USERNAME:
+        USERNAME = os.environ.get("ENGAGE_USERNAME", "")
+    if not PASSWORD:
+        PASSWORD = os.environ.get("ENGAGE_PASSWORD", "")
+
+    # --- Fresh sync from SharePoint ---
     if "--fresh" in sys.argv or "-f" in sys.argv:
         print("Downloading fresh xlsx from SharePoint...")
         import subprocess
@@ -172,8 +200,20 @@ def main():
     print("\nAvailable Orders:")
     for i, oid in enumerate(order_ids, 1):
         items_in_o = order_groups[oid]
-        v_name = spreadsheet_utils.get_col_val(items_in_o[0], "vendor") if items_in_o else "Unknown"
-        print(f"  {i}. {oid} ({v_name or 'Unknown'}, {len(items_in_o)} items)")
+        v_name = ""
+        for itm in items_in_o:
+            b_id = str(spreadsheet_utils.get_col_val(itm, "bill_item_id") or "").replace(".0", "").strip()
+            b_row = bill_item_map.get(b_id, {})
+            v = str(spreadsheet_utils.get_col_val(itm, "vendor") or spreadsheet_utils.get_col_val(b_row, "vendor") or "").strip()
+            if v:
+                v_name = v
+                break
+        if not v_name:
+            parts = oid.split("_")
+            if len(parts) >= 3 and parts[1]:
+                v_name = parts[1].capitalize()
+        v_name = v_name or "Unknown"
+        print(f"  {i}. {oid} ({v_name}, {len(items_in_o)} items)")
 
     if pre_selected_order:
         selected_order_id = pre_selected_order

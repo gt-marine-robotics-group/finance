@@ -48,16 +48,21 @@ ONEDRIVE_XLSX = os.path.expanduser(
     "Documents - Marine Robotics Group/OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx"
 )
 
-if os.path.exists(CWD_XLSX):
-    DEFAULT_XLSX = CWD_XLSX
-elif os.path.exists(REPO_XLSX):
-    DEFAULT_XLSX = REPO_XLSX
-elif os.path.exists(ONEDRIVE_XLSX):
-    DEFAULT_XLSX = ONEDRIVE_XLSX
-else:
-    DEFAULT_XLSX = REPO_XLSX
+def get_xlsx_path():
+    """Get the path to the Excel file, dynamically checking environment and defaults."""
+    env_path = os.environ.get("FINANCE_XLSX_PATH")
+    if env_path:
+        return env_path
+    if os.path.exists(CWD_XLSX):
+        return CWD_XLSX
+    if os.path.exists(REPO_XLSX):
+        return REPO_XLSX
+    if os.path.exists(ONEDRIVE_XLSX):
+        return ONEDRIVE_XLSX
+    return REPO_XLSX
 
-XLSX_PATH = os.environ.get("FINANCE_XLSX_PATH", DEFAULT_XLSX)
+
+XLSX_PATH = get_xlsx_path()
 SHEET_NAME = "Bills"
 ORDERING_SHEET = "Ordering"
 SCREENSHOT_DIR = os.path.join(SCRIPT_DIR, "screenshots")
@@ -101,7 +106,8 @@ def download_xlsx_via_graph_api(target_path):
 def fresh_sync():
     """Download latest xlsx + screenshots from SharePoint."""
     print("Syncing from SharePoint...")
-    xlsx_dir = os.path.dirname(XLSX_PATH)
+    xlsx_path = get_xlsx_path()
+    xlsx_dir = os.path.dirname(xlsx_path)
     r1 = subprocess.run(
         ["rclone", "copy", "--ignore-checksum", "--ignore-size", "--update",
          "onedrive:OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx",
@@ -113,7 +119,7 @@ def fresh_sync():
     else:
         err_brief = r1.stderr.strip().split("\n")[0] if r1.stderr else "rclone not configured"
         print(f"  ℹ️ rclone ({err_brief}). Trying Graph API fallback...")
-        if download_xlsx_via_graph_api(XLSX_PATH):
+        if download_xlsx_via_graph_api(xlsx_path):
             print("  ✅ xlsx synced via Microsoft Graph API!")
         else:
             print("  ⚠️ Could not sync xlsx file")
@@ -137,7 +143,7 @@ def load_xlsx():
     import warnings
     warnings.filterwarnings('ignore')
 
-    df = spreadsheet_utils.read_sheet_robust(XLSX_PATH, [SHEET_NAME, "Bill", "Budget"])
+    df = spreadsheet_utils.read_sheet_robust(get_xlsx_path(), [SHEET_NAME, "Bill", "Budget"])
     if df.empty:
         return df
 
@@ -158,7 +164,7 @@ def load_ordering():
     import warnings
     warnings.filterwarnings('ignore')
 
-    return spreadsheet_utils.read_sheet_robust(XLSX_PATH, [ORDERING_SHEET, "Orders", "OrderT"])
+    return spreadsheet_utils.read_sheet_robust(get_xlsx_path(), [ORDERING_SHEET, "Orders", "OrderT"])
 
 
 def select_bill(df, bill_title=None):
@@ -364,7 +370,7 @@ def cmd_purchase(args):
 
     # Run the Engage automation with the selected order
     py_exe = get_python_executable()
-    cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation_purchase.py"), "--order", selected_oid, "--excel-path", XLSX_PATH]
+    cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation_purchase.py"), "--order", selected_oid, "--excel-path", get_xlsx_path()]
     if getattr(args, "no_review", False):
         cmd.append("--no-review")
     res = subprocess.run(cmd)
@@ -514,9 +520,10 @@ def cmd_review(args):
 def cmd_doctor(args):
     """Run diagnostic health check on FY27_Bills_Budget.xlsx."""
     import spreadsheet_utils
+    target_xlsx = get_xlsx_path()
     print(f"\n🩺 Running MRG Finance Spreadsheet Diagnostic Doctor...")
-    print(f"   Target file: {XLSX_PATH}\n")
-    results = spreadsheet_utils.validate_budget_spreadsheet(XLSX_PATH)
+    print(f"   Target file: {target_xlsx}\n")
+    results = spreadsheet_utils.validate_budget_spreadsheet(target_xlsx)
     print("-" * 75)
     print(f"Summary: {results['summary']}")
     print("-" * 75)
@@ -539,16 +546,17 @@ def cmd_report(args):
         sys.path.insert(0, SCRIPT_DIR)
     import order_excel_builder
     order_id = getattr(args, "order", None)
+    target_xlsx = get_xlsx_path()
 
     if not order_id:
         # Prompt interactively if order ID not specified
         import pandas as pd
         import spreadsheet_utils
-        if not os.path.exists(XLSX_PATH):
-            print(f"❌ Spreadsheet not found at {XLSX_PATH}")
+        if not os.path.exists(target_xlsx):
+            print(f"❌ Spreadsheet not found at {target_xlsx}")
             return
         try:
-            ef = pd.ExcelFile(XLSX_PATH)
+            ef = pd.ExcelFile(target_xlsx)
             df_orders = spreadsheet_utils.read_sheet_robust(ef, ["Ordering", "Orders", "OrderT"])
             oid_col = next((c for c in df_orders.columns if "order" in str(c).lower()), "Order ID")
             order_ids = list(dict.fromkeys(str(r.get(oid_col, "")).strip() for _, r in df_orders.iterrows() if str(r.get(oid_col, "")).strip() and not str(r.get(oid_col, "")).strip().startswith("#")))
@@ -569,7 +577,7 @@ def cmd_report(args):
             print(f"❌ Could not load order list: {e}")
             return
 
-    sys.argv = ["order_excel_builder.py", "--order", order_id, "--excel-path", XLSX_PATH]
+    sys.argv = ["order_excel_builder.py", "--order", order_id, "--excel-path", target_xlsx]
     order_excel_builder.main()
 
 
