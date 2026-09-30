@@ -160,6 +160,78 @@ def read_sheet_robust(excel_file: pd.ExcelFile | str | openpyxl.Workbook, sheet_
     else:
         df = pd.read_excel(excel_file, sheet_name=sheet_name, header=header_row_idx).astype(object).fillna("")
         df.columns = [str(c).strip() for c in df.columns]
+
+    # Post-process: Synthesize missing Bill Item IDs if uncalculated in Excel Online
+    s_lower = sheet_name.lower().strip()
+    if any(k in s_lower for k in ["bill", "budget"]):
+        bid_col = next((c for c in df.columns if any(a == c.lower().strip() for a in COLUMN_ALIASES["bill_item_id"])), None)
+        name_col = next((c for c in df.columns if any(a == c.lower().strip() for a in COLUMN_ALIASES["item_name"])), None)
+        if bid_col and name_col:
+            non_empty_items = df[df[name_col].astype(str).str.strip() != ""]
+            empty_bids = non_empty_items[
+                (non_empty_items[bid_col].astype(str).str.strip() == "") |
+                (non_empty_items[bid_col].astype(str).str.startswith("="))
+            ]
+            if len(empty_bids) > len(non_empty_items) // 2:
+                non_empty_count = 0
+                for idx, row in df.iterrows():
+                    val = str(row.get(name_col, "")).strip()
+                    if val:
+                        non_empty_count += 1
+                        cur_b = clean_str(row.get(bid_col, ""))
+                        if not cur_b or cur_b.startswith("="):
+                            calc_id = str(-6 + non_empty_count - 1)
+                            df.at[idx, bid_col] = calc_id
+
+    elif any(k in s_lower for k in ["order"]):
+        bid_col = next((c for c in df.columns if any(a == c.lower().strip() for a in COLUMN_ALIASES["bill_item_id"])), None)
+        if bid_col:
+            xlsx_path = None
+            if isinstance(excel_file, str) and os.path.exists(excel_file):
+                xlsx_path = excel_file
+            elif hasattr(excel_file, "io") and isinstance(excel_file.io, str) and os.path.exists(excel_file.io):
+                xlsx_path = excel_file.io
+
+            wb_raw = None
+            if xlsx_path:
+                try:
+                    wb_raw = openpyxl.load_workbook(xlsx_path, data_only=False)
+                except Exception:
+                    wb_raw = None
+            elif isinstance(excel_file, openpyxl.Workbook) and not getattr(excel_file, "data_only", False):
+                wb_raw = excel_file
+
+            if wb_raw and sheet_name in wb_raw.sheetnames:
+                try:
+                    ws_raw = wb_raw[sheet_name]
+                    raw_headers = [str(cell.value).strip() if cell.value is not None else "" for cell in ws_raw[header_row_idx + 1]]
+                    raw_bid_idx = next((i + 1 for i, h in enumerate(raw_headers) if any(a == h.lower() for a in COLUMN_ALIASES["bill_item_id"])), None)
+                    if raw_bid_idx:
+                        resolved_bids = {}
+                        for r in range(header_row_idx + 2, ws_raw.max_row + 1):
+                            val = ws_raw.cell(row=r, column=raw_bid_idx).value
+                            if val is not None:
+                                s_val = str(val).strip()
+                                if s_val.startswith("="):
+                                    m = re.match(r"=[A-Za-z]+(\d+)\+(\d+)", s_val)
+                                    if m:
+                                        p_row, add = int(m.group(1)), int(m.group(2))
+                                        if p_row in resolved_bids and resolved_bids[p_row].isdigit():
+                                            resolved_bids[r] = str(int(resolved_bids[p_row]) + add)
+                                else:
+                                    try:
+                                        resolved_bids[r] = str(int(float(s_val)))
+                                    except Exception:
+                                        resolved_bids[r] = s_val
+                        for i, row_idx in enumerate(range(header_row_idx + 2, header_row_idx + 2 + len(df))):
+                            if i < len(df) and row_idx in resolved_bids:
+                                df.at[df.index[i], bid_col] = resolved_bids[row_idx]
+                except Exception:
+                    pass
+                finally:
+                    if xlsx_path and wb_raw:
+                        wb_raw.close()
+
     return df
 
 
