@@ -58,8 +58,8 @@ mrg-finance bill-request --fresh
 # Skipping the interactive bill selection menu:
 mrg-finance bill-request --bill "Marine Robotics Group RobotX Testing Equipment Bill"
 
-# Skipping the optional visual review GUI:
-mrg-finance bill-request --no-review
+# Review product evidence in the spreadsheet:
+mrg-finance screenshots --bill "<Bill Title>" --interactive
 ```
 
 ---
@@ -110,15 +110,10 @@ If screenshots are missing:
 ```text
 Capture missing screenshots automatically now? (Y/n): y
 ```
-- Type `y`: Headless Chrome will visit the vendor links for missing items, dismiss popups, and capture high-resolution product screenshots.
+- Type `y`: Visible Chrome will visit the vendor links for missing items, dismiss popups, and capture high-resolution product screenshots.
 
-### Prompt 5: Optional Side-by-Side Review GUI
-```text
-Open interactive side-by-side review GUI? [y/N]: y
-```
-- Type `y` to launch `http://127.0.0.1:8321/review.html` in your browser.
-- Displays every item, product screenshot, live price, and budgeted allocation side-by-side.
-- Return to your terminal and press **Enter** when done reviewing.
+### Prompt 5: Spreadsheet review
+Review the workbook and screenshot evidence before proceeding. The side-by-side GUI has been removed. Screenshot capture uses visible Chrome so you can solve CAPTCHAs; unresolved challenges are saved as separate diagnostics rather than quote attachments.
 
 ---
 

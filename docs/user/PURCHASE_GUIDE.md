@@ -1,278 +1,75 @@
-# 🛒 Purchase Request Automation Guide (`mrg-finance purchase`)
+# Purchase requests
 
-This guide is the complete step-by-step walkthrough for **`mrg-finance purchase`**. It covers terminal prompts, live price auditing, cost overrun mitigation, cart screenshot capture, Engage bill line lookups, Budget vs Quoted Excel report compilation, mandatory Engage attachments, and automatic link persistence.
+Run `mrg-finance purchase --fresh --order <Order ID>` after the source bills have been approved and their bill numbers recorded in the master workbook. Omit `--fresh` to use your local copy. Pending rows are grouped by Order ID; use a separate order for each vendor.
 
----
+The CLI shows the workbook path, approved allocation, current quote, shipping, tax, change from allocation, payee details, and absolute paths to all evidence. Review the generated comparison spreadsheet before filling Engage. The CLI prepares the form; you submit it manually.
 
-## 📑 Table of Contents
-1. [When to Use This Command](#1-when-to-use-this-command)
-2. [Spreadsheet Prerequisites (`Ordering` Sheet)](#2-spreadsheet-prerequisites-ordering-sheet)
-3. [Running the Command](#3-running-the-command)
-4. [Step-by-Step Interactive Terminal Walkthrough](#4-step-by-step-interactive-terminal-walkthrough)
-   - [Phase 1: Order Selection](#phase-1-order-selection)
-   - [Phase 2: Live Price Auditing & Overrun Mitigation](#phase-2-live-price-auditing--overrun-mitigation)
-   - [Phase 3: Seller Quantity Limits & Cart Generation](#phase-3-seller-quantity-limits--cart-generation)
-   - [Phase 4: Side-by-Side Review GUI](#phase-4-side-by-side-review-gui)
-   - [Phase 5: Shipping & Tax Overflow Questions](#phase-5-shipping--tax-overflow-questions)
-5. [Browser Automation & Form Autofill on Engage](#5-browser-automation--form-autofill-on-engage)
-   - [Automated Bill Line Item Lookup](#automated-bill-line-item-lookup)
-   - [Form Field Mapping](#form-field-mapping)
-6. [Required Attachments on Engage (Upload #1 & #2)](#6-required-attachments-on-engage-upload-1--2)
-   - [Upload #1: Shopping Cart Screenshot (`cart.png`)](#upload-1--shopping-cart-screenshot-cartpng)
-   - [Upload #2: Budget vs Quoted Audit Report (`.xlsx`)](#upload-2--budget-vs-quoted-audit-report-xlsx)
-7. [Final Submission & Automatic Spreadsheet Logging](#7-final-submission--automatic-spreadsheet-logging)
-8. [Troubleshooting & FAQs](#8-troubleshooting--faqs)
-
----
-
-## 1. When to Use This Command
-
-Use `mrg-finance purchase` during **Stage 2 (Spending Approved Funds)** of the club finance lifecycle:
-- The SGA has approved your funding bill and assigned an official `Bill No.` (e.g. `344042`).
-- You have assigned an `Order ID` (e.g. `260811_amazon_awu335`) and copied the `Bill Item ID`s into the **`Ordering`** sheet.
-- You are ready to purchase items from a vendor (Amazon, McMaster-Carr, DigiKey, etc.) and submit the formal Purchase Request on Georgia Tech's [CampusLabs Engage Finance](https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/Finance/CreatePurchaseRequest) portal.
-
----
-
-## 2. Spreadsheet Prerequisites (`Ordering` Sheet)
-
-Open `FY27_Bills_Budget.xlsx` on SharePoint and verify your rows in the **`Ordering`** sheet:
-*(Note: Row 1 contains subtotals, Row 2 contains headers, **data begins on Row 3**).*
-
-| Column | Field Name | Required Input | Notes |
-| :--- | :--- | :--- | :--- |
-| **A** | `Order ID` | Text | Format: `YYMMDD_vendor_gtusername` (e.g. `260811_amazon_awu335`). Repeat on every row for this order. |
-| **B** | `Bill Item ID` | **Input** | **Copy and paste from Column A of the `Bills` sheet.** *(Drives all formulas).* |
-| **C–G** | `Bill No.`, `Bill Title`, `Item Name`, `Vendor`, `Cost` | *Formula* | **Do NOT type here.** Formulas pull these from `BillsT`. |
-| **H** | `Quantity` | Integer | Enter how many units you are purchasing in this specific order. |
-| **I** | `Total Cost` | *Formula* | **Do NOT type here.** `=Quantity * Cost`. |
-| **J** | `Allocation` | *Formula* | Total funding approved on the source bill. |
-| **K** | `Purchaser` | Text | Name or GT username of person placing the order. |
-| **L** | `Status` | Text | Set to `Pending`. |
-| **U** | `Share-A-Cart Link` | URL | **Autofilled by CLI** (or paste vendor cart link). |
-| **V** | `Engage Request Link` | URL | **Autofilled by CLI** (URL of the submitted Engage request). |
-
----
-
-## 3. Running the Command
+## Choose a cart
 
 ```bash
-# Standard interactive launch:
-mrg-finance purchase
+# Build an Amazon cart in a temporary Chrome session
+mrg-finance purchase --order <Order ID>
 
-# With automated SharePoint sync before running:
-mrg-finance purchase --fresh
-
-# Target an order directly (skips interactive selection):
-mrg-finance purchase --order 260811_amazon_awu335
-
-# Skip the optional visual review GUI:
-mrg-finance purchase --no-review
+# Sign into your personal account and create Share-A-Cart from the real cart
+mrg-finance purchase --order <Order ID> --cart-source personal
 ```
 
----
+Personal mode opens a dedicated Chrome profile at `.mrg-finance-browser/` in your current directory. Sign into Amazon in that window, build the order, and install Share-A-Cart there if necessary. The profile remembers the account and extensions. It does not reuse an already open Chrome session. The profile is ignored by Git.
 
-## 4. Step-by-Step Interactive Terminal Walkthrough
+Include only the order's items in the active Amazon cart. The CLI checks the ASINs and quantities against the workbook, then uses the actual cart unit prices. Missing items, unrelated items, quantity limits, unreadable prices, and subtotal discrepancies stop the workflow. If a seller limits the quantity, correct the Ordering sheet or choose a substitute before rerunning. The CLI does not silently reduce workbook quantities.
 
-### Phase 1: Order Selection
-The CLI scans the `Ordering` sheet for pending orders:
+In automated Amazon mode, link creation through Share-A-Cart's undocumented website endpoint is best effort. If it fails, create a link with the extension. Personal mode always asks for a link made from the actual vendor cart; it does not synthesize a cart from spreadsheet quantities.
 
-```text
-Available Orders:
-  1. 260811_amazon_awu335 (Amazon, 12 items)
-  2. 260821_bluerobotics_awu335 (Blue Robotics, 4 items)
+[DigiKey is supported by Share-A-Cart](https://share-a-cart.com/supported/digikey) through its Everything extension. Both the sender and recipient need the extension for DigiKey. Build the DigiKey cart in the open browser, confirm each quoted unit price and the cart quantities, and paste the extension-generated link. The CLI does not call the Amazon cart endpoint for DigiKey. Other vendors use the same manual cart verification flow; their sharing method depends on vendor support.
 
-Select order (number or Order ID): 1
-```
-- Type the number `1` or the order ID to select it.
-- The CLI displays an itemized summary table showing Item Name, Approved Unit Cost, Quantity, and Line Total.
+## Screenshots and CAPTCHAs
 
----
+Screenshot capture waits for the rendered page and tries a full-page Chrome capture, with a viewport fallback. CAPTCHA or access-denied pages produce a terminal notification and diagnostic PNG/JSON under `screenshots/<Order ID>/challenges/`. These files are separate from quote attachments. Solve challenges in the visible browser and retry, or skip and stop the purchase. A challenge is never accepted as `cart.png`.
 
-### Phase 2: Live Price Auditing & Overrun Mitigation
-```text
-🔍 Check live online prices against approved budget allocations? (Y/n): y
-```
-- **Type `y`**: Chrome opens product links, scrapes live online prices, and compares them against approved budget allocations.
+For bill product screenshots:
 
-#### Handling Cost Overruns (Price Increases):
-If a live price is higher than the approved budget:
-```text
-⚠️ Cost Overrun for '2m IP67 LED Strip': Allocated $10.99, Live $12.59 (+$3.20 total over)
-   👉 Enter substitute product link (or Enter to keep current): 
-```
-- **Option A**: Paste a link to an in-stock alternative item that fits within the budget. The CLI scrapes the new link immediately and verifies that the price is under budget.
-- **Option B**: Press **Enter** to keep the current link and accept the overrun (you may need to allocate an overflow request for the difference).
-
----
-
-### Phase 3: Seller Quantity Limits & Cart Generation
-
-#### Quantity Limit Detection:
-If an Amazon seller restricts order quantities (e.g., max 2 units per customer):
-```text
-⚠️ QUANTITY LIMIT DETECTED on 'M2.5 Threaded Inserts':
-   Requested: 5 units | Max Available: 2 units
-   👉 Enter substitute product link with full stock (or Enter to accept limit):
-```
-- Paste a substitute seller link or press **Enter** to automatically adjust the order quantity from 5 down to 2.
-
-#### Shopping Cart Screenshot (`cart.png`):
-- For Amazon orders, the automation adds items to the cart, navigates to `https://www.amazon.com/gp/cart/view.html`, and captures:
-  `screenshots/<Order ID>/cart.png`
-- For non-Amazon vendors (McMaster-Carr, DigiKey, etc.), the CLI prompts you:
-  ```text
-  ℹ️ Non-Amazon Vendor Items Detected:
-     Please create a shopping cart directly on the vendor website and take a cart screenshot.
-  ```
-  Save your screenshot to `screenshots/<Order ID>/cart.png`.
-
-#### Share-A-Cart Link Creation:
-- The CLI automatically generates a multi-item cart link via the Share-A-Cart API.
-- **Automatic Excel Update**: It immediately saves this link into Column U (**`Share-A-Cart Link`**) across all rows for this order in the `Ordering` sheet!
-
----
-
-### Phase 4: Side-by-Side Review GUI
-```text
-🖥️  Open interactive side-by-side review GUI? [y/N]: y
-```
-- Type `y` to view product screenshots, approved allocations, and live prices side-by-side in your browser at `http://127.0.0.1:8321/review.html`.
-- Press **Enter** in the terminal when done reviewing.
-
----
-
-### Phase 5: Shipping & Tax Overflow Questions
-```text
-Do any items have shipping/tax overflow?
-Add shipping/tax for a separate 2nd overflow request? [y/N]: n
-```
-- If shipping or taxes cause an order to exceed the SGA bill allocation, type `y` to record the overflow amounts for a secondary reimbursement request. Otherwise, type `n`.
-
-Confirm the submission:
-```text
-Submit purchase request to Engage? (12 items, $734.64) [Y/n]: y
+```bash
+mrg-finance screenshots --bill "<Bill Title>"
+mrg-finance screenshots --bill "<Bill Title>" --interactive
 ```
 
----
+Default screenshot mode runs headlessly and records challenges for attention. `--interactive` shows Chrome and pauses for manual CAPTCHA solving. Review `screenshots/<Bill Title>/screenshot_audit.csv` in your spreadsheet. The side-by-side review server and `review` command have been removed; `--no-review` remains an ignored compatibility flag.
 
-## 5. Browser Automation & Form Autofill on Engage
+## Reconcile the amount
 
-A visible Google Chrome browser window will open automatically.
+The Engage request amount is the verified merchandise subtotal plus the shipping and tax shown by the vendor. Enter those fees and the final vendor total when prompted. All totals must agree to the cent; failed scraping never substitutes the approved allocation as a live quote.
 
-### Automated Bill Line Item Lookup
-Before opening the purchase form, the automation navigates to the approved SGA bills on Engage:
-- It opens each source bill (`.../budgeting/requests#/view/<BILL_NO>`).
-- It extracts the exact **Engage Line Number** and **Budget Section** (e.g. `B03 Line 12`) matching your items.
-- *Why this matters*: Engage line numbers are generated by CampusLabs and are NOT Excel row numbers. The automation discovers the true Engage line numbers automatically.
+The CLI creates one request for that full amount. It no longer submits the allocation as a primary request and adds a separate overflow request. Price increases are displayed as a variance; confirm that the order has sufficient approved funding before continuing. Approved unit costs remain the baseline in the comparison report.
 
-### Form Field Mapping
-The automation navigates to [Create Purchase Request](https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/Finance/CreatePurchaseRequest) and populates the fields:
+Immediately before uploading attachments, the CLI refreshes Amazon and checks that every item, quantity, unit price, and subtotal still agrees with the reviewed cart. For other vendors it asks you to reconfirm the quantities and subtotal. Shipping/tax and the final vendor total require manual confirmation because Amazon's cart subtotal does not include all checkout charges. The CLI then reads the actual Engage Amount field and requires it to equal the verified vendor total. If prices changed, rerun to rebuild the quote, report, and shared cart.
 
-```
-CampusLabs Engage Purchase Request Form
-├── Subject: Marine Robotics Group Amazon Purchase Request 2026-09-15
-├── Requested Amount: $734.64
-├── Description: [Order summary + Share-A-Cart Link]
-├── What is the Budget/Bill # and Request Line #?:
-│     └── Bill 344042 Line 1, Bill 344042 Line 4, Bill 344042 Line 7
-└── SGA Bill Box:
-      └── $11.99 - Line 1, Bill 344042, B06 - Non-Inventoried Items
-          $18.99 - Line 4, Bill 344042, B03 - General Inventoried Goods
-```
+## Engage fields and payee
 
----
+After GT sign-in and Duo MFA, the CLI looks up each item's line number and section on the approved Engage bill. If a lookup fails, enter the verified Engage line and section. Excel Bill Item IDs are not used as Engage line numbers. Shipping and tax also require funding references.
 
-## 6. Required Attachments on Engage (Upload #1 & #2)
+Select the Category/Account and SGA Bill funding option in Engage when prompted, so conditional questions are visible. The CLI matches controls through labels, ARIA references, or a local question container and checks that values were retained:
 
-Georgia Tech SGA policy requires **two specific attachments** for every purchase request. The automation uploads both files automatically:
+| Field | Content |
+| --- | --- |
+| Subject | `Marine Robotics Group <Vendor> Purchase Request <Date>` |
+| Requested Amount | Full verified vendor total, including shipping/tax |
+| Description | Share-A-Cart link |
+| What is the Budget/Bill # and Request Line #? | Verified bill, section, and Engage line references |
+| SGA Bill | Quoted dollar amount for each bill/line/section, including allocated fees |
+| Payee | Vendor name and available official contact information |
 
-```
-Engage Attachments Section
-│
-├── 📎 Upload #1: Shopping Cart Screenshot
-│   ├── File: screenshots/<Order ID>/cart.png
-│   └── Verifies: All items in cart, quantities, vendor estimated total
-│
-└── 📎 Upload #2: Price Comparison Audit Spreadsheet
-    ├── File: screenshots/<Order ID>/Budget_vs_Quoted_Detail_<Order ID>.xlsx
-    └── Verifies: Budget vs Quoted prices, variance, bill & line numbers
-```
+Amazon and DigiKey payee defaults are based on [Amazon's official contact address](https://shipping.amazon.com/privacy-notice) and [DigiKey's contact information](https://www.digikey.com/en/help/browser-support). Review the payee against your seller/invoice, especially for marketplace purchases. Other vendors are checked on their official homepage and contact pages for structured organization/address data. Missing required contact information or ambiguous form controls stop the upload for manual review; no details are moved into Description. Payee selection has no extra CLI options.
 
----
+On a form error, inspect `engage_form_error.png` and `engage_fields.json` in the order's evidence folder. These diagnostics identify visible controls without exporting entered form values.
 
-### Upload #1 — Shopping Cart Screenshot (`cart.png`)
-* **File Location**: `screenshots/<Order ID>/cart.png`
-* **Format**: `.png`
-* **What it must show**:
-  - The vendor shopping cart interface (e.g. Amazon Cart, McMaster Cart).
-  - Every item name, selected options, and ordered quantities.
-  - The estimated order subtotal, shipping, and taxes.
+## Reports and submission
 
----
+Evidence is stored under `screenshots/<Order ID>/`:
 
-### Upload #2 — Budget vs Quoted Audit Report (`.xlsx`)
-* **File Location**: `screenshots/<Order ID>/Budget_vs_Quoted_Detail_<Order ID>.xlsx`
-* **Format**: Formatted Microsoft Excel Workbook (`.xlsx`)
-* **What it contains**:
-  1. **Executive KPI Block**:
-     - `Total Budgeted Allocation ($)`
-     - `Total Quoted Amount ($)`
-     - `Net Variance ($)` (Color-coded green for savings, red for overrun)
-  2. **Itemized Audit Table**:
-     - `Item Name`
-     - `Engage Reference` (e.g. `Bill 344042, Line 4`)
-     - `Budget Section` (`B03` or `B06`)
-     - `Approved Unit Cost`, `Approved Quantity`, `Approved Total`
-     - `Quoted Unit Cost`, `Quoted Quantity`, `Quoted Total`
-     - `Line Variance ($)`
-  3. **Category Summary Table**:
-     - Subtotals for `B03 - General Inventoried Goods` vs `B06 - Non-Inventoried Items`.
+- `cart.png`: freshly verified vendor cart.
+- `Budget_vs_Quoted_Detail_<Order ID>.xlsx`: approved versus quoted prices and verified bill references, plus a Cart Reconciliation tab recording fees, vendor total, Engage amount, and payee source.
+- `Budget_vs_Quoted_Detail_<Order ID>.csv`: merchandise comparison for spreadsheet review.
 
----
+The screenshot and Excel report are uploaded only after the field and total checks pass. Review the form, complete any remaining required fields, sign, and submit in Engage. Paste the resulting Engage URL if it cannot be detected. The CLI writes cart and request links to every matching Ordering row and reports whether SharePoint synchronization succeeded.
 
-## 7. Final Submission & Automatic Spreadsheet Logging
-
-Once the form fields and attachments are loaded, the terminal pauses:
-
-```text
-⏸️  Form pre-filled with 12 items totaling $734.64
-    Review and fill remaining fields (Category, Account, etc.)
-    Press Enter after you submit this purchase request → 
-```
-
-### Steps to Complete in the Browser:
-1. **Category / Account**: Select the designated funding account (e.g. `SGA Sub-Account` or `Operations`).
-2. **Digital Signature**: Type your full name.
-3. **Submit**: Click the blue **Submit Request** button.
-
-### Steps to Complete in the Terminal:
-1. Return to your terminal and press **Enter**.
-2. The automation detects the submitted Engage URL:
-   ```text
-   👉 Enter submitted Engage Request URL [https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/Finance/ViewRequest/987654]: 
-   ```
-   Press **Enter** to accept the detected URL (or paste it if not automatically detected).
-3. **Automatic Spreadsheet Update**:
-   - The CLI writes the URL into Column V (**`Engage Request Link`**) across all rows for that order in the `Ordering` sheet!
-   - If `rclone` is enabled, it automatically syncs the updated sheet back to SharePoint.
-
----
-
-## 8. Troubleshooting & FAQs
-
-### Q: What if an Engage line number says `Line ?`?
-- Check that the `Bill No.` on your `Ordering` sheet matches an approved bill on Engage. If the bill was approved under a different number, update Column B (`Bill No.`) in Excel before running the command.
-
-### Q: What if the automated file upload fails on Engage?
-- If Engage updates its file input elements and automated upload fails, manually drag and drop:
-  1. `screenshots/<Order ID>/cart.png`
-  2. `screenshots/<Order ID>/Budget_vs_Quoted_Detail_<Order ID>.xlsx`
-  into the **Attachments** box on the Engage webpage before clicking Submit.
-
-### Q: Can I generate the Budget vs Quoted report without opening the browser?
-- **Yes!** Run:
-  ```bash
-  mrg-finance report --order <ORDER_ID>
-  ```
-  This creates `screenshots/<Order ID>/Budget_vs_Quoted_Detail_<Order ID>.xlsx` and `.csv` immediately without launching any browser automation.
+To regenerate an offline comparison without opening Engage, run `mrg-finance report --order <Order ID>`. Offline reports may use allocation fallbacks; they do not count as verified purchase quotes.

@@ -9,7 +9,7 @@ This manual provides authoritative context, architecture specifications, operati
 The MRG Finance system automates financial workflows for the Georgia Tech Marine Robotics Group:
 1. **SGA Bill Requests (`mrg-finance bill-request`)**: Submits equipment funding requests to Georgia Tech CampusLabs Engage with verified screenshot evidence.
 2. **Purchase Requests (`mrg-finance purchase`)**: Auto-fills Engage purchase request forms, verifies live quoted prices, generates audit reports, creates Share-A-Cart bundles, and writes links back to the master spreadsheet.
-3. **Audit & Review (`mrg-finance report`, `mrg-finance review`, `mrg-finance price-check`)**: Side-by-side visual diffing and dynamic Excel comparison generation.
+3. **Audit & Review (`mrg-finance report`, `mrg-finance price-check`)**: Spreadsheet comparison reports and verified vendor cart totals. The side-by-side GUI has been removed.
 4. **Master Database Sync (`FY27_Bills_Budget.xlsx`)**: Bi-directional synchronization with GT SharePoint via `rclone`.
 
 ---
@@ -26,8 +26,11 @@ finance/
 ├── price_scraper.py           # Multi-vendor scraper (Amazon, McMaster, DigiKey)
 ├── share_a_cart.py            # Share-A-Cart API integration & link generator
 ├── spreadsheet_utils.py       # Robust sheet reader, column normalizer, link writer
-├── review_server.py           # Local HTTP server for review.html & Excel sync
-├── review.html                # Side-by-side card visual inspection interface
+├── screenshot_capture.py     # Full-page evidence capture and separate CAPTCHA diagnostics
+├── purchase_cart.py          # Actual-cart preparation and pre-upload revalidation
+├── purchase_validation.py    # Decimal totals and Amazon quantity/price reconciliation
+├── engage_fields.py          # Label-associated custom form fields; no Description fallback
+├── vendor_payee.py           # Official vendor payee defaults and contact discovery
 ├── FY27_Bills_Budget.xlsx     # Local mirror of SharePoint master workbook
 ├── tests/                     # Comprehensive pytest test suite (32 tests)
 ├── web-app/                   # Flask web dashboard (runs on team SIM PC)
@@ -95,7 +98,7 @@ mrg-finance report --fresh --order "<Order ID>"
 Whenever making changes to the CLI or package dependencies:
 ```bash
 # 1. Verify syntax across all modules
-uv run python -m py_compile mrg.py automation_purchase.py automation.py spreadsheet_utils.py share_a_cart.py
+uv run python -m compileall -q mrg_finance
 
 # 2. Run unit tests
 uv run pytest tests/

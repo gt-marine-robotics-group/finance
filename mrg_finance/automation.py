@@ -19,6 +19,9 @@ from selenium.common.exceptions import (
 )
 from selenium.webdriver.common.action_chains import ActionChains
 import getpass
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 # === CONFIG & PATHS ===
 CWD_XLSX = os.path.join(os.getcwd(), "FY27_Bills_Budget.xlsx")
@@ -59,9 +62,10 @@ def _find_screenshot(item_name, bill_title=""):
     if bill_title:
         dirs_to_check.append(os.path.join(SCREENSHOT_DIR, bill_title))
         dirs_to_check.append(os.path.join(SCREENSHOT_DIR, safe_bill))
-    dirs_to_check.append(SCREENSHOT_DIR)
+    else:
+        dirs_to_check.append(SCREENSHOT_DIR)
 
-    if os.path.isdir(SCREENSHOT_DIR):
+    if not bill_title and os.path.isdir(SCREENSHOT_DIR):
         for sub in os.listdir(SCREENSHOT_DIR):
             sp = os.path.join(SCREENSHOT_DIR, sub)
             if os.path.isdir(sp) and sp not in dirs_to_check:
@@ -355,7 +359,7 @@ def main():
         for m_name, m_url, _ in missing_items:
             print(f"   - {m_name} ('Link available' if m_url else 'No link')")
 
-        take_missing = input("\nCapture missing screenshots now via headless Chrome? (Y/n): ").strip().lower()
+        take_missing = input("\nCapture missing screenshots in Chrome? (Y/n): ").strip().lower()
         if take_missing in ("", "y", "yes"):
             items_to_capture = missing_items
     else:
@@ -364,12 +368,11 @@ def main():
             items_to_capture = existing_items
 
     if items_to_capture:
-        print(f"\n🚀 Launching headless Chrome to capture {len(items_to_capture)} screenshot(s)...")
+        print(f"\nLaunching Chrome to capture {len(items_to_capture)} screenshot(s); solve CAPTCHAs when prompted.")
         from selenium.webdriver.chrome.options import Options
         from selenium.webdriver.chrome.service import Service
 
         c_opts = Options()
-        c_opts.add_argument("--headless=new")
         c_opts.add_argument("--window-size=1920,1080")
         c_opts.add_argument("--no-sandbox")
         c_opts.add_argument("--disable-dev-shm-usage")
@@ -387,11 +390,12 @@ def main():
                     continue
                 print(f"   📸 Capturing '{m_name}'...", end=" ", flush=True)
                 try:
-                    c_driver.get(m_url)
+                    from mrg_finance.screenshot_capture import navigate_for_evidence, capture_evidence
+                    navigate_for_evidence(c_driver, m_url)
                     time.sleep(2)
                     import price_scraper
                     price_scraper.dismiss_popups_and_interstitials(c_driver)
-                    c_driver.save_screenshot(shot_path)
+                    capture_evidence(c_driver, shot_path, interactive=True)
                     print(f"✅ Saved ({os.path.basename(shot_path)})")
                 except Exception as err:
                     print(f"❌ Failed: {err}")
@@ -402,38 +406,7 @@ def main():
         except Exception as chrome_err:
             print(f"⚠️ Could not start Chrome for screenshots: {chrome_err}")
 
-    # Launch Side-by-Side Review GUI (optional)
-    skip_review = any(arg in sys.argv for arg in ["--no-review", "--skip-review"])
-    if not skip_review:
-        open_gui = input("\n🖥️  Open interactive side-by-side review GUI? [y/N]: ").strip().lower()
-        if open_gui in ("y", "yes"):
-            try:
-                from automation_screenshots import generate_review_html, find_screenshots_for_item, parse_price, REVIEW_HTML
-                review_data = []
-                for _, row in bill_items_df.iterrows():
-                    item_name = str(row.get("Item Name", "")).strip()
-                    url = str(row.get("Link", "")).strip()
-                    csv_cost = str(row.get("Cost", "")).strip()
-                    old_shot, new_shot = find_screenshots_for_item(BILL_NO, item_name)
-                    parsed = parse_price(csv_cost)
-                    status = "needs_review" if old_shot and new_shot else ("ok" if new_shot else "failed")
-                    review_data.append({
-                        "item_name": item_name, "url": url, "csv_cost": csv_cost,
-                        "scraped_price": f"${parsed:.2f}" if parsed else "", "parsed_price": parsed,
-                        "confidence": "high", "screenshot": os.path.basename(new_shot) if new_shot else None,
-                        "old_screenshot": old_shot, "new_screenshot": new_shot, "status": status,
-                    })
-                generate_review_html(review_data, BILL_NO, REVIEW_HTML)
-                from review_server import launch_review_server_and_browser
-                launch_review_server_and_browser(REVIEW_HTML)
-                input("\n   Press Enter after reviewing & saving prices on the review page → ")
-            except Exception as ex:
-                print(f"  ⚠️ Review GUI notice: {ex}")
-        else:
-            print("  ⏩ Skipped review page generation.")
-    else:
-        print("  ⏩ Skipped review page generation (--no-review).")
-    print("   Verify screenshots and prices on side-by-side review cards before proceeding.")
+    print(f"Review the workbook and screenshots in {os.path.abspath(SCREENSHOT_DIR)} before proceeding.")
 
     del _df_temp, _titles
 

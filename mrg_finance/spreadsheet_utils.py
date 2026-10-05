@@ -114,7 +114,14 @@ def get_col_val(row_dict: dict, canonical_key: str, default: str = "") -> str:
     # 2. Substring match fallback
     for alias in aliases:
         for k, v in norm_row.items():
-            if alias in k:
+            # Don't read a different known column just because it contains a
+            # short alias: Item -> Bill Item ID, Cost -> Total Cost, Link ->
+            # Share-A-Cart Link. Parenthesized header hints still work.
+            base_header = re.sub(r"\s*\(.*\)\s*$", "", k).strip()
+            if any(base_header in other_aliases for key, other_aliases in COLUMN_ALIASES.items()
+                   if key != canonical_key):
+                continue
+            if re.search(r"(?<!\w)" + re.escape(alias) + r"(?!\w)", k):
                 return clean_str(v)
     return default
 

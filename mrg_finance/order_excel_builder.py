@@ -32,7 +32,7 @@ def generate_order_budget_vs_quoted_excel(
     # Group items by bill_no
     bills_grouped = {}
     for r in requests_to_submit:
-        b_no = str(r.get("bill_no") or "376851").strip()
+        b_no = str(r.get("bill_no") or "Unverified").strip()
         bills_grouped.setdefault(b_no, []).append(r)
 
     wb = openpyxl.Workbook()
@@ -110,16 +110,16 @@ def generate_order_budget_vs_quoted_excel(
             if not loc and sec_cache:
                 import engage_bill_lookup
                 loc = engage_bill_lookup.find_best_item_match(item_name, sec_cache)
-            sec_line = loc.get("section_line_number") if loc else None
+            sec_line = r.get("resolved_line_id") or (loc.get("section_line_number") if loc else None)
             line_str = f"Line {sec_line or global_line_counter}"
             global_line_counter += 1
 
-            sec_name = str(loc.get("section") or r.get("source_bill_title") or "B03 - General Inventoried Goods").strip() if loc else "B03 - General Inventoried Goods"
+            sec_name = str(r.get("resolved_section") or (loc.get("section") if loc else None) or "Unverified section").strip()
             qty = int(r.get("quantity", 1))
             alloc_cost = float(r.get("cost", 0.0))
 
-            live_val = None
-            if scraped_results:
+            live_val = r.get("quoted_unit_cost")
+            if live_val is None and scraped_results:
                 if item_name in scraped_results:
                     live_val = scraped_results[item_name]
                 else:

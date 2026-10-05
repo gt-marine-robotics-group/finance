@@ -34,7 +34,6 @@ from mrg_finance import (
     automation,
     automation_purchase,
     automation_screenshots,
-    review_server,
     cli,
 )
 
@@ -564,7 +563,7 @@ def test_simulated_purchase_request_workflow_with_overrun_and_overflow(ground_tr
     # 7. Share-A-Cart Normalization & Persistence
     test_cart_code = "ABC98765"
     normalized_cart = share_a_cart.normalize_share_a_cart_url(test_cart_code)
-    assert normalized_cart == "https://shareacart.net/get/ABC98765"
+    assert normalized_cart == "https://share-a-cart.com/get/ABC98765"
     assert share_a_cart.normalize_share_a_cart_url("https://shareacart.net/get/XYZ") == "https://shareacart.net/get/XYZ"
     assert share_a_cart.normalize_share_a_cart_url("") is None
     
@@ -604,6 +603,11 @@ def test_simulated_web_app_dashboard_workflow(ground_truth_workbook, monkeypatch
     monkeypatch.setenv("FINANCE_XLSX_PATH", ground_truth_workbook)
     
     from app import create_app
+    import xlsx_manager
+    monkeypatch.setattr(xlsx_manager, "LOCAL_XLSX", ground_truth_workbook)
+    monkeypatch.setattr(xlsx_manager, "_get_graph_token", lambda: None)
+    monkeypatch.setattr(xlsx_manager, "sync_pull", lambda **kwargs: False)
+    xlsx_manager.invalidate_all_caches()
     app = create_app()
     app.config["TESTING"] = True
     
@@ -659,10 +663,10 @@ def test_packaging_and_cli_dispatch_integrity():
     assert hasattr(cli, "main"), "mrg_finance.cli must expose main()"
     
     # 3. Verify CLI commands exist in dispatch map
-    expected_cmds = {"report", "screenshots", "review", "bill-request", "purchase", "price-check", "doctor"}
+    expected_cmds = {"report", "screenshots", "bill-request", "purchase", "price-check", "doctor"}
     
     # Check CLI functions exist
-    for cmd in ["cmd_report", "cmd_screenshots", "cmd_review", "cmd_bill_request", "cmd_purchase", "cmd_price_check", "cmd_doctor"]:
+    for cmd in ["cmd_report", "cmd_screenshots", "cmd_bill_request", "cmd_purchase", "cmd_price_check", "cmd_doctor"]:
         assert hasattr(cli, cmd), f"CLI command function {cmd} must exist"
 
 
@@ -681,8 +685,8 @@ def test_purchase_uncalculated_formula_fallback_and_webdriver_scope(tmp_path, mo
     ws_bills = wb.active
     ws_bills.title = "Bills"
     ws_bills.append(["FY27 BUDGET BILLS"])
-    ws_bills.append(["Bill Item ID", "Bill No.", "Bill Title", "Item Name", "Vendor", "Cost", "Quantity", "Total Cost", "Status"])
-    ws_bills.append(["501", "376851", "RobotX", "Brushless Thruster ESC", "Blue Robotics", 119.50, 2, 239.00, "Approved"])
+    ws_bills.append(["Bill Item ID", "Bill No.", "Bill Title", "Item Name", "Vendor", "Cost", "Quantity", "Total Cost", "Status", "Link"])
+    ws_bills.append(["501", "376851", "RobotX", "Brushless Thruster ESC", "Blue Robotics", 119.50, 2, 239.00, "Approved", "https://bluerobotics.com/store/test-esc"])
 
     ws_orders = wb.create_sheet(title="Ordering")
     ws_orders.append(["TOTALS", "", "", "", "", "", "", "", ""])
@@ -727,4 +731,3 @@ def test_purchase_uncalculated_formula_fallback_and_webdriver_scope(tmp_path, mo
     with pytest.raises(SystemExit) as exc_info_auto:
         automation_purchase.main()
     assert exc_info_auto.value.code == 0
-

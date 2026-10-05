@@ -4,7 +4,7 @@ Automated financial workflows, Engage submissions, and spreadsheet integrations
 for the Georgia Tech Marine Robotics Group.
 """
 
-__version__ = "0.2.7"
+__version__ = "0.2.11"
 
 from . import (
     spreadsheet_utils,
@@ -15,7 +15,6 @@ from . import (
     automation,
     automation_purchase,
     automation_screenshots,
-    review_server,
     cli,
 )
 
@@ -28,6 +27,5 @@ __all__ = [
     "automation",
     "automation_purchase",
     "automation_screenshots",
-    "review_server",
     "cli",
 ]

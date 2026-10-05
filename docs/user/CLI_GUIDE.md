@@ -94,13 +94,14 @@ All commands support `--fresh` to pull the latest workbook and screenshots via `
 | `mrg-finance report --fresh --order "<Order ID>"` | Generates `Budget_vs_Quoted_Detail_<Order ID>.xlsx` and `.csv` without launching browser automation. |
 | `mrg-finance price-check --fresh --bill "<Bill Title>"` | Scrapes live vendor prices for all items in a bill and compares against budgeted amounts. |
 | `mrg-finance screenshots --fresh --bill "<Bill Title>"` | Takes headless screenshots for missing item links and uploads to SharePoint. |
-| `mrg-finance review --bill "<Bill Title>"` | Launches local split-card review GUI (`http://localhost:8321`) to visually diff screenshots and update prices. |
 
 ### Command Flags:
 - `--bill "Exact Bill Title"`: Skip the interactive menu and target a specific bill directly.
 - `--order "YYMMDD_vendor_gtusername"`: Skip the interactive menu and target a specific order directly.
-- `--no-review`: Skip the optional web GUI and proceed immediately to form submission.
-- `--excel-path <path>`: Explicit override path to the master `.xlsx` workbook.
+- `purchase --cart-source personal`: Sign into your vendor account in a dedicated Chrome profile and share the actual cart.
+- `screenshots --interactive`: Show Chrome and pause for CAPTCHA solving. Headless runs save challenge diagnostics and notify you in the terminal.
+- `--no-review`: Ignored compatibility flag. Review prices in the spreadsheet; the side-by-side GUI has been removed.
+- `FINANCE_XLSX_PATH=/path/to/workbook.xlsx`: Override the workbook path for any CLI command. The underlying automation scripts also accept `--excel-path`.
 
 ---
 

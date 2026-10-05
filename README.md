@@ -134,7 +134,6 @@ The CLI automatically searches for `FY27_Bills_Budget.xlsx` in this priority ord
    mrg-finance doctor
    mrg-finance price-check --bill "Marine Robotics Group RobotX Testing Equipment Bill"
    mrg-finance report --order 260811_amazon_awu335
-   mrg-finance review --bill "Marine Robotics Group RobotX Testing Equipment Bill"
    ```
 4. When finished, upload the edited spreadsheet back to SharePoint via the web interface (or let your desktop OneDrive client sync it).
 
@@ -143,7 +142,6 @@ The CLI automatically searches for `FY27_Bills_Budget.xlsx` in this priority ord
   - `mrg-finance doctor` (validates formulas, columns, and costs using local Python libraries).
   - `uv run pytest` (runs the 8 simulation workflows offline against in-memory mock data).
   - `mrg-finance report --order <ID>` (generates formatted `.xlsx` and `.csv` reports; automatically falls back to budgeted baseline unit costs if vendor sites are unreachable).
-  - `mrg-finance review --bill "..."` (serves the review interface locally at `http://127.0.0.1:8321` using local screenshots and data).
   - Local spreadsheet editing in Microsoft Excel, LibreOffice, or Numbers.
 * **What requires internet**:
   - Dynamic scraping of live vendor prices (`price-check`, `screenshots`) and CampusLabs Engage web submissions (`bill-request`, `purchase`). Prepare everything offline, then submit once connected.
@@ -169,7 +167,7 @@ rclone config delete onedrive
 # Or delete the config file entirely: rm -f ~/.config/rclone/rclone.conf
 
 # 5. Clean local virtual environments, test caches, and build artifacts
-rm -rf .venv build dist *.egg-info __pycache__ mrg_finance/__pycache__ .pytest_cache review.html
+rm -rf .venv build dist *.egg-info __pycache__ mrg_finance/__pycache__ .pytest_cache
 ```
 
 ---
@@ -189,7 +187,7 @@ uv run pytest
 4. **Engage Bill Line Lookup**: Automated bill matching, budget category identification, and dropdown line indexing.
 5. **Budget vs Quoted Report Compilation**: Multi-tab formatted Excel sheet (`.xlsx`) and `.csv` generation with executive KPI blocks.
 6. **Cart Generation**: 1-Click Amazon Multi-Item Cart URL and Share-A-Cart JSON payload building.
-7. **Human Review Server**: Side-by-side screenshot verification, price adjustment, and overrun calculations.
+7. **Spreadsheet Review**: Approved versus quoted price reports with cart reconciliation.
 8. **Web App Dashboard**: Multi-sheet aggregation and vendor allocation visualization.
 
 ---
@@ -203,10 +201,9 @@ All commands accept `--fresh` (`-f`) when `rclone` is configured to sync directl
 | `mrg-finance doctor [--fresh]` | Diagnostics: validates formulas, missing bill numbers, blank URLs, and non-positive costs. *(Works offline without `--fresh`)*. |
 | `mrg-finance price-check [--bill <TITLE>] [--cart]` | Scrapes live vendor prices, reports price deltas, and generates 1-Click Amazon multi-item cart links. |
 | `mrg-finance report --order <ORDER_ID>` | Compiles formatted Budget vs Quoted Excel (`.xlsx`) & `.csv` comparison reports. *(Works offline)*. |
-| `mrg-finance review [--bill <TITLE>]` | Opens local web review UI (`http://127.0.0.1:8321`) to inspect screenshots and prices. *(Works offline)*. |
-| `mrg-finance screenshots [--bill <TITLE>] [--fresh]` | Captures full-page vendor screenshots and scrapes prices for items in a bill. |
+| `mrg-finance screenshots [--bill <TITLE>] [--fresh] [--interactive]` | Captures vendor screenshots and a CSV price audit; records CAPTCHAs or pauses to solve them. |
 | `mrg-finance bill-request [--bill <TITLE>] [--fresh]` | Automates Engage funding bill submission and screenshot attachments. |
-| `mrg-finance purchase [--order <ORDER_ID>] [--fresh]` | Price audits, cart generation, Budget vs Quoted reports, and Engage purchase submission. |
+| `mrg-finance purchase [--order <ORDER_ID>] [--fresh] [--cart-source personal]` | Verifies cart quantities and totals, builds comparison reports, and fills Engage bill and payee fields. |
 
 ---
 
@@ -246,7 +243,9 @@ Run the automated purchasing assistant:
 ```bash
 mrg-finance purchase --fresh
 ```
-This audits live vendor prices, captures cart screenshots, builds the Budget vs Quoted comparison report (`.xlsx`/`.csv`), generates vendor carts, and fills the Engage request form.
+This verifies the real cart quantities and prices, captures screenshots, builds the Budget vs Quoted comparison report (`.xlsx`/`.csv`), and fills the Engage request form. The requested amount includes shipping/tax and must match the verified vendor total before attachments upload. Review the spreadsheet and submit manually in Engage.
+
+Use `mrg-finance purchase --order <ORDER_ID> --cart-source personal` to sign into your own Amazon account in a dedicated Chrome profile and create a Share-A-Cart link from the actual cart. DigiKey uses the Share-A-Cart Everything extension and manual cart confirmation. See the [purchase guide](docs/user/PURCHASE_GUIDE.md) for CAPTCHA handling, payee lookup, field mapping, and reconciliation. The side-by-side review GUI has been removed.
 
 *(If submitting manually without the CLI: take a vendor cart screenshot, open [Create Purchase Request in Engage](https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/Finance/CreatePurchaseRequest), attach your cart screenshot and price comparison, and record the Engage URL in Col V and cart link in Col U).*
 
@@ -291,6 +290,7 @@ Selenium automatically manages the appropriate `chromedriver` binary matching yo
 ---
 
 ## 📚 Detailed Reference Guides
+- [Video Recording Runbook](docs/user/VIDEO_RUNBOOK.md) — Recording sequence, narration, and setup notes for installation, funding bills, purchases, and optional feature clips.
 - [Bill Request Automation Guide](docs/user/BILL_REQUEST_GUIDE.md) — Step-by-step interactive walkthrough for `mrg-finance bill-request`, GT Duo MFA, form autofill, and quote screenshots.
 - [Purchase Request Automation Guide](docs/user/PURCHASE_GUIDE.md) — Step-by-step interactive walkthrough for `mrg-finance purchase`, price auditing, cart creation, Engage line lookups, and mandatory attachments (`cart.png` + Excel detail report).
 - [Spreadsheet & Manual Workflow Guide](docs/user/WORKFLOW_GUIDE.md) — Comprehensive schema, formulas, column reference, and manual Engage walkthrough.
