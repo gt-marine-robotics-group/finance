@@ -117,7 +117,6 @@ def generate_order_budget_vs_quoted_excel(
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
     curr_row = 5
-    global_line_counter = 1
 
     sub_row_indices = []
     bill_keys = list(bills_grouped.keys())
@@ -145,10 +144,9 @@ def generate_order_budget_vs_quoted_excel(
                 import engage_bill_lookup
                 loc = engage_bill_lookup.find_best_item_match(item_name, sec_cache)
             sec_line = r.get("resolved_line_id") or (loc.get("section_line_number") if loc else None)
-            line_str = "Pending lookup" if preliminary and not sec_line else f"Line {sec_line or global_line_counter}"
-            global_line_counter += 1
+            line_str = f"Line {sec_line}" if sec_line else "Pending lookup" if preliminary else "Unverified line"
 
-            sec_name = str(r.get("resolved_section") or (loc.get("section") if loc else None) or "Unverified section").strip()
+            sec_name = str(r.get("resolved_section") or (loc.get("section") if loc else None) or r.get("budget_section") or "Unverified section").strip()
             qty = int(r.get("quantity", 1))
             alloc_cost = float(r.get("cost", 0.0))
 
@@ -268,26 +266,21 @@ def generate_order_budget_vs_quoted_excel(
 
 
 def main():
+    from mrg_finance.engage_bill_lookup import funding_kind_from_title
+    from mrg_finance.cli import get_xlsx_path
     import argparse
     import spreadsheet_utils
     import price_scraper
 
     parser = argparse.ArgumentParser(description="Generate Budget vs Quoted Full Detail Excel and CSV comparison reports.")
     parser.add_argument("--order", required=True, help="Order ID (e.g. 260811_amazon_awu335)")
-    parser.add_argument("--excel-path", default="FY27_Bills_Budget.xlsx", help="Path to master Excel file")
+    parser.add_argument("--excel-path", help="Path to master Excel file; otherwise use CLI workbook discovery")
     parser.add_argument("--skip-scrape", action="store_true", help="Skip live web price scraping and use spreadsheet allocations")
     args = parser.parse_args()
 
     order_id = args.order
-    excel_path = args.excel_path
-    cwd_path = os.path.join(os.getcwd(), "FY27_Bills_Budget.xlsx")
-    repo_path = os.path.expanduser("~/mrg/finance/FY27_Bills_Budget.xlsx")
-
-    if os.path.exists(cwd_path):
-        excel_path = cwd_path
-    elif os.path.exists(repo_path):
-        excel_path = repo_path
-    elif not os.path.exists(excel_path):
+    excel_path = args.excel_path or get_xlsx_path()
+    if not os.path.exists(excel_path):
         print(f"❌ Master spreadsheet not found at {excel_path}")
         return
 
@@ -296,6 +289,7 @@ def main():
     bill_item_map = {spreadsheet_utils.get_col_val(r.to_dict(), "bill_item_id"): r.to_dict() for _, r in df_bills.iterrows() if spreadsheet_utils.get_col_val(r.to_dict(), "bill_item_id")}
 
     df_orders = spreadsheet_utils.read_sheet_robust(wb_in, ["Ordering", "Orders", "OrderT"])
+    wb_in.close()
     oid_col = next((c for c in df_orders.columns if "order" in str(c).lower()), "Order ID")
 
     order_rows = [r for _, r in df_orders.iterrows() if str(r.get(oid_col, "")).strip() == order_id]
@@ -309,9 +303,9 @@ def main():
     for i, row in enumerate(order_rows, 1):
         b_id = spreadsheet_utils.get_col_val(row.to_dict(), "bill_item_id")
         b_row = bill_item_map.get(b_id, {})
-        b_no = spreadsheet_utils.get_col_val(b_row, "bill_no") or spreadsheet_utils.get_col_val(row.to_dict(), "bill_no") or "376851"
+        b_no = spreadsheet_utils.get_col_val(b_row, "bill_no") or spreadsheet_utils.get_col_val(row.to_dict(), "bill_no") or ""
         item_name = spreadsheet_utils.get_col_val(row.to_dict(), "item_name") or spreadsheet_utils.get_col_val(b_row, "item_name")
-        sec = spreadsheet_utils.get_col_val(b_row, "budget_section") or "B03 - General Inventoried Goods"
+        sec = spreadsheet_utils.get_col_val(b_row, "budget_section") or spreadsheet_utils.get_col_val(row.to_dict(), "budget_section") or ""
         link = spreadsheet_utils.get_col_val(row.to_dict(), "link") or spreadsheet_utils.get_col_val(b_row, "link")
         cost = spreadsheet_utils.safe_float(b_row.get("Cost", row.to_dict().get("Allocation", 0)))
         qty = spreadsheet_utils.safe_int(row.to_dict().get("Quantity", 1))
@@ -330,6 +324,9 @@ def main():
             "total": cost * qty,
             "bill_no": b_no,
             "bill_item_id": b_id,
+            "budget_section": sec,
+            "funding_kind": funding_kind_from_title(
+                spreadsheet_utils.get_col_val(b_row, "bill_title") or spreadsheet_utils.get_col_val(row.to_dict(), "bill_title")),
             "link": link
         })
 

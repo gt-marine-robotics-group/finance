@@ -644,7 +644,7 @@ def test_other_payee_uses_official_structured_contact(monkeypatch):
 def test_report_uses_verified_line_and_quote_instead_of_excel_id(tmp_path):
     item = order()[0]
     item.update(bill_no="376582", bill_item_id="999", resolved_line_id=4,
-                resolved_section="B06", quoted_unit_cost=12.5)
+                resolved_section="B06", budget_section="B03", quoted_unit_cost=12.5)
     xlsx, _ = order_excel_builder.generate_order_budget_vs_quoted_excel("test", [item], output_dir=str(tmp_path))
     wb = openpyxl.load_workbook(xlsx)
     row = list(wb.active.iter_rows(min_row=5, max_row=5, values_only=True))[0]
@@ -899,7 +899,7 @@ def test_purchase_upload_gate_uses_real_cart_amount(monkeypatch, tmp_path, capsy
         return MagicMock()
     driver.find_element.side_effect = find_element
     monkeypatch.setattr(automation_purchase.webdriver, "Chrome", lambda **kw: driver)
-    monkeypatch.setattr(automation_purchase.WebDriverWait, "until", lambda *a: MagicMock())
+    monkeypatch.setattr(automation_purchase, "WebDriverWait", lambda *a, **kw: MagicMock())
     monkeypatch.setattr(automation_purchase.time, "sleep", lambda *a: None)
     monkeypatch.setattr(automation_purchase, "lookup_bill_item_locations", lambda *a: {"Part": {"section_line_number": 4, "section": "B06", "funding_kind": funding_kind}})
     def recheck(*a):

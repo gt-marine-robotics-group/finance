@@ -140,6 +140,123 @@ def test_comparison_identifies_budget_funding(tmp_path):
     workbook.close()
 
 
+def test_changed_controls_are_relocated_and_multiline_input_never_sends_enter():
+    from selenium.common.exceptions import StaleElementReferenceException
+    driver = MagicMock()
+    state = {"field": control("refs"), "replaced": False}
+    old = state["field"]
+    old.tag_name = "input"
+
+    def replace_on_clear():
+        state["field"] = control("refs")
+        state["field"].tag_name = "input"
+        state["replaced"] = True
+        old.get_attribute.side_effect = StaleElementReferenceException()
+
+    old.clear.side_effect = replace_on_clear
+    result = engage_fields.fill_and_verify(driver, lambda: state["field"], "Bill 1, Line 1\nBill 2, Line 3")
+    assert state["replaced"]
+    assert result["value"] == "Bill 1, Line 1; Bill 2, Line 3"
+    old.send_keys.assert_not_called()
+    state["field"].send_keys.assert_called_once_with("Bill 1, Line 1; Bill 2, Line 3")
+    # A same-page retry should not erase successfully entered answers.
+    engage_fields.fill_and_verify(driver, lambda: state["field"], result["value"])
+    old.clear.assert_called_once()
+    state["field"].clear.assert_not_called()
+
+
+def test_report_shows_spreadsheet_section_before_lookup_without_inventing_line(tmp_path):
+    rows = [{"bill_no": "344042", "item_name": "Part", "quantity": 2, "cost": 10,
+             "budget_section": "B06 - Non-Inventoried Items", "bill_item_id": "999"}]
+    path, _ = order_excel_builder.generate_order_budget_vs_quoted_excel("order", rows, output_dir=str(tmp_path))
+    wb = openpyxl.load_workbook(path)
+    assert wb.active["D5"].value == "B06 - Non-Inventoried Items"
+    assert wb.active["A5"].value == "Unverified line"
+    wb.close()
+
+
+def test_standalone_report_passes_each_linked_bill_section_and_honors_explicit_path(monkeypatch, tmp_path):
+    path = tmp_path / "custom-master.xlsx"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Bills"
+    ws.append(["Bill Item ID", "Bill No.", "Bill Title", "Item Name", "Budget Section", "Cost", "Link"])
+    ws.append([1, 344042, "FY27 Budget", "Part A", "B06 - Non-Inventoried Items", 10, ""])
+    ws.append([2, 344042, "FY27 Budget", "Part B", "B03 - General Inventoried Goods", 20, ""])
+    ws = wb.create_sheet("Ordering")
+    ws.append(["Order ID", "Bill Item ID", "Quantity"])
+    ws.append(["section-test", 1, 2])
+    ws.append(["section-test", 2, 1])
+    wb.save(path)
+    wb.close()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("sys.argv", ["report", "--order", "section-test", "--excel-path", str(path), "--skip-scrape"])
+    order_excel_builder.main()
+    report = openpyxl.load_workbook(tmp_path / "screenshots/section-test/Budget_vs_Quoted_Detail_section-test.xlsx")
+    assert report.active["D5"].value == "B06 - Non-Inventoried Items"
+    assert report.active["D6"].value == "B03 - General Inventoried Goods"
+    assert report.active["B5"].value == "Budget 344042"
+    assert report.active["A5"].value == "Unverified line"
+    report.close()
+
+
+@pytest.mark.skipif(os.environ.get("MRG_RUN_BROWSER_TESTS") != "1", reason="Opt-in local Chrome DOM regression")
+def test_real_dom_multiline_bill_reference_and_replaced_controls_do_not_submit(tmp_path):
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    options = Options()
+    options.add_argument("--headless=new")
+    driver = webdriver.Chrome(options=options)
+    html = '''<form id="request">
+      <label for="Subject">Subject</label><input id="Subject" value="Amazon purchase">
+      <label for="Description">Description</label><textarea id="Description">https://share-a-cart.com/get/NOF2A</textarea>
+      <label for="RequestedAmount">Requested Amount</label><input id="RequestedAmount" type="number">
+      <div><label for="refs">What is the Budget/Bill # and Request Line #?</label><input id="refs"></div>
+      <div><input id="bill-check" type="checkbox" checked><label for="bill-check">SGA Bill</label>
+        <textarea id="answerTextBox-bill-check-free"></textarea></div>
+      <section><h2>Payee Information</h2>'''
+    for key in ("PayeeFirstName", "PayeeLastName", "PayeeStreet", "PayeeCity", "PayeeState", "PayeeZipCode"):
+        html += f'<label for="{key}">{key}</label><input id="{key}">'
+    html += '''</section><label for="email">Payee Email:</label><input id="email">
+      <button type="submit">Submit</button></form><script>
+      window.submissions=0; window.redraws=0;
+      const form=document.querySelector('form');
+      form.addEventListener('submit', e => { e.preventDefault(); window.submissions++; });
+      form.addEventListener('change', e => {
+        // Blur/clear replaces sibling inputs, like conditional Engage questions.
+        for (const field of [...form.querySelectorAll('input,textarea')]) {
+          if (field===e.target) continue;
+          const replacement=field.cloneNode(true); replacement.value=field.value;
+          field.replaceWith(replacement);
+        }
+        window.redraws++;
+      });</script>'''
+    refs = "Bill 376582, B06, Line 4\nBill 376582, B03, Line 2"
+    try:
+        driver.get("data:text/html," + quote(html))
+        # Reproduce the previous Enter-key behavior in a local, non-submitting form.
+        driver.find_element(By.ID, "refs").send_keys(refs)
+        assert driver.execute_script("return window.submissions") > 0
+        driver.execute_script("document.getElementById('refs').value='';window.submissions=0;")
+        result = engage_fields.fill_purchase_fields(driver, amount=25, cart_total=25,
+            bill_refs=refs, funding_lines={"bill": "$10, Line 4\n$15, Line 2"},
+            payee=lookup_vendor_payee("DigiKey", ""))
+        assert result == "25.00"
+        assert driver.find_element(By.ID, "refs").get_attribute("value") == refs.replace("\n", "; ")
+        assert driver.find_element(By.ID, "answerTextBox-bill-check-free").get_attribute("value") == "$10, Line 4\n$15, Line 2"
+        assert driver.find_element(By.ID, "PayeeFirstName").get_attribute("value") == "Digi-Key"
+        assert driver.find_element(By.ID, "PayeeCity").get_attribute("value") == "Thief River Falls"
+        assert driver.execute_script("return window.submissions") == 0
+        assert driver.execute_script("return window.redraws") > 0
+        # Replace the amount control after filling, then read the fresh value.
+        driver.execute_script("const field=document.getElementById('RequestedAmount');const fresh=field.cloneNode(true);fresh.value=field.value;field.replaceWith(fresh);")
+        assert engage_fields.read_requested_amount(driver) == "25.00"
+        assert driver.find_element(By.ID, "Subject").get_attribute("value") == "Amazon purchase"
+        assert driver.find_element(By.ID, "Description").get_attribute("value").endswith("NOF2A")
+    finally:
+        driver.quit()
+
+
 @pytest.mark.skipif(os.environ.get("MRG_RUN_BROWSER_TESTS") != "1", reason="Opt-in local Chrome DOM regression")
 def test_real_dom_budget_checkboxes_and_native_payee_preserve_existing_form(tmp_path, monkeypatch):
     from selenium import webdriver

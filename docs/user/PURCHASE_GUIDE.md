@@ -78,6 +78,8 @@ After GT sign-in and Duo MFA, the CLI looks up each item's line number and secti
 
 Select the Category/Account and the prompted SGA Budget or SGA Bill funding option in Engage. The CLI checks the selected checkbox and fills its own write-in answer; an unchecked funding option is left untouched. An order funded by both sources can fill both selected options. The CLI matches controls through labels, ARIA references, or a local question container and checks that values were retained:
 
+Multiple item references use semicolons in single-line answers and line breaks in text areas. The CLI does not send Enter keys into single-line fields, which could submit an incomplete form. Controls are re-found during filling and before reading the requested amount, so form updates do not reuse stale element references. Brief control replacement is retried automatically; persistent errors still pause in the same Chrome window.
+
 | Field | Content |
 | --- | --- |
 | Subject | `Marine Robotics Group <Vendor> Purchase Request <Date>` |
@@ -93,7 +95,7 @@ Missing fields, incorrect funding selections, and amount-verification errors pau
 
 ## Reports and submission
 
-The verified cart quote automatically fills the comparison workbook and CSV before GT credentials are requested. A Cart Reconciliation tab includes merchandise, shipping, tax, displayed total, and whether the vendor labels charges as estimated. Funding line/section references are marked pending until Engage lookup; close the workbook before continuing so they can be completed. Quote prices are written to this comparison workbook; the approved workbook remains the budget baseline. Product and shared-cart links still save to Ordering.
+The verified cart quote automatically fills the comparison workbook and CSV before GT credentials are requested. A Cart Reconciliation tab includes merchandise, shipping, tax, displayed total, and whether the vendor labels charges as estimated. The preview shows each item's spreadsheet budget section; Engage line numbers remain pending until lookup. Verified Engage sections replace spreadsheet sections in the completed report. Close the workbook before continuing so these references can be updated. Quote prices are written to this comparison workbook; the approved workbook remains the budget baseline. Product and shared-cart links still save to Ordering.
 
 At **Continue to Engage with this verified amount? [Y/n]**, Enter opens/fills Engage and completes the funding references; `n` stops with the comparison workbook saved. Final request submission remains manual.
 
@@ -108,3 +110,5 @@ Evidence is stored under `screenshots/<Order ID>/`:
 The screenshot and Excel report are uploaded only after the field and total checks pass. Review the form, complete any remaining required fields, sign, and submit in Engage. Paste the resulting Engage URL if it cannot be detected. The CLI writes cart and request links to every matching Ordering row and reports whether SharePoint synchronization succeeded.
 
 To regenerate an offline comparison without opening Engage, run `mrg-finance report --order <Order ID>`. Offline reports may use allocation fallbacks; they do not count as verified purchase quotes.
+
+Standalone reports take the category from the linked Bills row's **Budget Section**, with Ordering as a fallback. They do not invent an Engage line number from the Excel Bill Item ID or report row position: an unavailable line is labeled **Unverified line** until a purchase lookup supplies it.

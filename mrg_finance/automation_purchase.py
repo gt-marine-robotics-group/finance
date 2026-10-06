@@ -32,7 +32,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 from mrg_finance.purchase_cart import prepare_cart, recheck_cart
 from mrg_finance.purchase_validation import money, require_matching_total
-from mrg_finance.engage_fields import fill_purchase_fields, run_engage_step, save_engage_diagnostic
+from mrg_finance.engage_fields import fill_purchase_fields, read_requested_amount, run_engage_step, save_engage_diagnostic
 from mrg_finance.vendor_payee import lookup_vendor_payee, vendor_key
 from mrg_finance.screenshot_capture import save_page_screenshot
 from mrg_finance.purchase_sources import (
@@ -301,6 +301,7 @@ def main():
             "engage_line_ref": None,
             "bill_item_id": b_id,
             "source_bill_title": source_bill_title,
+            "budget_section": spreadsheet_utils.get_col_val(b_row, "budget_section") or spreadsheet_utils.get_col_val(r_dict, "budget_section") or "",
             "funding_kind": funding_kind,
             "link": link,
             "ordering_row": r_dict["_ordering_row"],
@@ -594,31 +595,34 @@ def main():
             # Verify precise custom fields before attaching any documentation.
             expected_funding = " and ".join("SGA " + kind.title() for kind in funding_lines)
             input(f"Select the funding Category/Account and {expected_funding} option in Engage, then Enter: ")
-            amount_field = run_engage_step(driver, order_shot_dir, "Engage form filling", lambda: fill_purchase_fields(
+            run_engage_step(driver, order_shot_dir, "Engage form filling", lambda: fill_purchase_fields(
                 driver, amount=order_amount, cart_total=cart["total"],
                 bill_refs=order_bill_refs, payee=payee,
                 funding_lines=funding_lines,
             ))
             def verify_before_upload():
                 recheck_cart(cart, requests_to_submit)
-                require_matching_total(cart["total"], amount_field.get_attribute("value"))
-            run_engage_step(driver, order_shot_dir, "Cart/Engage amount verification", verify_before_upload)
+                current_amount = read_requested_amount(driver)
+                require_matching_total(cart["total"], current_amount)
+                return current_amount
+            verified_engage_amount = run_engage_step(driver, order_shot_dir, "Cart/Engage amount verification", verify_before_upload)
             # Add a reconciliation sheet so fees and total charged remain explicit.
             import openpyxl
             report = openpyxl.load_workbook(excel_detail_path)
             order_excel_builder.write_cart_reconciliation(
                 report, selected_order_id, cart, approved_allocation=grand_total,
-                engage_amount=money(amount_field.get_attribute("value")), payee=payee,
+                engage_amount=money(verified_engage_amount), payee=payee,
             )
             report.save(excel_detail_path)
             report.close()
             file_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
             if len(file_inputs) < 2:
                 raise RuntimeError("Two Engage attachment controls were not found; no files uploaded.")
-            for field, path in zip(file_inputs, (cart["screenshot"], excel_detail_path)):
+            for index, path in enumerate((cart["screenshot"], excel_detail_path)):
                 if not os.path.isfile(path):
                     raise RuntimeError(f"Required attachment missing: {path}")
-                field.send_keys(os.path.abspath(path))
+                # The first upload can replace the remaining form controls.
+                driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')[index].send_keys(os.path.abspath(path))
                 print(f"  Attached: {os.path.abspath(path)}")
 
             # PAUSE — let user review and submit manually
