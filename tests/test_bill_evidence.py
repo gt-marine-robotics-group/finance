@@ -156,7 +156,7 @@ def test_screenshot_main_filters_menu_retries_selection_and_audits_actual_items(
     from mrg_finance import screenshot_capture
     navigate = MagicMock()
     monkeypatch.setattr(screenshot_capture, "navigate_for_evidence", navigate)
-    monkeypatch.setattr("sys.argv", ["screenshots", "--excel-path", str(path)])
+    monkeypatch.setattr("sys.argv", ["screenshots", "--excel-path", str(path), "--headless"])
     answers = iter(["", "0", "99", "test bill"])
     monkeypatch.setattr("builtins.input", lambda p: next(answers))
     assert automation_screenshots.main() == 1  # Two real product rows need URLs.

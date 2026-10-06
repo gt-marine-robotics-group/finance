@@ -30,10 +30,11 @@ The image covers the **visible page**, not the entire scrolling document. The CL
 
 ## Default and fallback modes
 
-- `mrg-finance screenshots`: tries the existing Selenium capture first. If verification blocks it, offers to switch to regular Chrome for the bill.
-- `mrg-finance screenshots --interactive`: shows the Selenium page. At a challenge prompt, type `chrome` to switch to regular Chrome, Enter to recheck the current page, or `cancel` to stop that item.
+- `mrg-finance screenshots`: opens visible Selenium Chrome by default. At a challenge prompt, type `chrome` to switch to regular Chrome, Enter to recheck the current page, or `cancel` to stop that item.
+- `mrg-finance screenshots --interactive`: the same visible mode; the flag is retained for existing commands.
 - `mrg-finance screenshots --browser chrome`: starts directly in regular Chrome.
-- `mrg-finance screenshots --browser selenium`: keeps the previous capture mode without offering the extension fallback; add `--interactive` for visible Chrome.
+- `mrg-finance screenshots --browser selenium`: uses visible Selenium without offering the extension fallback.
+- `mrg-finance screenshots --headless --bill "<Bill Title>"`: runs without a visible browser or verification prompts. Supplying the bill also skips the selection menu. Blocked items are recorded as challenges in the audit and are not usable bill evidence. Use this for unattended capture; regular-Chrome mode requires a visible window.
 
 The on-demand screenshot step in `bill-request` also accepts `chrome` at a challenge prompt. You can instead capture first with `screenshots --browser chrome`; `bill-request` reuses valid evidence and does not require recapturing it.
 

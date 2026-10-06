@@ -136,13 +136,52 @@ def test_screenshot_auto_fallback_rechecks_regular_browser_and_saves_quote(scree
     monkeypatch.setattr(regular_chrome, "RegularChrome", lambda: regular)
     monkeypatch.setattr(automation_screenshots, "dismiss_popups", lambda d: None)
     monkeypatch.setattr(automation_screenshots, "extract_price_from_page", lambda *args: ("$100.00", "high"))
-    monkeypatch.setattr("builtins.input", lambda prompt: "")
+    monkeypatch.setattr("builtins.input", lambda prompt: "chrome" if "'chrome' for regular Chrome" in prompt else "")
     monkeypatch.setattr("sys.argv", ["screenshots", "--excel-path", str(screenshot_workbook), "--bill", "Test Bill"])
     assert automation_screenshots.main() == 1  # Fixture also has two invalid product URLs.
     assert validate_evidence(tmp_path / "shots/Test Bill/Part.png", source_url=URL)
     regular.get.assert_called_once_with(URL)
     controlled.quit.assert_called_once()
     regular.quit.assert_called_once()
+
+
+def test_screenshots_default_opens_visible_chrome(screenshot_workbook, monkeypatch):
+    chrome = MagicMock(return_value=browser())
+    monkeypatch.setattr(automation_screenshots.webdriver, "Chrome", chrome)
+    monkeypatch.setattr(automation_screenshots, "dismiss_popups", lambda d: None)
+    monkeypatch.setattr(automation_screenshots, "extract_price_from_page", lambda *args: ("$100.00", "high"))
+    monkeypatch.setattr("sys.argv", ["screenshots", "--excel-path", str(screenshot_workbook), "--bill", "Test Bill"])
+    assert automation_screenshots.main() == 1
+    assert "--headless=new" not in chrome.call_args.kwargs["options"].arguments
+
+
+def test_headless_challenge_is_audited_without_prompting_or_opening_regular_chrome(screenshot_workbook, monkeypatch, tmp_path):
+    driver = browser()
+    driver.find_element.return_value.text = "Verify you are human"
+    chrome = MagicMock(return_value=driver)
+    regular = MagicMock()
+    monkeypatch.setattr(automation_screenshots.webdriver, "Chrome", chrome)
+    monkeypatch.setattr(regular_chrome, "RegularChrome", regular)
+    monkeypatch.setattr(automation_screenshots, "dismiss_popups", lambda d: None)
+    def unexpected_prompt(prompt):
+        raise AssertionError("Headless capture must not prompt for CAPTCHA or extension setup")
+    monkeypatch.setattr("builtins.input", unexpected_prompt)
+    monkeypatch.setattr("sys.argv", ["screenshots", "--excel-path", str(screenshot_workbook),
+                                    "--bill", "Test Bill", "--headless"])
+    assert automation_screenshots.main() == 1
+    import pandas as pd
+    folder = tmp_path / "shots/Test Bill"
+    assert pd.read_csv(folder / "screenshot_audit.csv").iloc[0]["Status"] == "challenge"
+    assert not validate_evidence(folder / "Part.png", source_url=URL)
+    regular.assert_not_called()
+    assert "--headless=new" in chrome.call_args.kwargs["options"].arguments
+
+
+def test_headless_regular_browser_combination_is_rejected_before_capture(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["screenshots", "--browser", "chrome", "--headless"])
+    with pytest.raises(SystemExit) as error:
+        automation_screenshots.main()
+    assert error.value.code == 2
 
 
 def test_extension_operations_with_chrome_api_mocks():

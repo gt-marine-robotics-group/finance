@@ -200,8 +200,7 @@ def cmd_screenshots(args):
     cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation_screenshots.py"), "--excel-path", get_xlsx_path()]
     if getattr(args, "bill", None):
         cmd.extend(["--bill", args.bill])
-    if getattr(args, "interactive", False):
-        cmd.append("--interactive")
+    cmd.append("--interactive" if getattr(args, "interactive", True) else "--headless")
     if getattr(args, "browser", None):
         cmd.extend(["--browser", args.browser])
     res = subprocess.run(cmd)
@@ -565,7 +564,12 @@ Examples:
     p_ss = sub.add_parser("screenshots", help="Scrape prices + take screenshots")
     p_ss.add_argument("--fresh", "-f", action="store_true", help="Sync from SharePoint first")
     p_ss.add_argument("--bill", "-b", help="Bill title (skips interactive selection)")
-    p_ss.add_argument("--interactive", action="store_true", help="Show Chrome and pause for CAPTCHA solving")
+    display = p_ss.add_mutually_exclusive_group()
+    display.add_argument("--interactive", dest="interactive", action="store_true",
+                         help="Show Chrome and pause for verification (default)")
+    display.add_argument("--headless", dest="interactive", action="store_false",
+                         help="Run without a browser window; record challenges without prompting")
+    p_ss.set_defaults(interactive=True)
     p_ss.add_argument("--browser", choices=("auto", "chrome", "selenium"), default="auto",
                       help="Capture mode: automatic fallback, regular Chrome extension, or Selenium only")
     p_ss.add_argument("--no-review", action="store_true", help=argparse.SUPPRESS)

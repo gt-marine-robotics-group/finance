@@ -319,11 +319,18 @@ def main():
     parser = argparse.ArgumentParser(description="Capture vendor screenshots and a price audit for spreadsheet review")
     parser.add_argument("--bill", "-b")
     parser.add_argument("--excel-path", default=os.environ.get("FINANCE_XLSX_PATH"))
-    parser.add_argument("--interactive", action="store_true", help="Show Chrome and pause so you can solve CAPTCHAs")
+    display = parser.add_mutually_exclusive_group()
+    display.add_argument("--interactive", dest="interactive", action="store_true",
+                         help="Show Chrome and pause for verification (default)")
+    display.add_argument("--headless", dest="interactive", action="store_false",
+                         help="Run without a browser window; record challenges without prompting")
+    parser.set_defaults(interactive=True)
     parser.add_argument("--browser", choices=("auto", "chrome", "selenium"), default="auto",
                         help="auto: existing capture with regular-Chrome fallback; chrome: regular Chrome extension")
     parser.add_argument("--no-review", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if not args.interactive and args.browser == "chrome":
+        parser.error("--browser chrome requires a visible browser; omit --headless")
     if not args.excel_path:
         from mrg_finance.cli import get_xlsx_path
         args.excel_path = get_xlsx_path()
@@ -383,7 +390,7 @@ def main():
     print("Screenshot mode: regular Chrome with the MRG Finance Evidence extension." if args.browser == "chrome" else
           "Screenshot mode: visible Chrome; verification prompts pause for retry." if args.interactive else
           "Screenshot mode: headless Chrome. Use --interactive to show pages and solve verification prompts.")
-    if args.browser == "auto":
+    if args.browser == "auto" and args.interactive:
         print("If vendor verification blocks capture, regular Chrome is available as a fallback.")
     options = Options()
     if not args.interactive:
@@ -425,7 +432,7 @@ def main():
                                 source_url=url, offer_regular_chrome=args.browser == "auto"
                                 and getattr(driver, "is_regular_chrome", False) is not True)
                         except BrowserChallenge as challenge:
-                            if args.browser != "auto" or getattr(driver, "is_regular_chrome", False) is True:
+                            if not args.interactive or args.browser != "auto" or getattr(driver, "is_regular_chrome", False) is True:
                                 raise
                             if not isinstance(challenge, UseRegularChrome):
                                 answer = input("Verification unresolved. Use regular Chrome for this bill? [Y/n]: ").strip().lower()

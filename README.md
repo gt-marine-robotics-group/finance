@@ -201,7 +201,7 @@ All commands accept `--fresh` (`-f`) when `rclone` is configured to sync directl
 | `mrg-finance doctor [--fresh]` | Diagnostics: validates formulas, missing bill numbers, blank URLs, and non-positive costs. *(Works offline without `--fresh`)*. |
 | `mrg-finance price-check [--bill <TITLE>] [--cart]` | Scrapes live vendor prices, reports price deltas, and generates 1-Click Amazon multi-item cart links. |
 | `mrg-finance report --order <ORDER_ID>` | Compiles formatted Budget vs Quoted Excel (`.xlsx`) & `.csv` comparison reports. *(Works offline)*. |
-| `mrg-finance screenshots [--bill <TITLE>] [--fresh] [--interactive] [--browser chrome]` | Captures vendor screenshots and a CSV price audit; offers regular Chrome when verification blocks Selenium. |
+| `mrg-finance screenshots [--bill <TITLE>] [--fresh] [--headless] [--browser chrome]` | Opens visible Chrome by default, saves screenshots and a price audit, and offers regular Chrome when verification blocks Selenium. |
 | `mrg-finance bill-request [--bill <TITLE>] [--fresh]` | Automates Engage funding bill submission and screenshot attachments. |
 | `mrg-finance purchase [--order <ORDER_ID>] [--fresh] [--cart-source personal]` | Verifies cart quantities and totals, builds comparison reports, and fills Engage bill and payee fields. |
 
