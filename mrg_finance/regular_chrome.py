@@ -26,6 +26,17 @@ from selenium.webdriver.common.by import By
 PROTOCOL = 1
 
 
+def extension_path_label():
+    """Show a portable per-user location, with the resolved path available separately."""
+    if sys.platform == "darwin":
+        return "~/Library/Application Support/mrg-finance/evidence-extension"
+    if sys.platform == "win32":
+        base = "%LOCALAPPDATA%" if os.environ.get("LOCALAPPDATA") else r"%USERPROFILE%\AppData\Local"
+        return base + r"\mrg-finance\evidence-extension"
+    base = "$XDG_DATA_HOME" if os.environ.get("XDG_DATA_HOME") else "~/.local/share"
+    return base + "/mrg-finance/evidence-extension"
+
+
 def extension_folder():
     from mrg_finance.browser_profiles import profile_root
     target = profile_root().parent / "evidence-extension"
@@ -184,8 +195,15 @@ class ChromeBridge:
         <h1>Connect regular Chrome</h1><p id="status">Waiting for the MRG Finance Evidence extension.</p>
         <p>One-time setup on macOS, Windows, or Linux:</p><ol>
         <li>Open <b>chrome://extensions</b> in another tab.</li>
-        <li>Enable <b>Developer mode</b>, choose <b>Load unpacked</b>, and select:<br>
-        <code>{html.escape(str(self.folder))}</code></li>
+        <li>Enable <b>Developer mode</b>, choose <b>Load unpacked</b>, and select
+        the extension folder for your account:<br>
+        <code>{html.escape(extension_path_label())}</code>
+        <p>The CLI creates this folder automatically. Its location follows your computer
+        and user account; <code>~</code> means your home folder, and environment variables
+        refer to your account's configured folders.</p>
+        <details><summary>Show the full folder path on this computer</summary>
+        <p>Copy this path into the folder chooser:<br>
+        <code>{html.escape(str(self.folder))}</code></p></details></li>
         <li>Return here and reload this connection page, then return to the Terminal.</li></ol>
         <p>Already installed? Reload this page. After a CLI update, click Reload on the
         extension's card first. Keep this connection tab open during capture.</p>

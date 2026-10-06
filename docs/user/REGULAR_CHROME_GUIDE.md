@@ -8,13 +8,21 @@ Use this when a vendor keeps repeating its CAPTCHA in the tool's Selenium window
 mrg-finance screenshots --browser chrome
 ```
 
-Select the bill. Chrome opens a local connection page with the exact extension folder to select.
+Select the bill. Chrome opens a local connection page with the extension folder for your operating system. The CLI creates it automatically under the current user's account:
+
+| Operating system | Extension folder |
+| --- | --- |
+| macOS | `~/Library/Application Support/mrg-finance/evidence-extension` |
+| Windows | `%LOCALAPPDATA%\mrg-finance\evidence-extension` |
+| Linux | `~/.local/share/mrg-finance/evidence-extension`, or `$XDG_DATA_HOME/mrg-finance/evidence-extension` when configured |
+
+These locations apply to each user's own account. Expand **Show the full folder path on this computer** on the connection page to copy the resolved path into Chrome's folder chooser.
 
 ## Install once
 
 1. In the same Chrome profile, open `chrome://extensions` in another tab.
 2. Enable **Developer mode** and click **Load unpacked**.
-3. Select the **extension folder printed by the CLI and connection page**. On Mac, use Cmd+Shift+G in the folder chooser to paste that path.
+3. Select the **extension folder for your account**. The CLI prints its resolved path; the connection page shows it under **Show the full folder path on this computer**. On Mac, use Cmd+Shift+G in the folder chooser to paste that path.
 4. Return to the connection page and reload it. It should say **Connected**.
 5. Return to the Terminal and press Enter if it is waiting for setup.
 
