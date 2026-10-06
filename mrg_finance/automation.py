@@ -414,8 +414,19 @@ def main():
                     navigate_for_evidence(c_driver, m_url)
                     time.sleep(2)
                     import price_scraper
-                    price_scraper.dismiss_popups_and_interstitials(c_driver)
-                    capture_evidence(c_driver, shot_path, interactive=True, source_url=m_url)
+                    if getattr(c_driver, "is_regular_chrome", False) is not True:
+                        price_scraper.dismiss_popups_and_interstitials(c_driver)
+                    from mrg_finance.screenshot_capture import UseRegularChrome
+                    try:
+                        capture_evidence(c_driver, shot_path, interactive=True, source_url=m_url,
+                                         offer_regular_chrome=getattr(c_driver, "is_regular_chrome", False) is not True)
+                    except UseRegularChrome:
+                        from mrg_finance.regular_chrome import RegularChrome
+                        regular = RegularChrome()
+                        c_driver.quit()
+                        c_driver = regular
+                        navigate_for_evidence(c_driver, m_url)
+                        capture_evidence(c_driver, shot_path, interactive=True, source_url=m_url)
                     print(f"✅ Saved ({os.path.basename(shot_path)})")
                 except Exception as err:
                     print(f"❌ Failed: {err}")

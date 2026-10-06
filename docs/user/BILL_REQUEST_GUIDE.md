@@ -112,6 +112,7 @@ Capture missing screenshots in Chrome? (Y/n): y
 ```
 - Type `y`: Visible Chrome will visit the vendor links for missing items, dismiss popups, and capture high-resolution product screenshots.
 - Complete any CAPTCHA in that window and press Enter to retry, or type `cancel`. The browser session is retained under `.mrg-finance-browser/evidence/`. Linked items with missing or unverified evidence stop the bill flow before Engage opens. The source URL/hash are checked again immediately before attachment upload.
+- If verification keeps repeating, type `chrome` at that prompt to switch to your regular installed Chrome. The one-time extension setup works on macOS, Windows, and Linux; see the [regular Chrome guide](REGULAR_CHROME_GUIDE.md). Position the product name and price in view before capturing. You can also run `mrg-finance screenshots --browser chrome` first and reuse its verified evidence.
 - Keep the `.evidence.json` files with the images and review the images visually; challenge detection checks known text/widgets.
 
 ### Prompt 5: Spreadsheet review

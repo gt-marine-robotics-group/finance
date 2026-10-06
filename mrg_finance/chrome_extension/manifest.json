@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "MRG Finance Evidence",
+  "version": "1.0.0",
+  "description": "Read product prices and capture reviewed evidence for a local MRG Finance CLI session.",
+  "permissions": ["tabs", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "background": {"service_worker": "background.js"},
+  "content_scripts": [{
+    "matches": ["http://127.0.0.1/*"],
+    "js": ["connect.js"],
+    "run_at": "document_idle"
+  }]
+}

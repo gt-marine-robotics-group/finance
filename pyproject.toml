@@ -30,4 +30,5 @@ mrg-finance = "mrg_finance.cli:main"
 packages = ["mrg_finance", "web-app", "web-app.routes"]
 
 [tool.setuptools.package-data]
+"mrg_finance" = ["chrome_extension/*.json", "chrome_extension/*.js"]
 "web-app" = ["templates/*", "templates/**/*", "static/*", "static/**/*"]

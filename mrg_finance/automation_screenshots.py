@@ -314,11 +314,14 @@ def main():
     if project_root not in sys.path:
         sys.path.insert(0, project_root)
     from mrg_finance import spreadsheet_utils
-    from mrg_finance.screenshot_capture import capture_evidence, navigate_for_evidence, invalidate_evidence, BrowserChallenge
+    from mrg_finance.screenshot_capture import capture_evidence, navigate_for_evidence, invalidate_evidence, BrowserChallenge, UseRegularChrome
+    from mrg_finance.regular_chrome import RegularChrome
     parser = argparse.ArgumentParser(description="Capture vendor screenshots and a price audit for spreadsheet review")
     parser.add_argument("--bill", "-b")
     parser.add_argument("--excel-path", default=os.environ.get("FINANCE_XLSX_PATH"))
     parser.add_argument("--interactive", action="store_true", help="Show Chrome and pause so you can solve CAPTCHAs")
+    parser.add_argument("--browser", choices=("auto", "chrome", "selenium"), default="auto",
+                        help="auto: existing capture with regular-Chrome fallback; chrome: regular Chrome extension")
     parser.add_argument("--no-review", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if not args.excel_path:
@@ -377,14 +380,21 @@ def main():
     folder = Path(SAVE_FOLDER, safe_bill).resolve()
     folder.mkdir(parents=True, exist_ok=True)
     print(f"Bill: {args.bill}\nEvidence directory: {folder}")
-    print("Screenshot mode: visible Chrome; verification prompts pause for retry." if args.interactive else
+    print("Screenshot mode: regular Chrome with the MRG Finance Evidence extension." if args.browser == "chrome" else
+          "Screenshot mode: visible Chrome; verification prompts pause for retry." if args.interactive else
           "Screenshot mode: headless Chrome. Use --interactive to show pages and solve verification prompts.")
+    if args.browser == "auto":
+        print("If vendor verification blocks capture, regular Chrome is available as a fallback.")
     options = Options()
     if not args.interactive:
         options.add_argument("--headless=new")
     options.add_argument("--window-size=1920,1200")
     options.add_argument(f"--user-data-dir={Path('.mrg-finance-browser', 'evidence').resolve()}")
-    driver = webdriver.Chrome(service=Service(), options=options)
+    try:
+        driver = RegularChrome() if args.browser == "chrome" else webdriver.Chrome(service=Service(), options=options)
+    except Exception as error:
+        print(f"Screenshots stopped before capture: {error}")
+        return 1
     driver.set_page_load_timeout(30)
     results = []
     try:
@@ -407,8 +417,28 @@ def main():
                 for attempt in range(MAX_RETRIES + 1):
                     try:
                         navigate_for_evidence(driver, url)
-                        dismiss_popups(driver)
-                        result["Screenshot"] = capture_evidence(driver, shot, interactive=args.interactive, source_url=url)
+                        if getattr(driver, "is_regular_chrome", False) is not True:
+                            dismiss_popups(driver)
+                        try:
+                            result["Screenshot"] = capture_evidence(driver, shot,
+                                interactive=args.interactive or getattr(driver, "is_regular_chrome", False) is True,
+                                source_url=url, offer_regular_chrome=args.browser == "auto"
+                                and getattr(driver, "is_regular_chrome", False) is not True)
+                        except BrowserChallenge as challenge:
+                            if args.browser != "auto" or getattr(driver, "is_regular_chrome", False) is True:
+                                raise
+                            if not isinstance(challenge, UseRegularChrome):
+                                answer = input("Verification unresolved. Use regular Chrome for this bill? [Y/n]: ").strip().lower()
+                                if answer not in ("", "y", "yes"):
+                                    raise
+                            try:
+                                regular = RegularChrome()
+                            except Exception as error:
+                                raise BrowserChallenge(f"Regular Chrome unavailable: {error}") from error
+                            driver.quit()
+                            driver = regular
+                            navigate_for_evidence(driver, url)
+                            result["Screenshot"] = capture_evidence(driver, shot, interactive=True, source_url=url)
                         text, confidence = extract_price_from_page(driver, url)
                         value = parse_price(text)
                         result["Quoted Unit Cost"] = value
@@ -424,8 +454,9 @@ def main():
                     except Exception as error:
                         result["Status"] = "failed"
                         result["Error"] = str(error)
-                        if attempt == MAX_RETRIES:
-                            print(f"  Failed after {MAX_RETRIES + 1} attempts: {error}")
+                        if getattr(driver, "is_regular_chrome", False) is True or attempt == MAX_RETRIES:
+                            print(f"  Failed after {attempt + 1} attempt(s): {error}")
+                            break
             else:
                 result["Status"] = "missing_url" if not url else "invalid_url"
                 result["Error"] = "Add a complete HTTP(S) product URL to the item's Link cell in Bills."

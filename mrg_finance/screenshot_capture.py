@@ -5,6 +5,7 @@ import json
 import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
@@ -13,6 +14,10 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 class BrowserChallenge(RuntimeError):
     pass
+
+
+class UseRegularChrome(BrowserChallenge):
+    """The operator requested a regular-browser fallback for this product."""
 
 
 def evidence_metadata_path(path):
@@ -101,12 +106,18 @@ def save_page_screenshot(driver, path, full_page=True):
     return str(path)
 
 
-def capture_evidence(driver, path, *, interactive=False, prompt=None, source_url=None, settle_timeout=5):
+def capture_evidence(driver, path, *, interactive=False, prompt=None, source_url=None, settle_timeout=5,
+                     offer_regular_chrome=False):
     """Save challenge diagnostics, notify the operator, and optionally wait for solving."""
     path = Path(path).resolve()
     prompt = prompt or input
     source_url = source_url or driver.current_url
     invalidate_evidence(path)
+    if getattr(driver, "is_regular_chrome", False) is True:
+        answer = prompt("  In Chrome, finish verification and show the product name and price. "
+                        "Enter to capture the visible page (or 'cancel'): ").strip().lower()
+        if answer in ("cancel", "skip", "quit", "q"):
+            raise BrowserChallenge("Regular Chrome capture cancelled; no usable evidence saved.")
     try:
         WebDriverWait(driver, 15).until(
             lambda d: d.execute_script("return document.readyState") in ("interactive", "complete")
@@ -115,6 +126,11 @@ def capture_evidence(driver, path, *, interactive=False, prompt=None, source_url
         print("  Page load timed out; checking the rendered page.")
     while True:
         reason = challenge_reason(driver)
+        if getattr(driver, "is_regular_chrome", False) is True and not reason:
+            source_host = (urlparse(source_url).hostname or "").removeprefix("www.")
+            current_host = (urlparse(driver.current_url).hostname or "").removeprefix("www.")
+            if not source_host or source_host != current_host:
+                reason = "different vendor website; return to the original product link"
         if settle_timeout and reason in (
             "checking your browser", "security verification", "verifying your browser",
             "checking if the site connection is secure",
@@ -153,7 +169,11 @@ def capture_evidence(driver, path, *, interactive=False, prompt=None, source_url
               f"  Page: {driver.current_url}\n  Diagnostic screenshot: {challenge_path}")
         if not interactive:
             raise BrowserChallenge(f"Solve the challenge in a visible browser: {challenge_path}")
-        if prompt("  Solve it in the browser, then Enter to retry (or 'cancel'): ").strip().lower() in ("skip", "cancel", "q", "quit"):
+        choice = prompt("  Solve it in the browser, then Enter to retry "
+                        + ("(or 'chrome' for regular Chrome, 'cancel'): " if offer_regular_chrome else "(or 'cancel'): "))
+        if offer_regular_chrome and choice.strip().lower() == "chrome":
+            raise UseRegularChrome(f"Switch to regular Chrome: {challenge_path}")
+        if choice.strip().lower() in ("skip", "cancel", "q", "quit"):
             raise BrowserChallenge(f"Challenge unresolved: {challenge_path}")
 
 

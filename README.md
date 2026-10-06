@@ -201,7 +201,7 @@ All commands accept `--fresh` (`-f`) when `rclone` is configured to sync directl
 | `mrg-finance doctor [--fresh]` | Diagnostics: validates formulas, missing bill numbers, blank URLs, and non-positive costs. *(Works offline without `--fresh`)*. |
 | `mrg-finance price-check [--bill <TITLE>] [--cart]` | Scrapes live vendor prices, reports price deltas, and generates 1-Click Amazon multi-item cart links. |
 | `mrg-finance report --order <ORDER_ID>` | Compiles formatted Budget vs Quoted Excel (`.xlsx`) & `.csv` comparison reports. *(Works offline)*. |
-| `mrg-finance screenshots [--bill <TITLE>] [--fresh] [--interactive]` | Captures vendor screenshots and a CSV price audit; records CAPTCHAs or pauses to solve them. |
+| `mrg-finance screenshots [--bill <TITLE>] [--fresh] [--interactive] [--browser chrome]` | Captures vendor screenshots and a CSV price audit; offers regular Chrome when verification blocks Selenium. |
 | `mrg-finance bill-request [--bill <TITLE>] [--fresh]` | Automates Engage funding bill submission and screenshot attachments. |
 | `mrg-finance purchase [--order <ORDER_ID>] [--fresh] [--cart-source personal]` | Verifies cart quantities and totals, builds comparison reports, and fills Engage bill and payee fields. |
 
@@ -289,11 +289,14 @@ export FINANCE_XLSX_PATH="/path/to/my_custom_budget.xlsx"
 ### Headless Chrome / Selenium Issues
 Selenium Manager uses installed Chrome or downloads Chrome for Testing and its matching driver when Chrome is unavailable. New Mac users normally do not need a manual Chrome installation. The first browser run needs internet to obtain uncached components; manually installing Chrome is a fallback when browser downloads are blocked. [Selenium browser management](https://www.selenium.dev/documentation/selenium_manager/)
 
+If verification loops in Selenium, use `mrg-finance screenshots --browser chrome` to capture through your regular installed Chrome on macOS, Windows, or Linux. This requires a one-time installation of the bundled **MRG Finance Evidence** extension; the CLI opens setup instructions with its folder path. Regular Chrome captures the visible product page and retains your existing browser profile. CAPTCHA pages remain excluded from bill evidence. See the [regular Chrome and local-workbook guide](docs/user/REGULAR_CHROME_GUIDE.md).
+
 ---
 
 ## 📚 Detailed Reference Guides
 - [Video Recording Runbook](docs/user/VIDEO_RUNBOOK.md) — Recording sequence, narration, and setup notes for installation, funding bills, purchases, and optional feature clips.
 - [Bill Request Automation Guide](docs/user/BILL_REQUEST_GUIDE.md) — Step-by-step interactive walkthrough for `mrg-finance bill-request`, GT Duo MFA, form autofill, and quote screenshots.
+- [Regular Chrome & Local Workbook Guide](docs/user/REGULAR_CHROME_GUIDE.md) — Cross-platform screenshot fallback, one-time extension setup, and local spreadsheet commands.
 - [Purchase Request Automation Guide](docs/user/PURCHASE_GUIDE.md) — Step-by-step interactive walkthrough for `mrg-finance purchase`, price auditing, cart creation, Engage line lookups, and mandatory attachments (`cart.png` + Excel detail report).
 - [Spreadsheet & Manual Workflow Guide](docs/user/WORKFLOW_GUIDE.md) — Comprehensive schema, formulas, column reference, and manual Engage walkthrough.
 - [CLI & Troubleshooting Guide](docs/user/CLI_GUIDE.md) — Full CLI flags, custom paths, and troubleshooting FAQs.

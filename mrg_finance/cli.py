@@ -202,6 +202,8 @@ def cmd_screenshots(args):
         cmd.extend(["--bill", args.bill])
     if getattr(args, "interactive", False):
         cmd.append("--interactive")
+    if getattr(args, "browser", None):
+        cmd.extend(["--browser", args.browser])
     res = subprocess.run(cmd)
     sys.exit(res.returncode)
 
@@ -564,6 +566,8 @@ Examples:
     p_ss.add_argument("--fresh", "-f", action="store_true", help="Sync from SharePoint first")
     p_ss.add_argument("--bill", "-b", help="Bill title (skips interactive selection)")
     p_ss.add_argument("--interactive", action="store_true", help="Show Chrome and pause for CAPTCHA solving")
+    p_ss.add_argument("--browser", choices=("auto", "chrome", "selenium"), default="auto",
+                      help="Capture mode: automatic fallback, regular Chrome extension, or Selenium only")
     p_ss.add_argument("--no-review", action="store_true", help=argparse.SUPPRESS)
 
     # bill-request
