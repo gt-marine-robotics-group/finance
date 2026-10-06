@@ -1,12 +1,14 @@
 """Bill requests must stop before Engage when screenshot proof is missing."""
 
 from pathlib import Path
+import hashlib
 from unittest.mock import MagicMock
 
 import openpyxl
+import pandas as pd
 import pytest
 
-from mrg_finance import automation
+from mrg_finance import automation, automation_screenshots
 from mrg_finance.screenshot_capture import (
     BrowserChallenge, capture_evidence, evidence_metadata_path, validate_evidence,
 )
@@ -119,3 +121,87 @@ def test_legacy_image_without_proof_is_not_bill_evidence(monkeypatch, tmp_path):
     assert automation._verified_screenshot("Part", "Test Bill", URL) is None
     with pytest.raises(ValueError, match="Part"):
         automation.require_bill_evidence([("Part", URL)], "Test Bill")
+
+
+@pytest.fixture
+def screenshot_workbook(tmp_path, monkeypatch):
+    path = tmp_path / "bill.xlsx"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Bills"
+    ws.append(["Bill Name", "Item", "Product URL", "Unit Cost"])
+    ws.append(["Request 1", "", "", ""])
+    ws.append(["Liquid - RobotX", "Non-bill Item - Update Manually", "", ""])
+    ws.append(["Misc", "Misc", "", ""])
+    ws.append(["Test Bill", "Part", URL, 63.35])
+    ws.append(["Test Bill", "", "", ""])
+    ws.append(["Test Bill", "Missing link", "", 20])
+    ws.append(["Test Bill", "Malformed link", "http://[", 30])
+    wb.save(path)
+    wb.close()
+    monkeypatch.setattr(automation_screenshots, "SAVE_FOLDER", str(tmp_path / "shots"))
+    monkeypatch.setattr(automation_screenshots, "Service", MagicMock())
+    monkeypatch.setattr(automation_screenshots, "sync_screenshots_to_sharepoint", MagicMock())
+    return path
+
+
+def test_screenshot_main_filters_menu_retries_selection_and_audits_actual_items(screenshot_workbook, monkeypatch, tmp_path, capsys):
+    path = screenshot_workbook
+    before = hashlib.sha256(path.read_bytes()).digest()
+    driver = browser()
+    chrome = MagicMock(return_value=driver)
+    monkeypatch.setattr(automation_screenshots.webdriver, "Chrome", chrome)
+    monkeypatch.setattr(automation_screenshots, "dismiss_popups", lambda d: None)
+    monkeypatch.setattr(automation_screenshots, "extract_price_from_page", lambda *a: ("$100.00", "high"))
+    from mrg_finance import screenshot_capture
+    navigate = MagicMock()
+    monkeypatch.setattr(screenshot_capture, "navigate_for_evidence", navigate)
+    monkeypatch.setattr("sys.argv", ["screenshots", "--excel-path", str(path)])
+    answers = iter(["", "0", "99", "test bill"])
+    monkeypatch.setattr("builtins.input", lambda p: next(answers))
+    assert automation_screenshots.main() == 1  # Two real product rows need URLs.
+    output = capsys.readouterr().out
+    assert "  1. Test Bill" in output
+    assert not any(t in output for t in ("Request 1", "Liquid - RobotX", "Misc"))
+    assert output.count("Choose a listed bill") == 3
+    assert "Screenshot mode: headless Chrome" in output
+    assert "Items: 3 | Need attention: 2" in output
+    folder = tmp_path / "shots" / "Test Bill"
+    audit = pd.read_csv(folder / "screenshot_audit.csv")
+    assert list(audit["Status"]) == ["captured", "missing_url", "invalid_url"]
+    assert audit.iloc[0]["Quoted Unit Cost"] == 100
+    assert validate_evidence(folder / "Part.png", source_url=URL)
+    navigate.assert_called_once_with(driver, URL)
+    driver.quit.assert_called_once()
+    assert "--headless=new" in chrome.call_args.kwargs["options"].arguments
+    assert hashlib.sha256(path.read_bytes()).digest() == before
+
+
+def test_screenshot_navigation_failure_invalidates_old_proof_and_saves_audit(screenshot_workbook, monkeypatch, tmp_path):
+    from mrg_finance import screenshot_capture
+    from selenium.common.exceptions import TimeoutException
+    driver = browser()
+    shot = tmp_path / "shots" / "Test Bill" / "Part.png"
+    capture_evidence(driver, shot, source_url=URL)
+    assert validate_evidence(shot, source_url=URL)
+    monkeypatch.setattr(automation_screenshots.webdriver, "Chrome", lambda **kw: driver)
+    navigate = MagicMock(side_effect=TimeoutException("Page did not load"))
+    monkeypatch.setattr(screenshot_capture, "navigate_for_evidence", navigate)
+    monkeypatch.setattr("sys.argv", ["screenshots", "--excel-path", str(screenshot_workbook),
+                                    "--bill", "Test Bill", "--interactive"])
+    assert automation_screenshots.main() == 1
+    assert navigate.call_count == 3
+    assert not validate_evidence(shot, source_url=URL)
+    audit = pd.read_csv(shot.parent / "screenshot_audit.csv")
+    assert audit.iloc[0]["Status"] == "failed"
+    assert "Page did not load" in audit.iloc[0]["Error"]
+    driver.quit.assert_called_once()
+
+
+def test_screenshot_menu_cancel_does_not_start_browser(screenshot_workbook, monkeypatch):
+    chrome = MagicMock()
+    monkeypatch.setattr(automation_screenshots.webdriver, "Chrome", chrome)
+    monkeypatch.setattr("sys.argv", ["screenshots", "--excel-path", str(screenshot_workbook)])
+    monkeypatch.setattr("builtins.input", lambda p: "cancel")
+    assert automation_screenshots.main() == 0
+    chrome.assert_not_called()

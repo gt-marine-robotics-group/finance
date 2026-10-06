@@ -6,6 +6,7 @@ if SCRIPT_DIR not in sys.path:
 import time
 import re
 import json
+from urllib.parse import urlparse
 import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -23,8 +24,6 @@ CSV_PATH = os.environ.get("FINANCE_XLSX_PATH", DEFAULT_XLSX)
 OUTPUT_CSV = "./FY27_Bills_Budget_Updated.csv"
 SHEET_NAME = "Bills"
 SAVE_FOLDER = "./screenshots"
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DELAY = 5  # seconds to wait after page load
 MAX_RETRIES = 2  # retry failed page loads
 
 
@@ -315,7 +314,7 @@ def main():
     if project_root not in sys.path:
         sys.path.insert(0, project_root)
     from mrg_finance import spreadsheet_utils
-    from mrg_finance.screenshot_capture import capture_evidence, navigate_for_evidence, BrowserChallenge
+    from mrg_finance.screenshot_capture import capture_evidence, navigate_for_evidence, invalidate_evidence, BrowserChallenge
     parser = argparse.ArgumentParser(description="Capture vendor screenshots and a price audit for spreadsheet review")
     parser.add_argument("--bill", "-b")
     parser.add_argument("--excel-path", default=os.environ.get("FINANCE_XLSX_PATH"))
@@ -326,25 +325,60 @@ def main():
         from mrg_finance.cli import get_xlsx_path
         args.excel_path = get_xlsx_path()
     if args.excel_path.endswith(".xlsx"):
-        df = spreadsheet_utils.read_sheet_robust(args.excel_path, ["Bills", "Bill", "Budget"])
+        import warnings
+        with warnings.catch_warnings():
+            # This command only reads the master workbook; it never resaves its
+            # unsupported Excel validation extension. Keep other warnings visible.
+            warnings.filterwarnings("ignore", category=UserWarning,
+                                    message="Data Validation extension is not supported and will be removed")
+            df = spreadsheet_utils.read_sheet_robust(args.excel_path, ["Bills", "Bill", "Budget"])
     else:
         df = pd.read_csv(args.excel_path).fillna("")
     title_col = next((c for c in df.columns if str(c).strip().lower() in spreadsheet_utils.COLUMN_ALIASES["bill_title"]), None)
     if not title_col:
         raise ValueError("Bill Title column not found")
-    titles = [t for t in df[title_col].astype(str).str.strip().unique() if t and t.lower() != "nan"]
+    print(f"Workbook: {Path(args.excel_path).resolve()}")
+    # Request separators and liquid/misc allocations are not product bills.
+    # Keep actual items even without a URL so the audit can flag missing links.
+    def is_product_item(row):
+        record = row.to_dict()
+        title = spreadsheet_utils.get_col_val(record, "bill_title").lower()
+        return bool(title and spreadsheet_utils.get_col_val(record, "item_name")) and not (
+            title.startswith("liquid -") or title == "misc")
+    df = df.loc[df.apply(is_product_item, axis=1).astype(bool)].copy()
+    titles = list(dict.fromkeys(df[title_col].astype(str).str.strip()))
+    if not titles:
+        print("No product bills found. Add a Bill Title, Item Name, and product Link in Bills.")
+        return 1
+    def match_title(value):
+        return next((title for title in titles if title.lower() == value.strip().lower()), None)
     if not args.bill:
+        print("\nAvailable product bills:")
         for i, title in enumerate(titles, 1):
             print(f"  {i}. {title}")
-        choice = input("Select bill title or number: ").strip()
-        args.bill = titles[int(choice) - 1] if choice.isdigit() and 1 <= int(choice) <= len(titles) else choice
+        while True:
+            choice = input("Select bill title or number (or 'cancel'): ").strip()
+            if choice.lower() in ("cancel", "quit", "q"):
+                return 0
+            args.bill = titles[int(choice) - 1] if choice.isdigit() and 1 <= int(choice) <= len(titles) else match_title(choice)
+            if args.bill:
+                break
+            print(f"Choose a listed bill title or a number from 1 to {len(titles)}.")
+    else:
+        selected = match_title(args.bill)
+        if not selected:
+            print(f"No product items for bill '{args.bill}'. Run screenshots without --bill to see the available bills.")
+            return 1
+        args.bill = selected
     df = df[df[title_col].astype(str).str.strip().str.lower() == args.bill.lower()]
     if df.empty:
         raise ValueError(f"No items for bill {args.bill}")
     safe_bill = "".join(c if c.isalnum() or c in " -_" else "_" for c in args.bill)
     folder = Path(SAVE_FOLDER, safe_bill).resolve()
     folder.mkdir(parents=True, exist_ok=True)
-    print(f"Workbook: {Path(args.excel_path).resolve()}\nEvidence directory: {folder}")
+    print(f"Bill: {args.bill}\nEvidence directory: {folder}")
+    print("Screenshot mode: visible Chrome; verification prompts pause for retry." if args.interactive else
+          "Screenshot mode: headless Chrome. Use --interactive to show pages and solve verification prompts.")
     options = Options()
     if not args.interactive:
         options.add_argument("--headless=new")
@@ -362,9 +396,14 @@ def main():
             result = {"Item": name, "URL": url, "Approved Unit Cost": cost,
                       "Quoted Unit Cost": None, "Status": "skipped", "Screenshot": "", "Error": ""}
             print(f"\n[{i}/{len(df)}] {name}")
-            if url.startswith("http"):
+            try:
+                parsed = urlparse(url)
+                valid_url = parsed.scheme in ("https", "http") and bool(parsed.hostname)
+            except ValueError:
+                valid_url = False
+            if valid_url:
                 shot = folder / ("".join(c if c.isalnum() or c in " -_" else "_" for c in name) + ".png")
-                shot.unlink(missing_ok=True)
+                invalidate_evidence(shot)
                 for attempt in range(MAX_RETRIES + 1):
                     try:
                         navigate_for_evidence(driver, url)
@@ -387,16 +426,18 @@ def main():
                         result["Error"] = str(error)
                         if attempt == MAX_RETRIES:
                             print(f"  Failed after {MAX_RETRIES + 1} attempts: {error}")
-                results.append(result)
             else:
-                results.append(result)
+                result["Status"] = "missing_url" if not url else "invalid_url"
+                result["Error"] = "Add a complete HTTP(S) product URL to the item's Link cell in Bills."
+                print(f"  Needs attention: {result['Error']}")
+            results.append(result)
     finally:
         driver.quit()
     audit = folder / "screenshot_audit.csv"
     pd.DataFrame(results).to_csv(audit, index=False)
     print(f"\nReview audit in your spreadsheet: {audit}")
     print(f"Screenshots: {folder}\nCAPTCHA diagnostics: {folder / 'challenges'}")
-    failed = sum(r["Status"] in ("challenge", "failed", "price_unverified") for r in results)
+    failed = sum(r["Status"] != "captured" for r in results)
     print(f"Items: {len(results)} | Need attention: {failed}")
     sync_screenshots_to_sharepoint()
     return 1 if failed else 0
