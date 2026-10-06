@@ -115,7 +115,7 @@ This selects the existing file; it does not copy it. You only need the export wh
 
 **Say:** “Doctor checks common workbook data problems. I'll check its file path and resolve any warnings relevant to these examples.”
 
-**Show:** path and diagnostic results. Close Excel after the shot. A new funding draft can legitimately lack an approved bill number; doctor does not verify every formula or live vendor page.
+**Show:** path and diagnostic results. Close Excel after the shot. Planning rows can lack an Engage request ID, but `bill-request` requires it before running. Doctor does not verify every formula or live vendor page.
 
 **Overlay:** `3. Check the workbook`
 
@@ -123,7 +123,9 @@ This selects the existing file; it does not copy it. You only need the export wh
 
 **Save as:** `04-bill.mov`, with `-part2` after GT login
 
-**Say:** “First I'll capture product evidence, review it, and add the funding items to our Engage draft.”
+**Show before running the CLI:** Create Request in Engage Budgeting → choose the fiscal year → enter the matching Bill Title → save the draft. Show the numeric ID at the end of its edit URL and copy it into **Bill No. on every item row** for this bill. Save and close Excel; let OneDrive finish uploading before `--fresh`.
+
+**Say:** “First I create the funding draft in Engage and record its request ID in Excel. Bill-request fills that existing draft; it does not create one. Now I'll capture the product evidence and add the funding items.”
 
 Run:
 
@@ -143,14 +145,14 @@ mrg-finance bill-request
 | --- | --- |
 | GT credentials / Duo | Stop recording; resume after authentication. |
 | Bill-title menu | Select the same bill. |
-| Missing Bill No. | Paste your prepared Engage draft edit URL. |
+| Missing/invalid/conflicting Bill No. | Stop; record the saved Engage draft's numeric ID on every matching item row, save/sync, then rerun. |
 | Re-capture screenshots? | Type `n` after reviewing the captures. |
 | Section/item preview; Proceed? | Check names, costs, quantities, and sections; press Enter to continue. |
 | Existing items; Choice [1/2] | **Type `2`** to keep existing items and skip duplicates. Do not press Enter: the current default clears existing lines. |
 | Automated entry | Record one complete item and screenshot upload. Cut repeated entry. |
 | Completion | Show counts and inspect the draft; resolve failures before calling it complete. |
 
-**Say:** “The CLI has prepared the funding draft. Approval happens later. For purchasing, I'll switch to a separate approved example.”
+**Say:** “The CLI has filled our existing funding draft. Its request ID is already in Excel. Approval happens later, so I'll switch to a separate approved example for purchasing.”
 
 **Show:** the approved budget/bill and its pending order for five seconds. Submit the funding draft only when ready; CLI completion means line entry, not approval.
 

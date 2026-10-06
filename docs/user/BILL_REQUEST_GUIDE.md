@@ -21,6 +21,7 @@ This guide is the complete step-by-step walkthrough for **`mrg-finance bill-requ
 Use `mrg-finance bill-request` during **Stage 1 (Funding Allocation)** of the club finance lifecycle:
 - You want the Student Government Association (SGA) to allocate budget for future club equipment, parts, tools, or supplies.
 - You have entered your proposed items under a shared **`Bill Title`** in the `Bills` sheet of `FY27_Bills_Budget.xlsx`.
+- You have already created and saved the matching draft in Engage and recorded its request ID in **`Bill No.` on every item row**.
 - You want to eliminate the tedious manual work of clicking "Add Item", typing item names, descriptions, prices, quantities, and uploading product quote screenshots one-by-one into Engage.
 
 ---
@@ -29,10 +30,14 @@ Use `mrg-finance bill-request` during **Stage 1 (Funding Allocation)** of the cl
 
 Open `FY27_Bills_Budget.xlsx` on SharePoint and verify your rows in the **`Bills`** sheet:
 
+Before running the tool, log in to [MRG Budgeting in Engage](https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/budgeting), click **Create Request**, select the fiscal year, enter the same **Bill Title**, and save the draft. Copy its numeric ID from the edit URL—for example, `344042` from `.../requests#/edit/344042`—into **Bill No.** on every item row for this bill. Save and close Excel. If using `--fresh`, let cloud sync finish first.
+
+`bill-request` fills this existing draft. It does not create the request, and its ID is needed before approval. Missing, invalid, or conflicting IDs stop the tool before screenshot capture or GT credential entry.
+
 | Column | Field Name | Required Value | Notes |
 | :--- | :--- | :--- | :--- |
 | **A** | `Bill Item ID` | *Formula* | **Do NOT edit.** Calculated automatically (e.g. `B03-01`). |
-| **B** | `Bill No.` | Blank / Number | Leave blank for new drafts. Fill in once SGA approves the bill. |
+| **B** | `Bill No.` | Engage draft request ID | Required before running the tool; use the same numeric ID on every item row for this bill. |
 | **C** | `Bill Title` | Text | Shared bill name (e.g. `Marine Robotics Group RobotX Testing Equipment Bill`). |
 | **D** | `Item Name` | Text | Clear name matching vendor listing (e.g. `Pi Pico Microcontroller`). |
 | **E** | `Vendor` | Text | Vendor name (e.g. `Amazon`, `McMaster-Carr`, `DigiKey`). |
@@ -68,15 +73,7 @@ mrg-finance screenshots --bill "<Bill Title>" --interactive
 
 When you launch `mrg-finance bill-request`, the CLI guides you through the following prompts:
 
-### Prompt 1: Georgia Tech Credentials
-```text
-Enter your GT username: gburdell3
-Enter GT password (for CampusLabs + Duo MFA): [hidden]
-```
-- **What to do**: Enter your GT username and password. The password input is masked for security.
-- *Tip*: Set `export ENGAGE_USERNAME="gburdell3"` in your terminal to avoid typing your username every time.
-
-### Prompt 2: Bill Selection Menu
+### Prompt 1: Bill Selection Menu
 If you did not pass `--bill`, the CLI lists all available bill titles found in your spreadsheet:
 ```text
 Available Bill Titles:
@@ -88,16 +85,18 @@ Select Bill Title [1-3]: 1
 ```
 - **What to do**: Type the number (e.g. `1`) or copy-paste the exact bill title.
 
-### Prompt 3: Engage Bill URL Resolution
-- **If `Bill No.` is already recorded in Excel**: The CLI automatically builds the direct edit URL:
+### Step 2: Existing Engage Draft Check
+- The CLI requires the same numeric **Bill No.** on every item row and builds the direct edit URL:
   `https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/budgeting/requests#/edit/<BILL_NO>`
-- **If `Bill No.` is blank (new bill draft)**:
-  ```text
-  Could not find Bill No. Enter Engage Edit URL manually: 
-  ```
-  - Log in to [MRG Budgeting in Engage](https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/budgeting).
-  - Click **Create Request** &rarr; select the fiscal year (e.g. `FY27`) &rarr; name the request your exact `Bill Title`.
-  - Copy the URL from your browser address bar (it looks like `.../requests#/edit/123456`) and paste it into the terminal.
+- If any item row lacks the ID, contains a title/URL instead of a number, or points to a different request, the tool stops. Create/save the draft and correct **Bill No.** in Excel, then rerun. There is no terminal URL fallback that bypasses the workbook reference.
+
+### Prompt 3: Georgia Tech Credentials
+```text
+Enter your GT username: gburdell3
+Enter GT password (for CampusLabs + Duo MFA): [hidden]
+```
+- Enter your GT username and password after the workbook reference passes validation. The password input is masked.
+- Set `export ENGAGE_USERNAME="gburdell3"` in your terminal to avoid typing your username every time.
 
 ### Prompt 4: Screenshot Audit & On-Demand Capture
 The CLI checks `screenshots/<Bill Title>/` for product screenshots with a checked `.evidence.json` sidecar, matching source URL, and unchanged image hash. Legacy images without this record need recapturing:
@@ -189,10 +188,9 @@ Engage Budget Request Line Item
    - Confirm it matches the subtotal in `FY27_Bills_Budget.xlsx`.
 2. **Submit to SGA**:
    - Click the blue **Submit Request** button in Engage.
-3. **Record Official Bill Number**:
-   - Once submitted, SGA assigns a Request Number (e.g., `344042`).
-   - Open `FY27_Bills_Budget.xlsx` and paste that number into Column B (**`Bill No.`**) on **all rows** for that bill.
-   - *This step is critical because `mrg-finance purchase` will later use this Bill Number to look up line item allocations!*
+3. **Track Approval**:
+   - The Engage request ID is already saved in **Bill No.** from draft creation. Keep that reference on every item row.
+   - Wait for SGA approval and confirm approved amounts before creating purchase orders. `purchase` uses this reference to resolve funding lines.
 
 ---
 

@@ -50,6 +50,33 @@ BILL_NO = ""   # Will prompt — shows available options
 
 
 # === Utility functions ===
+class BillDraftRequired(ValueError):
+    pass
+
+
+def require_engage_draft_number(rows, bill_title):
+    """Every product row must reference the same already-created Engage draft."""
+    import spreadsheet_utils
+    items = [row for row in rows.to_dict("records")
+             if spreadsheet_utils.get_col_val(row, "item_name")]
+    numbers = [spreadsheet_utils.clean_id(spreadsheet_utils.get_col_val(row, "bill_no")) for row in items]
+    if not items:
+        problem = f"No product items found for '{bill_title}'."
+    elif any(not number for number in numbers):
+        problem = f"Bill No. is missing on one or more item rows for '{bill_title}'."
+    elif any(not number.isascii() or not number.isdigit() or int(number) <= 0 for number in numbers):
+        problem = "Bill No. must contain the numeric Engage request ID, not a title or URL."
+    elif len({int(number) for number in numbers}) != 1:
+        problem = f"Item rows for '{bill_title}' contain conflicting Engage Bill No. values."
+    else:
+        return str(int(numbers[0]))
+    raise BillDraftRequired(f"Bill request stopped before Chrome: {problem}\n"
+        "Create and save the bill draft in Engage first. Copy its numeric ID from "
+        "the edit URL (.../requests#/edit/344042) into Bill No. on every item row for this bill.\n"
+        "Save and close the workbook, finish cloud sync if using --fresh, then rerun bill-request. "
+        "The tool fills an existing draft; it does not create one.")
+
+
 def _find_screenshot(item_name, bill_title=""):
     """Find screenshot file for an item using exact, sanitized, and alphanumeric normalized matching."""
     if not item_name:
@@ -291,12 +318,6 @@ def main():
         if result2.returncode == 0:
             print("✅ Screenshots synced")
 
-    # Prompt if empty
-    if not USERNAME:
-        USERNAME = input("Enter your GT username: ").strip()
-    if not PASSWORD:
-        PASSWORD = getpass.getpass("Enter GT password (for CampusLabs + Duo MFA): ")
-
     import spreadsheet_utils
     if CSV_FILE.endswith(".xlsx"):
         with pd.ExcelFile(CSV_FILE) as ef:
@@ -313,8 +334,9 @@ def main():
         print("\nAvailable Bill Titles:")
         for i, t in enumerate(_titles, 1):
             _mask = _df_temp["Bill Title"].astype(str).str.strip().str.lower() == t.lower()
-            _bill_nos = _df_temp[_mask]["Bill No."].astype(str).str.replace(".0", "", regex=False).str.strip().unique()
-            _bill_no_str = _bill_nos[0] if len(_bill_nos) > 0 and _bill_nos[0] not in ("", "nan") else "?"
+            _bill_nos = list(dict.fromkeys(spreadsheet_utils.clean_id(
+                spreadsheet_utils.get_col_val(row, "bill_no")) for row in _df_temp[_mask].to_dict("records")))
+            _bill_no_str = "/".join(number for number in _bill_nos if number) or "?"
             count = _mask.sum()
             print(f"  {i}. {t} (Bill #{_bill_no_str}, {count} items)")
 
@@ -335,16 +357,16 @@ def main():
             BILL_NO = match[0]
         print(f"\nUsing Bill: {BILL_NO}")
 
-    # Auto-generate BILL_URL from Bill No. in spreadsheet
+    # The draft must already exist and its ID must be recorded before automation.
     _mask = _df_temp["Bill Title"].astype(str).str.strip().str.lower() == BILL_NO.lower()
-    _bill_nos = _df_temp[_mask]["Bill No."].astype(str).str.replace(".0", "", regex=False).str.strip().unique()
-    _bill_num = _bill_nos[0] if len(_bill_nos) > 0 and _bill_nos[0] not in ("", "nan") else ""
-    if _bill_num:
-        BILL_URL = f"https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/budgeting/requests#/edit/{_bill_num}"
-        print(f"\n  → Bill URL: {BILL_URL}")
-    else:
-        while not BILL_URL or not BILL_URL.startswith("http"):
-            BILL_URL = input("Could not find Bill No. Enter Engage Edit URL manually: ").strip()
+    _bill_num = require_engage_draft_number(_df_temp[_mask], BILL_NO)
+    BILL_URL = f"https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/budgeting/requests#/edit/{_bill_num}"
+    print(f"\n  → Existing Engage draft #{_bill_num}: {BILL_URL}")
+
+    if not USERNAME:
+        USERNAME = input("Enter your GT username: ").strip()
+    if not PASSWORD:
+        PASSWORD = getpass.getpass("Enter GT password (for CampusLabs + Duo MFA): ")
 
     # Interactive Screenshot Audit & On-Demand Capture
     safe_bill = "".join(c if c.isalnum() or c in " -_" else "_" for c in BILL_NO)
@@ -714,4 +736,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except BillDraftRequired as error:
+        print(error)
+        sys.exit(1)

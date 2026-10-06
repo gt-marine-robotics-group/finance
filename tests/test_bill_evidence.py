@@ -123,6 +123,42 @@ def test_legacy_image_without_proof_is_not_bill_evidence(monkeypatch, tmp_path):
         automation.require_bill_evidence([("Part", URL)], "Test Bill")
 
 
+@pytest.mark.parametrize("numbers", [[""], ["344042", ""], ["344042", "344043"],
+                                    ["https://example.com/edit/344042"], [0], ["344042.5"]])
+def test_bill_missing_or_conflicting_draft_ids_stop_before_credentials_or_chrome(monkeypatch, tmp_path, numbers):
+    path = tmp_path / "bill.xlsx"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Bills"
+    ws.append(["Bill Title", "Bill No.", "Item Name", "Link"])
+    for index, number in enumerate(numbers):
+        ws.append(["Test Bill", number, f"Part {index}", URL])
+    wb.save(path)
+    wb.close()
+    monkeypatch.setattr("sys.argv", ["bill-request", "--excel-path", str(path), "--bill", "Test Bill"])
+    monkeypatch.setattr(automation, "USERNAME", "")
+    monkeypatch.setattr(automation, "PASSWORD", "")
+    monkeypatch.setattr(automation, "BILL_URL", "https://example.com/stale-draft")
+    unexpected = MagicMock(side_effect=AssertionError("Must validate the workbook reference first"))
+    monkeypatch.setattr("builtins.input", unexpected)
+    monkeypatch.setattr(automation.getpass, "getpass", unexpected)
+    chrome = MagicMock()
+    monkeypatch.setattr(automation.webdriver, "Chrome", chrome)
+    with pytest.raises(automation.BillDraftRequired, match="Create and save the bill draft in Engage first"):
+        automation.main()
+    unexpected.assert_not_called()
+    chrome.assert_not_called()
+
+
+def test_bill_draft_check_accepts_excel_numeric_ids_and_ignores_separator_rows():
+    rows = pd.DataFrame([
+        {"Item": "Part A", "Bill Number": 344042.0},
+        {"Item": "Part B", "Bill Number": "344042"},
+        {"Item": "", "Bill Number": ""},
+    ])
+    assert automation.require_engage_draft_number(rows, "Test Bill") == "344042"
+
+
 @pytest.fixture
 def screenshot_workbook(tmp_path, monkeypatch):
     path = tmp_path / "bill.xlsx"

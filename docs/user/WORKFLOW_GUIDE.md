@@ -13,9 +13,10 @@ flowchart TD
     subgraph Stage1["Stage 1: Funding Allocation (Bills Sheet)"]
         B1["Club needs future funding"] --> B2["Add rows to Bills sheet with shared Bill Title"]
         B2 --> B3["Excel generates Bill Item ID & Total Cost"]
-        B3 --> B4["Submit Budget Request on Engage"]
-        B4 --> B5["SGA Approves Bill & assigns Bill No."]
-        B5 --> B6["Record Bill No. on Bills rows"]
+        B3 --> B4["Create and save draft on Engage"]
+        B4 --> B5["Record draft ID in Bill No. on every item row"]
+        B5 --> B6["Fill draft manually or with bill-request, then submit"]
+        B6 --> B7["Wait for SGA approval"]
     end
 
     subgraph Stage2["Stage 2: Spending Approved Funds (Ordering Sheet)"]
@@ -58,7 +59,7 @@ Used when preparing an SGA Bill Request for funding.
 | Column | Field Name | Type | Editing Instructions |
 | :--- | :--- | :--- | :--- |
 | **A** | **`Bill Item ID`** | **Formula** | **DO NOT OVERWRITE.** Generated automatically by Excel formula. |
-| **B** | `Bill No.` | Text/Number | Leave blank initially. Once SGA passes the bill, enter the official Engage request number (e.g. `344042`) on all rows for this bill. |
+| **B** | `Bill No.` | Text/Number | Create/save the Engage draft, then record its numeric request ID (e.g. `344042`) on every item row before running `bill-request`. Approval comes later. |
 | **C** | `Bill Title` | Text | The shared bill name. Use identical text across all rows in the same request. |
 | **D** | `Item Name` | Text | Clear, concise item name (e.g. `Pi Pico`, `M2.5 Threaded Inserts`). |
 | **E** | `Vendor` | Text | Primary vendor (e.g. `Amazon`, `McMaster`, `DigiKey`). |
@@ -102,12 +103,12 @@ If you are not using the automated CLI tool, follow these step-by-step instructi
 
 1. **Open Engage Budgeting:** Navigate to [MRG Budgeting in Engage](https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/budgeting) and log in with your GT account and Duo MFA.
 2. **Create Draft:** Click **Create Request**, select the upcoming fiscal year (e.g., `FY27`), and set the request name to the exact **`Bill Title`** used in Excel.
-3. **Add Line Items by Section:**
+3. **Record the Draft ID:** Copy the numeric ID from the saved draft's edit URL into `Bill No.` on every matching item row in Excel. Save and close the workbook. This is also required before using `mrg-finance bill-request` to fill the draft.
+4. **Add Line Items by Section:**
    - Group items under the correct budget section (`B03` or `B06`).
    - For each item, enter the `Item Name`, `Description` (justification), `Quantity`, and unit `Cost`.
    - **Attach Quote Screenshot:** Upload a clear PNG screenshot (`screenshots/<Bill Title>/<Item Name>.png`) showing the product name, variant/pack size, and live price.
-4. **Verify Totals & Submit:** Confirm the total requested amount matches Excel's subtotal for that bill title. Click **Submit**.
-5. **Update Excel:** Once submitted, copy the assigned request number into `Bill No.` on the `Bills` sheet for all items in that bill.
+5. **Verify Totals & Submit:** Confirm the total requested amount matches Excel's subtotal for that bill title. Click **Submit**, then wait for approval before purchasing. Keep the previously recorded draft ID in `Bill No.`.
 
 ### B. Submitting a Purchase Request (Spending Approved Funds)
 

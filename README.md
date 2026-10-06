@@ -218,12 +218,13 @@ All team purchasing data lives in **`FY27_Bills_Budget.xlsx`**:
 2. Group items under a shared **`Bill Title`** (e.g. `Marine Robotics Group RobotX Testing Equipment Bill`).
 3. Fill in: `Item Name`, `Vendor`, unit `Cost`, `Quantity`, product `Link`, `Budget Section` (`B03` for equipment/tools, `B06` for supplies), and `Person Requesting`.
 4. **Do not edit `Bill Item ID` or `Total Cost`** — Excel calculates these automatically.
-5. Submit the draft to SGA:
+5. Create and save the funding request draft in [Engage Budgeting](https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/budgeting) first. Use the same bill title and fiscal year. Copy the numeric request ID from its edit URL (`.../requests#/edit/344042`) into **`Bill No.` on every item row** for that bill. Save and close Excel; let OneDrive finish syncing before using `--fresh`.
+6. Fill the existing Engage draft:
    ```bash
    mrg-finance bill-request --fresh
    ```
-   *(Or submit manually on [Engage Budgeting](https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/budgeting)).*
-6. Once SGA approves the bill, record the official **`Bill No.`** on all item rows.
+   The tool adds line items and evidence to that draft; it does not create the Engage request. Review the completed draft and submit it manually to SGA.
+7. Wait for SGA approval before preparing a purchase. The Engage request ID is already recorded in **`Bill No.`**; approval is a later step.
 
 ---
 
