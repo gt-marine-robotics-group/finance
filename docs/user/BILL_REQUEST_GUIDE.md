@@ -58,8 +58,8 @@ mrg-finance bill-request --fresh
 # Skipping the interactive bill selection menu:
 mrg-finance bill-request --bill "Marine Robotics Group RobotX Testing Equipment Bill"
 
-# Skipping the optional visual review GUI:
-mrg-finance bill-request --no-review
+# Review product evidence in the spreadsheet:
+mrg-finance screenshots --bill "<Bill Title>" --interactive
 ```
 
 ---
@@ -100,25 +100,22 @@ Select Bill Title [1-3]: 1
   - Copy the URL from your browser address bar (it looks like `.../requests#/edit/123456`) and paste it into the terminal.
 
 ### Prompt 4: Screenshot Audit & On-Demand Capture
-The CLI checks the local directory `screenshots/<Bill Title>/` to verify that every item in your bill has a corresponding product screenshot:
+The CLI checks `screenshots/<Bill Title>/` for product screenshots with a checked `.evidence.json` sidecar, matching source URL, and unchanged image hash. Legacy images without this record need recapturing:
 ```text
 📸 Screenshot Audit for 'Marine Robotics Group RobotX Testing Equipment Bill':
-   ✅ Existing ground-truth screenshots: 9
-   ⚠️ Missing screenshots: 2
+   ✅ Checked screenshots: 9
+   ⚠️ Missing or unverified screenshots: 2
 ```
 If screenshots are missing:
 ```text
-Capture missing screenshots automatically now? (Y/n): y
+Capture missing screenshots in Chrome? (Y/n): y
 ```
-- Type `y`: Headless Chrome will visit the vendor links for missing items, dismiss popups, and capture high-resolution product screenshots.
+- Type `y`: Visible Chrome will visit the vendor links for missing items, dismiss popups, and capture high-resolution product screenshots.
+- Complete any CAPTCHA in that window and press Enter to retry, or type `cancel`. The browser session is retained under `.mrg-finance-browser/evidence/`. Linked items with missing or unverified evidence stop the bill flow before Engage opens. The source URL/hash are checked again immediately before attachment upload.
+- Keep the `.evidence.json` files with the images and review the images visually; challenge detection checks known text/widgets.
 
-### Prompt 5: Optional Side-by-Side Review GUI
-```text
-Open interactive side-by-side review GUI? [y/N]: y
-```
-- Type `y` to launch `http://127.0.0.1:8321/review.html` in your browser.
-- Displays every item, product screenshot, live price, and budgeted allocation side-by-side.
-- Return to your terminal and press **Enter** when done reviewing.
+### Prompt 5: Spreadsheet review
+Review the workbook and screenshot evidence before proceeding. The side-by-side GUI has been removed. Screenshot capture uses visible Chrome so you can solve CAPTCHAs; unresolved challenges are saved as separate diagnostics rather than quote attachments.
 
 ---
 

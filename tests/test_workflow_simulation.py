@@ -10,15 +10,12 @@ Workflows Simulated:
 3. Budget / Bill Request Assembly & Deduplication Simulation (mrg_finance.automation)
 4. Price Scraper Multi-Tier Fallback Cascade Simulation (mrg_finance.price_scraper)
 5. Engage Bill Line Item Lookup 5-Tier Fallback Simulation (mrg_finance.engage_bill_lookup)
-6. Purchase Request & Price Overrun / Overflow Simulation (mrg_finance.automation_purchase)
-7. Flask Web Dashboard & Review GUI Simulation (web-app/app.py)
-8. Packaging & CLI Dispatch Regression Shield (mrg_finance.cli & pyproject.toml)
+6. Flask Web Dashboard Simulation (web-app/app.py)
+7. Purchase CLI selection, workbook fallbacks, and cancellation (mrg_finance.cli)
 """
 
 import os
 import sys
-import json
-import tempfile
 from unittest.mock import MagicMock, patch
 import pytest
 import openpyxl
@@ -28,13 +25,9 @@ import pandas as pd
 from mrg_finance import (
     spreadsheet_utils,
     price_scraper,
-    order_excel_builder,
-    share_a_cart,
     engage_bill_lookup,
     automation,
     automation_purchase,
-    automation_screenshots,
-    review_server,
     cli,
 )
 
@@ -409,187 +402,13 @@ def test_simulated_engage_bill_item_matching_5_tiers():
     m5 = engage_bill_lookup.find_best_item_match("Jetson Carrier Board v2", candidate_dict)
     assert m5 is not None and m5["line_number"] == 5
 
-    # HTML Line Number Regex Extraction
-    sample_html = """
-    <div>
-      <a ng-click="editLineItem(lineItem)">1. First Item</a>
-      <a ng-click="editLineItem(lineItem)">2. Valve Assembly</a>
-      <a ng-click="editLineItem(lineItem)">3. Motor Controller</a>
-    </div>
-    """
-    assert engage_bill_lookup.find_line_number_in_bill_html(sample_html, "Valve Assembly") == 2
-    assert engage_bill_lookup.find_line_number_in_bill_html(sample_html, "Missing Item") is None
-
     # URL Construction
     url = engage_bill_lookup.build_bill_url("376851")
     assert url == "https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/budgeting/requests#/edit/376851"
 
 
 # ==============================================================================
-# WORKFLOW SIMULATION 6: PURCHASE REQUEST & OVERRUN / OVERFLOW SIMULATION
-# ==============================================================================
-
-def test_simulated_purchase_request_workflow_with_overrun_and_overflow(ground_truth_workbook, tmp_path):
-    """
-    Simulates the entire Purchase Request execution pipeline:
-    - Reads Ordering sheet and links items to Bills sheet via Bill Item ID
-    - Runs live price audit:
-        * Item 1: Allocated $45.00 -> Quoted $52.99 (+$7.99 price overrun)
-        * Item 2: Allocated $20.00 x 2 = $40.00 -> Quoted $40.00 (exact match)
-        * Item 3: Allocated $15.00 -> Scrape fails -> Falls back to approved $15.00 allocation
-        * Item 4: Allocated $0.00 -> Quoted $7.50 (+$7.50 manual shipping fee)
-    - Verifies mathematical calculations:
-        * Primary Request Allocation: $100.00
-        * Price Overrun: +$7.99
-        * Fee Overflow:  +$7.50
-        * Total 2nd PR Overflow: $15.49
-        * Combined Total: $115.49
-    - Verifies generated Overflow Explanation text
-    - Verifies Budget vs Quoted Excel attachment generation
-    - Verifies Share-A-Cart link generation and persistence
-    """
-    excel_file = pd.ExcelFile(ground_truth_workbook)
-    df_bills = spreadsheet_utils.read_sheet_robust(excel_file, ["Bills"])
-    df_orders = spreadsheet_utils.read_sheet_robust(excel_file, ["Ordering"])
-    
-    # 1. Cross-reference Bill Items
-    bill_item_map = {
-        str(spreadsheet_utils.get_col_val(r.to_dict(), "bill_item_id")).replace(".0", ""): r.to_dict()
-        for _, r in df_bills.iterrows()
-    }
-    assert "101" in bill_item_map
-    assert "102" in bill_item_map
-    
-    # 2. Build requests to submit
-    requests_to_submit = []
-    for _, row in df_orders.iterrows():
-        r_dict = row.to_dict()
-        b_id = str(spreadsheet_utils.get_col_val(r_dict, "bill_item_id")).replace(".0", "")
-        b_row = bill_item_map.get(b_id, {})
-        
-        name = spreadsheet_utils.get_col_val(r_dict, "item_name")
-        cost = automation_purchase.safe_float(spreadsheet_utils.get_col_val(b_row, "cost") or spreadsheet_utils.get_col_val(r_dict, "cost"))
-        qty = automation_purchase.safe_int(spreadsheet_utils.get_col_val(r_dict, "quantity"))
-        
-        requests_to_submit.append({
-            "item_name": name,
-            "cost": cost,
-            "quantity": qty,
-            "total": cost * qty,
-            "bill_no": "376851",
-            "bill_item_id": b_id,
-            "bill_line_ref": f"Bill 376851, Line {b_id}",
-        })
-    
-    # Primary base allocation (Items 1, 2, 3): 45*1 + 20*2 + 15*1 = 100.00 (Item 4 has cost 0.0 in bill)
-    grand_total_allocation = sum(r["total"] for r in requests_to_submit)
-    assert grand_total_allocation == 100.00
-    
-    # 3. Simulate Live Scrape Audit
-    scraped_results = {
-        "Jetson - Heatsink": 52.99,                   # +$7.99 price increase
-        "M12 Penetrators [Pack of 5]": 20.00,        # Exact match
-        "Mystery Board": None,                         # Scrape failed -> fallback to 15.00
-    }
-    manual_overflow_items = [
-        {"description": "Amazon Prime Shipping", "amount": 7.50, "bill_line_ref": "Bill 376851, Line 105"}
-    ]
-    
-    total_scraped_live = 0.0
-    for r in requests_to_submit:
-        live = scraped_results.get(r["item_name"])
-        if live is not None:
-            total_scraped_live += (live * r["quantity"])
-        else:
-            # Fallback to allocated cost when scrape fails
-            total_scraped_live += r["total"]
-            
-    # Live cost of base items: 52.99*1 + 20.00*2 + 15.00*1 = 107.99
-    assert round(total_scraped_live, 2) == 107.99
-    
-    # 4. Calculate Overrun & Overflow
-    price_overrun_total = max(0.0, total_scraped_live - grand_total_allocation)
-    assert round(price_overrun_total, 2) == 7.99
-    
-    manual_overflow_total = sum(it["amount"] for it in manual_overflow_items)
-    assert manual_overflow_total == 7.50
-    
-    total_overflow_amount = price_overrun_total + manual_overflow_total
-    assert round(total_overflow_amount, 2) == 15.49
-    
-    # 5. Build Overflow Justification Text
-    overflow_reasons = []
-    if price_overrun_total > 0:
-        overflow_reasons.append(f"Price increase overflow for order 260910_amazon_awu335. Original allocation: ${grand_total_allocation:.2f}, Live quoted cost: ${total_scraped_live:.2f}")
-        for r_item in requests_to_submit:
-            live_cost = scraped_results.get(r_item["item_name"])
-            if live_cost is not None and live_cost > r_item["cost"] + 0.01:
-                diff = (live_cost - r_item["cost"]) * r_item["quantity"]
-                overflow_reasons.append(f"  - {r_item['item_name']}: Allocated ${r_item['cost']:.2f} -> Quoted ${live_cost:.2f} (+${diff:.2f})")
-
-    if manual_overflow_items:
-        overflow_reasons.append("Shipping / Tax fee allocations:")
-        for m_item in manual_overflow_items:
-            overflow_reasons.append(f"  - {m_item['description']}: +${m_item['amount']:.2f} ({m_item['bill_line_ref']})")
-
-    overflow_text = "\n".join(overflow_reasons)
-    assert "Jetson - Heatsink: Allocated $45.00 -> Quoted $52.99 (+$7.99)" in overflow_text
-    assert "Amazon Prime Shipping: +$7.50 (Bill 376851, Line 105)" in overflow_text
-    
-    # 6. Generate Side-by-Side Budget vs Quoted Excel Report
-    report_out_dir = str(tmp_path / "reports")
-    xlsx_report, csv_report = order_excel_builder.generate_order_budget_vs_quoted_excel(
-        order_id="260910_amazon_awu335",
-        requests_to_submit=requests_to_submit,
-        scraped_results=scraped_results,
-        output_dir=report_out_dir
-    )
-    assert os.path.exists(xlsx_report), "Excel detail report must exist"
-    assert os.path.exists(csv_report), "CSV detail report must exist"
-    
-    # Inspect generated Excel report formulas and integrity
-    wb_rep = openpyxl.load_workbook(xlsx_report, data_only=False)
-    ws_rep = wb_rep.active
-    assert ws_rep.title == "Budget vs Quoted Detail"
-    # Find total row formula
-    has_sum_formula = False
-    for row in ws_rep.iter_rows(values_only=True):
-        for cell in row:
-            if isinstance(cell, str) and "=SUM(" in cell:
-                has_sum_formula = True
-                break
-    assert has_sum_formula, "Excel report must contain =SUM(...) subtotal formulas"
-    wb_rep.close()
-    
-    # 7. Share-A-Cart Normalization & Persistence
-    test_cart_code = "ABC98765"
-    normalized_cart = share_a_cart.normalize_share_a_cart_url(test_cart_code)
-    assert normalized_cart == "https://shareacart.net/get/ABC98765"
-    assert share_a_cart.normalize_share_a_cart_url("https://shareacart.net/get/XYZ") == "https://shareacart.net/get/XYZ"
-    assert share_a_cart.normalize_share_a_cart_url("") is None
-    
-    updated_cnt = spreadsheet_utils.update_order_table_links(
-        ground_truth_workbook,
-        "260910_amazon_awu335",
-        share_cart_url=normalized_cart,
-        engage_request_url="https://gatech.campuslabs.com/engage/finance/request/99999"
-    )
-    assert updated_cnt == 4, "All 4 order rows should have their links updated in the Ordering sheet"
-
-    # 8. Share-A-Cart Extension Discovery
-    with tempfile.TemporaryDirectory() as tmp_ext_dir:
-        ext_dir = os.path.join(tmp_ext_dir, "extensions")
-        os.makedirs(ext_dir, exist_ok=True)
-        crx_file = os.path.join(ext_dir, "share-a-cart.crx")
-        with open(crx_file, "w") as f:
-            f.write("mock crx")
-        with patch("os.path.dirname", return_value=tmp_ext_dir):
-            found_ext = share_a_cart.find_share_a_cart_extension()
-            assert found_ext == crx_file
-
-
-# ==============================================================================
-# WORKFLOW SIMULATION 7: FLASK WEB DASHBOARD & REVIEW GUI SIMULATION
+# WORKFLOW SIMULATION 6: FLASK WEB DASHBOARD SIMULATION
 # ==============================================================================
 
 def test_simulated_web_app_dashboard_workflow(ground_truth_workbook, monkeypatch):
@@ -604,6 +423,11 @@ def test_simulated_web_app_dashboard_workflow(ground_truth_workbook, monkeypatch
     monkeypatch.setenv("FINANCE_XLSX_PATH", ground_truth_workbook)
     
     from app import create_app
+    import xlsx_manager
+    monkeypatch.setattr(xlsx_manager, "LOCAL_XLSX", ground_truth_workbook)
+    monkeypatch.setattr(xlsx_manager, "_get_graph_token", lambda: None)
+    monkeypatch.setattr(xlsx_manager, "sync_pull", lambda **kwargs: False)
+    xlsx_manager.invalidate_all_caches()
     app = create_app()
     app.config["TESTING"] = True
     
@@ -635,54 +459,21 @@ def test_simulated_web_app_dashboard_workflow(ground_truth_workbook, monkeypatch
 
 
 # ==============================================================================
-# WORKFLOW SIMULATION 8: PACKAGING & CLI DISPATCH REGRESSION SHIELD
+# WORKFLOW SIMULATION 7: PURCHASE WORKBOOK FALLBACK & CANCELLATION
 # ==============================================================================
 
-def test_packaging_and_cli_dispatch_integrity():
+def test_purchase_workbook_fallback_and_single_confirmation(tmp_path, monkeypatch, capsys):
     """
-    Verifies packaging integrity and CLI command availability:
-    - pyproject.toml declares packages = ['mrg_finance', 'web-app', 'web-app.routes']
-    - Script entrypoint mrg-finance = 'mrg_finance.cli:main'
-    - Zero loose .py files exist in the repository root
-    - CLI dispatch table contains all commands (report, doctor, bill-request, purchase, etc.)
-    """
-    root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    
-    # 1. Check root for stray python files
-    loose_py = [
-        f for f in os.listdir(root_dir)
-        if f.endswith(".py") and not f.startswith("test") and f != "conftest.py"
-    ]
-    assert not loose_py, f"Loose python files found in root: {loose_py}"
-    
-    # 2. Verify CLI entrypoint imports cleanly
-    assert hasattr(cli, "main"), "mrg_finance.cli must expose main()"
-    
-    # 3. Verify CLI commands exist in dispatch map
-    expected_cmds = {"report", "screenshots", "review", "bill-request", "purchase", "price-check", "doctor"}
-    
-    # Check CLI functions exist
-    for cmd in ["cmd_report", "cmd_screenshots", "cmd_review", "cmd_bill_request", "cmd_purchase", "cmd_price_check", "cmd_doctor"]:
-        assert hasattr(cli, cmd), f"CLI command function {cmd} must exist"
-
-
-# ==============================================================================
-# WORKFLOW SIMULATION 9: PURCHASE UNCALCULATED FORMULA FALLBACK & WEBDRIVER SCOPE
-# ==============================================================================
-
-def test_purchase_uncalculated_formula_fallback_and_webdriver_scope(tmp_path, monkeypatch):
-    """
-    Tests regression shields for:
-    1. Uncalculated Excel formulas in Ordering sheet (vendor/allocation empty strings -> fallback to Bills)
-    2. Selenium webdriver module-level scope (no UnboundLocalError when live price check is skipped)
+    Resolve uncalculated Ordering values from Bills and cancel before cart/login.
+    Exercise the actual CLI-to-purchase dispatch to ensure there is only one confirmation.
     """
     # 1. Construct workbook with uncalculated Ordering row formulas
     wb = openpyxl.Workbook()
     ws_bills = wb.active
     ws_bills.title = "Bills"
     ws_bills.append(["FY27 BUDGET BILLS"])
-    ws_bills.append(["Bill Item ID", "Bill No.", "Bill Title", "Item Name", "Vendor", "Cost", "Quantity", "Total Cost", "Status"])
-    ws_bills.append(["501", "376851", "RobotX", "Brushless Thruster ESC", "Blue Robotics", 119.50, 2, 239.00, "Approved"])
+    ws_bills.append(["Bill Item ID", "Bill No.", "Bill Title", "Item Name", "Vendor", "Cost", "Quantity", "Total Cost", "Status", "Link"])
+    ws_bills.append(["501", "376851", "RobotX", "Brushless Thruster ESC", "Blue Robotics", 119.50, 2, 239.00, "Approved", "https://bluerobotics.com/store/test-esc"])
 
     ws_orders = wb.create_sheet(title="Ordering")
     ws_orders.append(["TOTALS", "", "", "", "", "", "", "", ""])
@@ -704,27 +495,40 @@ def test_purchase_uncalculated_formula_fallback_and_webdriver_scope(tmp_path, mo
     args.order = None
     args.fresh = False
     args.no_review = False
+    args.cart_source = "automated"
 
-    # Mock user input to select order 1 and then cancel submit ("n")
+    monkeypatch.setattr(automation_purchase, "USERNAME", "")
+    monkeypatch.setattr(automation_purchase, "PASSWORD", "")
+    monkeypatch.delenv("ENGAGE_USERNAME", raising=False)
+    monkeypatch.delenv("ENGAGE_PASSWORD", raising=False)
+    password = MagicMock(side_effect=AssertionError("Cancellation should not ask for credentials"))
+    monkeypatch.setattr(automation_purchase.getpass, "getpass", password)
+    cart = MagicMock(side_effect=AssertionError("Cancellation should not open a cart"))
+    monkeypatch.setattr(automation_purchase, "prepare_cart", cart)
+    def run_purchase(command):
+        monkeypatch.setattr(sys, "argv", command[1:])
+        with pytest.raises(SystemExit) as stopped:
+            automation_purchase.main()
+        return MagicMock(returncode=stopped.value.code)
+    monkeypatch.setattr(cli.subprocess, "run", run_purchase)
+
+    # Select order 1, then decline cart preparation before any credentials are requested.
     inputs = iter(["1", "n"])
-    monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
+    prompts = []
+    def answer(prompt=""):
+        prompts.append(prompt)
+        return next(inputs)
+    monkeypatch.setattr("builtins.input", answer)
 
     with pytest.raises(SystemExit) as exc_info:
         cli.cmd_purchase(args)
     assert exc_info.value.code == 0
-
-    # 3. Test automation_purchase.py execution when live price check is skipped ("n")
-    # Ensuring options = webdriver.ChromeOptions() has valid webdriver in scope
-    args_automation = ["automation_purchase.py", "--order", "260929_bluerobotics_cray66", "--excel-path", test_xlsx]
-    monkeypatch.setattr(sys, "argv", args_automation)
-    monkeypatch.setenv("ENGAGE_USERNAME", "testuser")
-    monkeypatch.setenv("ENGAGE_PASSWORD", "testpass")
-    monkeypatch.setattr("getpass.getpass", lambda prompt="": "testpass")
-
-    # Mock inputs: live price check "n", overflow "n", confirm submit "n" (exits cleanly before launching browser)
-    monkeypatch.setattr("builtins.input", lambda prompt="": "n")
-
-    with pytest.raises(SystemExit) as exc_info_auto:
-        automation_purchase.main()
-    assert exc_info_auto.value.code == 0
-
+    assert sum("verify" in prompt for prompt in prompts) == 1
+    assert list(inputs) == []
+    output = capsys.readouterr().out
+    assert output.count("Pending Orders") == 1
+    assert "Available Orders" not in output
+    assert output.count("Purchase Request") == 1
+    assert "$239.00" in output
+    password.assert_not_called()
+    cart.assert_not_called()

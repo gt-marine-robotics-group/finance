@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mrg-finance"
-version = "0.2.10"
+version = "0.2.11"
 description = "MRG Finance CLI — bill requests, purchase automation, and price auditing"
 readme = "README.md"
 authors = [
@@ -30,5 +30,4 @@ mrg-finance = "mrg_finance.cli:main"
 packages = ["mrg_finance", "web-app", "web-app.routes"]
 
 [tool.setuptools.package-data]
-mrg_finance = ["*.html"]
 "web-app" = ["templates/*", "templates/**/*", "static/*", "static/**/*"]

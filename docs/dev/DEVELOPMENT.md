@@ -120,8 +120,6 @@ finance/
 ├── engage_bill_lookup.py      # DOM scraper for live Engage bills & line numbers
 ├── order_excel_builder.py     # Budget vs Quoted Excel generator with formulas
 ├── price_scraper.py           # Multi-vendor scraping (Amazon, McMaster, DigiKey)
-├── review_server.py           # Local HTTP server (port 8321) for review GUI
-├── review.html                # Side-by-side card visual inspection interface
 ├── share_a_cart.py            # Share-A-Cart API & extension integration
 ├── spreadsheet_utils.py       # Excel parser, table reader, link persistence
 ├── web-app/                   # Flask web dashboard (runs on SIM PC)

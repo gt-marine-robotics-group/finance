@@ -94,13 +94,19 @@ All commands support `--fresh` to pull the latest workbook and screenshots via `
 | `mrg-finance report --fresh --order "<Order ID>"` | Generates `Budget_vs_Quoted_Detail_<Order ID>.xlsx` and `.csv` without launching browser automation. |
 | `mrg-finance price-check --fresh --bill "<Bill Title>"` | Scrapes live vendor prices for all items in a bill and compares against budgeted amounts. |
 | `mrg-finance screenshots --fresh --bill "<Bill Title>"` | Takes headless screenshots for missing item links and uploads to SharePoint. |
-| `mrg-finance review --bill "<Bill Title>"` | Launches local split-card review GUI (`http://localhost:8321`) to visually diff screenshots and update prices. |
 
 ### Command Flags:
 - `--bill "Exact Bill Title"`: Skip the interactive menu and target a specific bill directly.
 - `--order "YYMMDD_vendor_gtusername"`: Skip the interactive menu and target a specific order directly.
-- `--no-review`: Skip the optional web GUI and proceed immediately to form submission.
-- `--excel-path <path>`: Explicit override path to the master `.xlsx` workbook.
+- `purchase`: Uses the automated cart source by default, without a source-selection prompt. Amazon attempts automatic cart building. DigiKey attempts product additions to an empty cart in a persistent browser, pauses for manual bot verification, and automatically reads its products, quantities, prices, and displayed charges. Manual price entry is an explicit fallback when automatic reading fails. DigiKey requests through GT accountants apply free shipping while retaining the public cart estimate in the comparison workbook; merchandise and tax remain verified. The comparison workbook is filled before GT login. Other vendors use manual preparation.
+- `purchase`: Saves the Share-A-Cart link to every matching Ordering row and reads it back before preparing Engage. Missing columns or failed saves prompt for correction/retry; a recovery copy is kept at `screenshots/<Order ID>/share_a_cart.json`.
+- `purchase --cart-source personal`: Use your vendor account in a dedicated Chrome profile and share the actual cart. `--cart-source automated` explicitly selects the default. Both modes retain Share-A-Cart in stable vendor profiles (`~/Library/Application Support/mrg-finance/chrome/<vendor>/` on macOS), across working folders. Automated Amazon reuses matching cart products and adds only absent products.
+- `purchase`: Enter at **Continue to Engage with this verified amount? [Y/n]** proceeds to form filling; `n` stops with the comparison workbook saved. Final submission is manual. Funding lookup opens the request’s Menu → Budget and distinguishes annual budgets from bills. The form fills the matching selected SGA Budget/Bill write-in answer and native payee fields. Form errors pause for correction/retry in the current Chrome window. A failed lookup offers a retry in the same browser; manual references accept `B03 Line 1`.
+- `purchase`: Offers interactive replacement URLs before building the cart and when verified prices exceed allocation. Replacements are saved to Ordering's Link/Vendor cells in the active workbook; the new URL selects the vendor workflow and payee. An order must contain one vendor.
+- `screenshots --interactive`: Show Chrome and pause for CAPTCHA solving. Headless runs save challenge diagnostics and notify you in the terminal.
+- Screenshot runs retain their browser profile under `.mrg-finance-browser/evidence/`. Bill requests require checked screenshot sidecars with a matching URL/file hash before opening Engage; older unchecked images need recapturing.
+- `--no-review`: Ignored compatibility flag. Review prices in the spreadsheet; the side-by-side GUI has been removed.
+- `FINANCE_XLSX_PATH=/path/to/workbook.xlsx`: Override the workbook path for any CLI command. The underlying automation scripts also accept `--excel-path`.
 
 ---
 
@@ -146,7 +152,7 @@ mrg-finance-work/
 ### 🌐 Chrome & Selenium Automation Issues
 
 #### 1. ChromeDriver & Browser Setup
-- **Automatic Resolution**: `selenium>=4.27` includes built-in Selenium Manager that automatically locates system Chrome or downloads isolated **Chrome for Testing** binaries across macOS, Windows, and Linux. No manual driver download is required.
+- **Automatic Resolution**: `selenium>=4.27` includes Selenium Manager, which uses installed Chrome or downloads **Chrome for Testing** and its driver on supported systems. New Mac users normally do not need a manual browser or driver installation. First-time downloads need internet; Linux has additional architecture/system-library limits. The managed browser is used for real CLI workflows as well as optional browser tests. [Selenium browser management](https://www.selenium.dev/documentation/selenium_manager/)
 
 #### 2. GT SSO / Duo MFA Timeout
 - **Cause**: Duo push notification was not accepted within the 180-second timeout window.
@@ -154,7 +160,7 @@ mrg-finance-work/
 
 #### 3. Engage Form Fallback
 - **Cause**: Engage periodically alters question labels or DOM structures.
-- **Solution**: The purchase automation looks for specific question headings and automatically dumps unmatched order breakdowns and the Share-A-Cart link into the main **Description** box. If this happens, copy the breakdown lines into the respective form inputs before signing.
+- **Solution**: Select the Category/Account and the prompted SGA Budget or SGA Bill option to reveal the custom questions. The CLI verifies separate bill/line, SGA amount, and payee controls and pauses before upload for correction/retry if they cannot be resolved. Inspect `engage_form_error.png` and `engage_fields.json` in the order's evidence folder. Description contains the cart link; funding details are never used as a fallback there.
 
 ---
 

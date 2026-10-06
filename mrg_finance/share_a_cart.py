@@ -1,6 +1,9 @@
 import os
 import re
 from typing import Optional
+from urllib.parse import urlparse
+
+SHARE_A_CART_CHROME_URL = "https://chromewebstore.google.com/detail/share-a-cart-%E2%80%93-easily-sha/hcjohblbkdgcoikaedjndgbcgcfoojmj"
 
 def find_share_a_cart_extension() -> Optional[str]:
     """
@@ -26,35 +29,45 @@ def find_share_a_cart_extension() -> Optional[str]:
 
 def normalize_share_a_cart_url(raw_input: str) -> Optional[str]:
     """
-    Normalize user input or cart code into a full Share-A-Cart URL.
-    Examples:
-      - 'https://shareacart.net/get/ABC1234' -> 'https://shareacart.net/get/ABC1234'
-      - 'ABC1234' -> 'https://shareacart.net/get/ABC1234'
-      - 'shareacart.net/get/ABC1234' -> 'https://shareacart.net/get/ABC1234'
+    Accept a Share-A-Cart link or code; reject unrelated URLs and partial matches.
     """
     if not raw_input or not raw_input.strip():
         return None
     cleaned = raw_input.strip()
-    if cleaned.startswith("http://") or cleaned.startswith("https://"):
-        return cleaned
-    # Match standalone cart code or relative path
-    code_match = re.search(r'(?:shareacart\.net/(?:get|cart)/)?([A-Za-z0-9_-]{5,20})', cleaned)
-    if code_match:
-        return f"https://shareacart.net/get/{code_match.group(1)}"
-    return f"https://shareacart.net/get/{cleaned}"
+    if re.fullmatch(r"[A-Za-z0-9_-]{5,20}", cleaned):
+        return f"https://share-a-cart.com/get/{cleaned}"
+    if "://" not in cleaned:
+        cleaned = "https://" + cleaned
+    parsed = urlparse(cleaned)
+    try:
+        port = parsed.port
+    except ValueError:
+        return None
+    if (parsed.scheme in ("http", "https")
+            and parsed.hostname in ("share-a-cart.com", "www.share-a-cart.com", "shareacart.net", "www.shareacart.net")
+            and not parsed.username and not parsed.password and port in (None, 443, 80)
+            and re.fullmatch(r"/(?:get|cart)/[A-Za-z0-9_-]{3,20}/?", parsed.path)):
+        return parsed._replace(scheme="https", query="", fragment="").geturl()
+    return None
 
 def create_share_a_cart_link(items: list[dict], vendor_name: str = "amazon", order_title: str = "MRG Order") -> Optional[str]:
     """
-    Automatically creates a Share-A-Cart link via the official Share-A-Cart API.
+    Best-effort Amazon link creation through Share-A-Cart's website endpoint.
+    This endpoint is undocumented and does not validate seller quantity limits.
+    Other vendors, including DigiKey, must use the actual-cart browser extension.
     items: list of dicts with keys 'item_name'/'title', 'link'/'url', 'quantity'/'qty', 'cost'/'price'.
     """
     import requests
+    if re.sub(r"[^a-z]", "", vendor_name.lower()) not in ("amazon", "amazoncom", "amazonbusiness"):
+        return None
     cart_entries = []
     for it in items:
         url = it.get("link") or it.get("url") or ""
-        qty = int(it.get("quantity") or it.get("qty") or 1)
+        qty = int(it.get("quantity", it.get("qty", 1)))
+        if qty <= 0:
+            raise ValueError("Share-A-Cart quantities must be positive")
         name = it.get("item_name") or it.get("title") or "Item"
-        price = str(it.get("cost") or it.get("price") or "")
+        price = str(it.get("quoted_unit_cost", it.get("cost", it.get("price", ""))))
         
         # Extract ASIN for Amazon
         asin = it.get("asin")
@@ -105,7 +118,7 @@ def create_share_a_cart_link(items: list[dict], vendor_name: str = "amazon", ord
         print(f"  ⚠️ Automatic Share-A-Cart generation notice: {e}")
     return None
 
-def prompt_for_share_a_cart(item_count: int, vendor_name: str = "Vendor", auto_url: Optional[str] = None) -> Optional[str]:
+def prompt_for_share_a_cart(item_count: int, vendor_name: str = "Vendor", auto_url: Optional[str] = None, *, required=False) -> Optional[str]:
     """
     Interactive prompt presenting the automatically generated Share-A-Cart link,
     or letting the user paste/override it.
@@ -117,23 +130,32 @@ def prompt_for_share_a_cart(item_count: int, vendor_name: str = "Vendor", auto_u
         print(f"  ✨ Automatically Created Cart Link: {auto_url}")
         print("  Press Enter to use this link, or paste a replacement below:")
     else:
-        print("  1. In your open browser window, open your shopping cart.")
-        print("  2. Click the 'Share-A-Cart' extension icon and click 'Create Cart'.")
-        print("  3. Paste the Share-A-Cart link or code below (or press Enter to skip):")
+        print("  Use the vendor/cart Chrome window opened by the CLI. The Engage window is separate.")
+        print("  If Share-A-Cart is missing, leave this prompt waiting and open a new tab in that cart window:")
+        print(f"    {SHARE_A_CART_CHROME_URL}")
+        print("  Click Add to Chrome, then Add extension. Use the puzzle-piece menu to find/pin Share-A-Cart.")
+        print("  Install in the cart window, not the incognito Engage window or your regular Chrome profile.")
+        print("  Amazon and DigiKey cart profiles retain the installation across runs and working folders.")
+        print("  Return to the vendor cart tab (reload if needed), open Share-A-Cart, and click Create Cart ID.")
+        print("  Paste the resulting link or code below" + (" (required; 'cancel' to stop):" if required else " (or press Enter to skip):"))
     
     try:
-        user_input = input("👉 Share-A-Cart Link/Code: ").strip()
-        if not user_input and auto_url:
-            print(f"  ✅ Using Share-A-Cart link: {auto_url}")
-            return auto_url
-        url = normalize_share_a_cart_url(user_input)
-        if url:
-            print(f"  ✅ Registered Share-A-Cart link: {url}")
-            return url
-        else:
+        while True:
+            user_input = input("👉 Share-A-Cart Link/Code: ").strip()
+            if user_input.lower() in ("cancel", "quit", "q"):
+                return None
+            if not user_input and auto_url:
+                print(f"  ✅ Using Share-A-Cart link: {auto_url}")
+                return auto_url
+            url = normalize_share_a_cart_url(user_input)
+            if url:
+                print(f"  ✅ Registered Share-A-Cart link: {url}")
+                return url
+            if required:
+                print("A valid Share-A-Cart URL/code is required. Create it from the verified cart, then paste it here (or 'cancel').")
+                continue
             print("  ⏩ Skipped Share-A-Cart link (none provided).")
             return None
     except (KeyboardInterrupt, EOFError):
         print("\n  ⏩ Skipped Share-A-Cart link.")
-        return auto_url
-
+        return None if required else auto_url

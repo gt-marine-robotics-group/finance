@@ -16,3 +16,6 @@ dist/
 *.egg
 .aider*
 scratch/
+
+# Dedicated personal vendor browser profile (cookies and extensions)
+.mrg-finance-browser/

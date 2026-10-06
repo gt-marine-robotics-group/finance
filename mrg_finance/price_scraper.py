@@ -229,7 +229,7 @@ def dismiss_popups_and_interstitials(driver):
             '[id*="cookie"] button', '[class*="cookie"] button',
             '[id*="consent"] button', 'button[class*="accept"]',
             'button[class*="dismiss"]', 'button[aria-label*="close"]',
-            '#sp-cc-accept', '#a-autoid-0-announce'
+            '#sp-cc-accept'
         ]:
             try:
                 buttons = driver.find_elements(By.CSS_SELECTOR, sel)
@@ -277,8 +277,19 @@ def check_and_set_amazon_quantity(driver, desired_qty: int, item_name: str = "")
     """
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import Select
+    from selenium.webdriver.common.keys import Keys
     import re
     import time
+
+    def select_quantity(element, value):
+        Select(element).select_by_value(str(value))
+        # macOS Chrome can leave the native dropdown open after selecting an
+        # option. Close it and blur the control before clicking Add to Cart.
+        element.send_keys(Keys.ESCAPE)
+        element.send_keys(Keys.TAB)
+        time.sleep(0.3)
+        if element.get_attribute("value") != str(value):
+            raise ValueError("Amazon quantity selection did not retain its value.")
 
     # 1. Check availability text for stock limits
     try:
@@ -293,7 +304,7 @@ def check_and_set_amazon_quantity(driver, desired_qty: int, item_name: str = "")
                     try:
                         qty_selects = driver.find_elements(By.ID, "quantity")
                         if qty_selects:
-                            Select(qty_selects[0]).select_by_value(str(stock_left))
+                            select_quantity(qty_selects[0], stock_left)
                     except Exception:
                         pass
                     return stock_left, True, f"Only {stock_left} left in stock (requested {desired_qty})"
@@ -310,16 +321,13 @@ def check_and_set_amazon_quantity(driver, desired_qty: int, item_name: str = "")
             if numeric_options:
                 max_selectable = max(numeric_options)
                 if desired_qty in numeric_options:
-                    sel.select_by_value(str(desired_qty))
-                    time.sleep(0.3)
+                    select_quantity(qty_selects[0], desired_qty)
                     return desired_qty, False, ""
                 elif desired_qty > max_selectable:
-                    sel.select_by_value(str(max_selectable))
-                    time.sleep(0.3)
+                    select_quantity(qty_selects[0], max_selectable)
                     return max_selectable, True, f"Seller maximum limit is {max_selectable} per customer/order (requested {desired_qty})"
                 else:
-                    sel.select_by_value(str(numeric_options[0]))
-                    time.sleep(0.3)
+                    select_quantity(qty_selects[0], numeric_options[0])
                     return numeric_options[0], True, f"Requested quantity {desired_qty} not in available dropdown options {numeric_options}"
     except Exception:
         pass
@@ -337,11 +345,16 @@ def check_and_set_amazon_quantity(driver, desired_qty: int, item_name: str = "")
             else:
                 inp.clear()
                 inp.send_keys(str(desired_qty))
+                inp.send_keys(Keys.TAB)
+                if inp.get_attribute("value") != str(desired_qty):
+                    raise ValueError("Amazon quantity input did not retain its value.")
                 return desired_qty, False, ""
     except Exception:
         pass
 
-    return desired_qty, False, ""
+    if desired_qty == 1:
+        return 1, False, ""  # Default single-item buy boxes may have no quantity control.
+    return 0, True, "Could not verify the requested quantity in the product buy box. Set it manually or use personal cart mode."
 
 
 def generate_amazon_cart_url(items: list[dict]) -> str:
@@ -495,4 +508,3 @@ def scrape_item_price(url: str, timeout: int = 10) -> dict | None:
         pass
 
     return None
-

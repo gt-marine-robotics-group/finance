@@ -7,16 +7,14 @@ Usage:
     mrg-finance doctor [--fresh]
     mrg-finance bill-request [--fresh] [--bill TITLE]
     mrg-finance purchase [--fresh] [--order ORDER_ID]
-    mrg-finance review [--bill TITLE]
     mrg-finance price-check [--fresh] [--bill TITLE] [--cart]
-    mrg-finance screenshots [--fresh] [--bill TITLE] [--review-only]
+    mrg-finance screenshots [--fresh] [--bill TITLE]
 
 Commands:
     report           Generate Budget vs Quoted Full Detail Excel (.xlsx) & CSV reports
     doctor           Run diagnostic health check on FY27_Bills_Budget.xlsx
     bill-request     Submit a bill to CampusLabs Engage
     purchase         Create purchase requests on Engage (grouped by vendor from OrderT)
-    review           Launch side-by-side screenshot & price review GUI
     price-check      Check current prices vs allocation, warn on overrun
     screenshots      Scrape prices + take screenshots for items in a bill
 
@@ -65,7 +63,7 @@ def get_xlsx_path():
 XLSX_PATH = get_xlsx_path()
 SHEET_NAME = "Bills"
 ORDERING_SHEET = "Ordering"
-SCREENSHOT_DIR = os.path.join(SCRIPT_DIR, "screenshots")
+SCREENSHOT_DIR = os.path.abspath("screenshots")
 SKIP_TITLES = ("nan", "request", "liquid", "misc")
 
 
@@ -199,14 +197,13 @@ def select_bill(df, bill_title=None):
 def cmd_screenshots(args):
     """Scrape prices and capture full-page product screenshots for a bill."""
     py_exe = get_python_executable()
-    cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation_screenshots.py")]
+    cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation_screenshots.py"), "--excel-path", get_xlsx_path()]
     if getattr(args, "bill", None):
         cmd.extend(["--bill", args.bill])
-    if getattr(args, "review_only", False):
-        cmd.append("--review-only")
-    if getattr(args, "no_review", False):
-        cmd.append("--no-review")
-    subprocess.run(cmd)
+    if getattr(args, "interactive", False):
+        cmd.append("--interactive")
+    res = subprocess.run(cmd)
+    sys.exit(res.returncode)
 
 
 # ============================================================
@@ -216,13 +213,11 @@ def cmd_bill_request(args):
     """Submit a bill to CampusLabs Engage."""
     # This wraps the existing automation.py
     py_exe = get_python_executable()
-    cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation.py"), "--excel-path", XLSX_PATH]
+    cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation.py"), "--excel-path", get_xlsx_path()]
     if getattr(args, "bill", None):
         cmd.extend(["--bill", args.bill])
     if getattr(args, "fresh", False):
         cmd.append("--fresh")
-    if getattr(args, "no_review", False):
-        cmd.append("--no-review")
     res = subprocess.run(cmd)
     sys.exit(res.returncode)
 
@@ -233,6 +228,7 @@ def cmd_bill_request(args):
 def cmd_purchase(args):
     """Create purchase requests on Engage from the Ordering sheet."""
     import spreadsheet_utils
+    from mrg_finance.purchase_sources import purchase_source
 
     df_order = load_ordering()
 
@@ -253,12 +249,14 @@ def cmd_purchase(args):
 
     oid_col = next((c for c in df_order.columns if isinstance(c, str) and "Order ID" in c), "Order ID")
     status_col = next((c for c in df_order.columns if c.strip().lower() == "status"), "Status")
+    if status_col not in df_order.columns:
+        df_order[status_col] = ""
 
     # Filter to rows with Order IDs but not yet purchased
     df_pending = df_order[
         (df_order[oid_col].astype(str).str.strip() != "") &
         (~df_order[oid_col].astype(str).str.strip().str.startswith("ungrouped_")) &
-        (df_order[status_col].astype(str).str.strip().str.lower().isin(["", "pending purchase", "bill approved"]))
+        (df_order[status_col].astype(str).str.strip().str.lower().isin(["", "pending", "pending purchase", "bill approved"]))
     ]
 
     if df_pending.empty:
@@ -276,11 +274,7 @@ def cmd_purchase(args):
             or spreadsheet_utils.get_col_val(b_dict, "item_name")
             or ""
         )
-        vendor = (
-            spreadsheet_utils.get_col_val(d, "vendor")
-            or spreadsheet_utils.get_col_val(b_dict, "vendor")
-            or ""
-        )
+        _, vendor = purchase_source(d, b_dict)
         qty = spreadsheet_utils.safe_float(
             spreadsheet_utils.get_col_val(d, "quantity")
             or spreadsheet_utils.get_col_val(b_dict, "quantity")
@@ -323,17 +317,16 @@ def cmd_purchase(args):
             orders[oid] = []
         orders[oid].append(row)
 
-    print(f"\nPending Orders ({len(orders)}):\n")
     order_list = list(orders.items())
-    for i, (oid, items) in enumerate(order_list, 1):
-        resolved = [_resolve_item(it) for it in items]
-        vendor = _extract_vendor(oid, resolved)
-        total = sum(it["allocation"] for it in resolved)
-        print(f"  {i}. {oid} — {vendor} — {len(items)} items — ${total:.2f}")
-
     if args.order:
         selected_oid = args.order
     else:
+        print(f"\nPending Orders ({len(orders)}):\n")
+        for i, (oid, items) in enumerate(order_list, 1):
+            resolved = [_resolve_item(it) for it in items]
+            vendor = _extract_vendor(oid, resolved)
+            total = sum(it["allocation"] for it in resolved)
+            print(f"  {i}. {oid} — {vendor} — {len(items)} items — ${total:.2f}")
         choice = input("\nSelect order (number or ID): ").strip()
         if choice.isdigit() and 1 <= int(choice) <= len(order_list):
             selected_oid = order_list[int(choice) - 1][0]
@@ -344,35 +337,10 @@ def cmd_purchase(args):
         print(f"Order '{selected_oid}' not found")
         sys.exit(1)
 
-    order_items = orders[selected_oid]
-    resolved_order_items = [_resolve_item(it) for it in order_items]
-    vendor = _extract_vendor(selected_oid, resolved_order_items)
-
-    print(f"\n{'='*60}")
-    print(f"Purchase Request: {selected_oid}")
-    print(f"Vendor: {vendor}")
-    print(f"{'='*60}")
-    print(f"\n{'Item':<35} {'Qty':<5} {'Allocation':<12}")
-    print("-" * 55)
-    total = 0.0
-    for it in resolved_order_items:
-        name = it["name"][:34]
-        qty_str = str(int(it["qty"])) if it["qty"].is_integer() else f"{it['qty']:.1f}"
-        alloc = it["allocation"]
-        total += alloc
-        print(f"  {name:<33} {qty_str:<5} ${alloc:.2f}")
-    print(f"\n  Total: ${total:.2f}")
-
-    confirm = input(f"\nSubmit purchase request to Engage? [Y/n]: ").strip().lower()
-    if confirm == "n":
-        print("Cancelled.")
-        sys.exit(0)
-
-    # Run the Engage automation with the selected order
+    cart_source = getattr(args, "cart_source", None) or "automated"
+    # The purchase script owns the summary and preparation confirmation.
     py_exe = get_python_executable()
-    cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation_purchase.py"), "--order", selected_oid, "--excel-path", get_xlsx_path()]
-    if getattr(args, "no_review", False):
-        cmd.append("--no-review")
+    cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation_purchase.py"), "--order", selected_oid, "--excel-path", get_xlsx_path(), "--cart-source", cart_source]
     res = subprocess.run(cmd)
     sys.exit(res.returncode)
 
@@ -382,12 +350,10 @@ def cmd_purchase(args):
 # ============================================================
 def cmd_price_check(args):
     """Check current prices vs allocation, generate Amazon cart."""
-    import re
     import time
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
     from selenium.webdriver.chrome.service import Service
-    from selenium.webdriver.common.by import By
 
     df = load_xlsx()
     bill_title = select_bill(df, args.bill)
@@ -508,15 +474,6 @@ def cmd_price_check(args):
 # ============================================================
 # MAIN
 # ============================================================
-def cmd_review(args):
-    """Launch the side-by-side screenshot and price review GUI directly without scraping."""
-    py_exe = get_python_executable()
-    cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation_screenshots.py"), "--review-only"]
-    if getattr(args, "bill", None):
-        cmd.extend(["--bill", args.bill])
-    subprocess.run(cmd)
-
-
 def cmd_doctor(args):
     """Run diagnostic health check on FY27_Bills_Budget.xlsx."""
     import spreadsheet_utils
@@ -589,7 +546,6 @@ def main():
 Examples:
   mrg-finance report --order 260811_amazon_awu335
   mrg-finance screenshots --fresh --bill "FY27 Budget"
-  mrg-finance review --bill "Marine Robotics Group RobotX Testing Equipment Bill"
   mrg-finance bill-request --fresh
   mrg-finance purchase --fresh
   mrg-finance price-check --bill "FY27 Budget" --cart
@@ -607,24 +563,22 @@ Examples:
     p_ss = sub.add_parser("screenshots", help="Scrape prices + take screenshots")
     p_ss.add_argument("--fresh", "-f", action="store_true", help="Sync from SharePoint first")
     p_ss.add_argument("--bill", "-b", help="Bill title (skips interactive selection)")
-    p_ss.add_argument("--review-only", "-r", action="store_true", help="Launch review GUI without scraping")
-    p_ss.add_argument("--no-review", action="store_true", help="Skip opening side-by-side review GUI")
-
-    # review
-    p_rv = sub.add_parser("review", help="Launch side-by-side screenshot & price review GUI")
-    p_rv.add_argument("--bill", "-b", help="Bill title (skips interactive selection)")
+    p_ss.add_argument("--interactive", action="store_true", help="Show Chrome and pause for CAPTCHA solving")
+    p_ss.add_argument("--no-review", action="store_true", help=argparse.SUPPRESS)
 
     # bill-request
     p_br = sub.add_parser("bill-request", help="Submit bill to CampusLabs Engage")
     p_br.add_argument("--fresh", "-f", action="store_true", help="Sync from SharePoint first")
     p_br.add_argument("--bill", "-b", help="Bill title (skips interactive selection)")
-    p_br.add_argument("--no-review", action="store_true", help="Skip opening side-by-side review GUI")
+    p_br.add_argument("--no-review", action="store_true", help=argparse.SUPPRESS)
 
     # purchase
     p_pr = sub.add_parser("purchase", help="Submit purchase requests to Engage")
     p_pr.add_argument("--fresh", "-f", action="store_true", help="Sync from SharePoint first")
     p_pr.add_argument("--order", "-o", help="Order ID (skips interactive selection)")
-    p_pr.add_argument("--no-review", action="store_true", help="Skip opening side-by-side review GUI")
+    p_pr.add_argument("--no-review", action="store_true", help=argparse.SUPPRESS)
+    p_pr.add_argument("--cart-source", choices=("automated", "personal"), default="automated",
+                      help="Cart source (default: automated); attempts Amazon/DigiKey additions. Personal skips additions. Reads supported carts automatically")
 
     # price-check
     p_pc = sub.add_parser("price-check", help="Check current prices vs allocation")
@@ -650,7 +604,6 @@ Examples:
     commands = {
         "report": cmd_report,
         "screenshots": cmd_screenshots,
-        "review": cmd_review,
         "bill-request": cmd_bill_request,
         "purchase": cmd_purchase,
         "price-check": cmd_price_check,
