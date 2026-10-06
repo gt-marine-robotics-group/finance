@@ -91,6 +91,36 @@ def test_already_loaded_budget_does_not_toggle_menu_or_tab():
     driver.find_elements.assert_not_called()
 
 
+def test_draft_budget_accepts_empty_sections_only_after_edit_controls_load(monkeypatch):
+    from selenium.webdriver.support.ui import WebDriverWait
+    driver, menu, tab, section, add = (MagicMock() for _ in range(5))
+    state = {"menu": False, "budget": False, "reads": 0}
+    menu.click.side_effect = lambda: state.update(menu=True)
+    tab.is_displayed.side_effect = lambda: state["menu"]
+    tab.click.side_effect = lambda: state.update(budget=True)
+    section.text = "B03 - General Inventoried Goods"
+    section.find_element.return_value.find_elements.return_value = [add]
+    add.is_displayed.side_effect = lambda: state["reads"] > 4
+
+    def body(*args):
+        state["reads"] += 1
+        return MagicMock(text="Budget Section:\nB03 - General Inventoried Goods\n# of Line Items (0)")
+
+    def controls(by, selector):
+        if by == By.CSS_SELECTOR:
+            return [section] if state["budget"] else []
+        return [menu] if "not(contains" in selector else [tab]
+
+    driver.find_element.side_effect = body
+    driver.find_elements.side_effect = controls
+    monkeypatch.setattr(lookup, "WebDriverWait", lambda d, *a, **kw: WebDriverWait(d, 1, poll_frequency=.01, **kw))
+    assert "# of Line Items (0)" in lookup.open_budget_view(driver, require_editable=True)
+    assert state["reads"] > 4
+    menu.click.assert_called_once()
+    tab.click.assert_called_once()
+    add.click.assert_not_called()  # Readiness checks must not create a blank line.
+
+
 def test_failed_lookup_reports_unread_page_instead_of_zero_success(monkeypatch, capsys):
     driver = MagicMock()
     monkeypatch.setattr(lookup, "open_budget_view", MagicMock(side_effect=TimeoutException()))
@@ -138,22 +168,30 @@ def test_fee_reference_can_be_explicitly_cancelled(monkeypatch):
 
 
 @pytest.mark.skipif(os.environ.get("MRG_RUN_BROWSER_TESTS") != "1", reason="Opt-in local Chrome DOM regression")
-def test_real_dom_hidden_menu_budget_lookup(tmp_path):
+@pytest.mark.parametrize("require_editable", [False, True])
+def test_real_dom_hidden_menu_budget_lookup(tmp_path, require_editable):
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
     page = tmp_path / "bill.html"
     page.write_text("""<a href='#' onclick="document.querySelector('#budget').style.display='block';return false">MENU</a>
     <a id='budget' style='display:none' onclick="document.querySelector('#rows').style.display='block';return false">BUDGET</a>
-    <div id='rows' style='display:none'>Budget Section:<h4>B03 - General Inventoried Goods</h4>
-    <div><div>1.</div><div><a href='#'>Rapsberry Pi 4</a></div><div>B03 - General Inventoried Goods</div>
-    <div>10 x $63.35</div><div>$633.50</div></div></div>""")
+    <div id='rows' style='display:none'><div>Budget Section:
+    <h4 class='groupTitle'><a href='#'>B03 - General Inventoried Goods</a></h4>
+    <a class='add' href='#'>Add Line Item</a></div>
+    """ + ("""<div><div>1.</div><div><a href='#'>Rapsberry Pi 4</a></div><div>B03 - General Inventoried Goods</div>
+    <div>10 x $63.35</div><div>$633.50</div></div>""" if not require_editable else "# of Line Items (0)") + "</div>")
     options = Options()
     options.add_argument("--headless=new")
     driver = webdriver.Chrome(options=options)
     try:
         driver.get(page.as_uri())
-        rows = lookup.parse_budget_text(lookup.open_budget_view(driver))
-        assert rows["rapsberry pi 4"]["section_line_number"] == 1
-        assert rows["rapsberry pi 4"]["section"] == "B03 - General Inventoried Goods"
+        body = lookup.open_budget_view(driver, require_editable=require_editable)
+        if require_editable:
+            assert "# of Line Items (0)" in body
+            assert lookup.parse_budget_text(body) == {}
+        else:
+            rows = lookup.parse_budget_text(body)
+            assert rows["rapsberry pi 4"]["section_line_number"] == 1
+            assert rows["rapsberry pi 4"]["section"] == "B03 - General Inventoried Goods"
     finally:
         driver.quit()

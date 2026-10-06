@@ -291,19 +291,29 @@ def wait_for_page_ready(driver, timeout=15):
     time.sleep(2)  # Extra settle for JS content
 
 
-def sync_screenshots_to_sharepoint():
-    """Upload evidence folders, including separately marked challenge diagnostics."""
+def sync_screenshots_to_sharepoint(folder):
+    """Upload only the selected bill's evidence, preserving its folder in SharePoint."""
     import subprocess
+    from pathlib import Path
+    source = Path(folder).resolve()
+    if not source.is_dir():
+        print(f"Screenshot upload skipped: evidence folder not found: {source}")
+        return
+    destination = f"onedrive:OPS-1 Operations/FY27 Finances/screenshots/{source.name}"
     try:
         result = subprocess.run(
             ["rclone", "copy", "--ignore-checksum", "--ignore-size", "--update",
-             SAVE_FOLDER, "onedrive:OPS-1 Operations/FY27 Finances/screenshots"],
+             str(source), destination],
             capture_output=True, text=True, timeout=120,
         )
         if result.returncode:
-            print(f"Screenshot sync skipped: {result.stderr.strip()}")
+            errors = [line for line in result.stderr.splitlines() if "ERROR" in line]
+            detail = (errors[-1] if errors else result.stderr.strip())[-500:]
+            print(f"Screenshot upload incomplete: {detail}\nLocal evidence remains saved in {source}. Retry this bill's upload after resolving the rclone error.")
+        else:
+            print(f"Screenshot evidence uploaded to SharePoint: {source.name}")
     except (OSError, subprocess.TimeoutExpired) as error:
-        print(f"Screenshot sync skipped: {error}")
+        print(f"Screenshot upload incomplete: {error}\nLocal evidence remains saved in {source}.")
 
 
 def main():
@@ -477,7 +487,7 @@ def main():
     print(f"Screenshots: {folder}\nCAPTCHA diagnostics: {folder / 'challenges'}")
     failed = sum(r["Status"] != "captured" for r in results)
     print(f"Items: {len(results)} | Need attention: {failed}")
-    sync_screenshots_to_sharepoint()
+    sync_screenshots_to_sharepoint(folder)
     return 1 if failed else 0
 
 

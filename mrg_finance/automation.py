@@ -77,6 +77,24 @@ def require_engage_draft_number(rows, bill_title):
         "The tool fills an existing draft; it does not create one.")
 
 
+def prepare_bill_budget(driver, bill_url, folder):
+    """Recover in the same Chrome window before any bill items are changed."""
+    from mrg_finance.engage_bill_lookup import open_budget_view
+    from mrg_finance.engage_fields import run_engage_step
+
+    def open_current_draft():
+        if (driver.current_url or "").split("?")[0].rstrip("/") != bill_url.rstrip("/"):
+            raise RuntimeError(f"Open the expected Engage draft first: {bill_url}")
+        try:
+            return open_budget_view(driver, require_editable=True)
+        except TimeoutException as error:
+            raise RuntimeError("Could not find editable Budget sections. Open Menu → Budget and check that this draft allows editing.") from error
+
+    return run_engage_step(driver, folder, "Engage bill Budget navigation", open_current_draft,
+        instructions="Chrome remains open. Finish loading/sign-in, then open this draft's Menu → Budget and retry. No bill items have been changed.",
+        cancel_message="Bill preparation cancelled; checked screenshots remain saved and Chrome stays open.")
+
+
 def _find_screenshot(item_name, bill_title=""):
     """Find screenshot file for an item using exact, sanitized, and alphanumeric normalized matching."""
     if not item_name:
@@ -455,7 +473,7 @@ def main():
 
             c_driver.quit()
             from automation_screenshots import sync_screenshots_to_sharepoint
-            sync_screenshots_to_sharepoint()
+            sync_screenshots_to_sharepoint(bill_shot_dir)
         except Exception as chrome_err:
             print(f"⚠️ Could not start Chrome for screenshots: {chrome_err}")
 
@@ -581,11 +599,7 @@ def main():
     print("✅ Logged in\n")
 
     driver.get(BILL_URL)
-    budget_tab = WebDriverWait(driver, 20).until(
-        EC.element_to_be_clickable((By.XPATH, "//a[contains(@analytics-event, 'Tab Budget')]"))
-    )
-    budget_tab.click()
-    time.sleep(5)
+    prepare_bill_budget(driver, BILL_URL, os.path.join(SCREENSHOT_DIR, safe_bill))
 
     # === Ask about existing items ===
     print(f"\n⚠️  What to do with existing line items in each section?")

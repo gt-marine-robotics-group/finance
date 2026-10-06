@@ -140,6 +140,8 @@ Once terminal prompts are complete, a visible Google Chrome browser window will 
 
 2. **Budget Section Navigation**:
    - The automation loads your bill edit page on Engage.
+   - It opens **Menu → Budget** and waits for editable section controls. A new draft can have zero line items.
+   - If navigation fails, Chrome stays open: finish sign-in/loading or open **Menu → Budget** yourself, then press Enter to retry. Type `cancel` to stop. No line items are changed before this step succeeds.
    - It iterates through sections:
      - `B03 - General Inventoried Goods`
      - `B06 - Non-Inventoried Items`
@@ -209,3 +211,11 @@ Engage Budget Request Line Item
 
 ### Q: Can I run this without installing rclone?
 - **Yes!** Just omit the `--fresh` flag. As long as `FY27_Bills_Budget.xlsx` is in your working directory, the command runs completely fine off your local file.
+
+### Q: Screenshots saved, but the SharePoint upload failed?
+- Checked screenshots remain on your computer and can still be attached to Engage. The upload covers only the selected bill's folder, including its evidence metadata and challenge diagnostics; unrelated order reports are not uploaded by this step.
+- Retry the upload from the same working directory after resolving the rclone error, replacing `<Bill Title>` with the actual folder name:
+  ```bash
+  rclone copy "screenshots/<Bill Title>" "onedrive:OPS-1 Operations/FY27 Finances/screenshots/<Bill Title>"
+  ```
+- To resume bill preparation, rerun `mrg-finance bill-request --bill "<Bill Title>"`. Existing checked screenshots are reused; leave the re-capture question at its default `No`.

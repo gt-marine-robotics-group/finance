@@ -176,8 +176,8 @@ def parse_budget_text(text: str) -> dict[str, dict]:
     return {name: info for name, info in by_name.items() if name not in duplicates}
 
 
-def open_budget_view(driver):
-    """Expand the request Menu before selecting Budget, then wait for its data."""
+def open_budget_view(driver, *, require_editable=False):
+    """Open Menu → Budget; draft editing also accepts empty, editable sections."""
     menu_clicked = False
     budget_clicked = False
     upper, lower = "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"
@@ -186,8 +186,16 @@ def open_budget_view(driver):
     def ready(d):
         nonlocal menu_clicked, budget_clicked
         body = d.find_element(By.TAG_NAME, "body").text or ""
-        if parse_budget_text(body):
+        if not require_editable and parse_budget_text(body):
             return body
+        if require_editable:
+            for section in d.find_elements(By.CSS_SELECTOR, "h4.groupTitle a"):
+                if not section.is_displayed() or not re.match(r"^[A-Z]\d{2}\b", section.text.strip()):
+                    continue
+                container = section.find_element(By.XPATH, "./../../..")
+                for add in container.find_elements(By.XPATH, ".//a[contains(@class,'add')]"):
+                    if add.is_displayed() and add.is_enabled():
+                        return body
         if not budget_clicked:
             for tab in d.find_elements(By.XPATH,
                     f"//a[{label}='budget' or contains(@analytics-event, 'Tab Budget')] | "

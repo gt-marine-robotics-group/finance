@@ -145,19 +145,19 @@ def save_engage_diagnostic(driver, folder):
         pass  # Diagnostics must not prevent same-browser recovery.
 
 
-def run_engage_step(driver, folder, title, action):
+def run_engage_step(driver, folder, title, action, *, instructions=None, cancel_message=None):
     """Retry a failed stage without navigating away or tearing down either browser."""
     while True:
         try:
             return action()
         except Exception as error:
-            print(f"\n{title} needs attention: {str(error).split('Stacktrace:')[0].strip()}\n"
-                  "Both Chrome windows remain open. Correct the form or wait for it to load, then retry.")
+            print(f"\n{title} needs attention: {str(error).split('Stacktrace:')[0].strip()}\n" +
+                  (instructions or "Both Chrome windows remain open. Correct the form or wait for it to load, then retry."))
             save_engage_diagnostic(driver, folder)
             while True:
                 answer = input("Enter to retry this step in the current page, or 'cancel' to stop: ").strip().lower()
                 if answer in ("cancel", "quit", "q"):
-                    raise SystemExit("Purchase preparation cancelled; comparison workbook and cart link are saved.")
+                    raise SystemExit(cancel_message or "Purchase preparation cancelled; comparison workbook and cart link are saved.")
                 if not answer:
                     break
                 print("Press Enter to retry, or type 'cancel'.")

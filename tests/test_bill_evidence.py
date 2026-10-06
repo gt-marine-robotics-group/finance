@@ -103,7 +103,7 @@ def test_bill_main_stops_before_engage_if_capture_declined_or_blocked(monkeypatc
     # automation.py's direct-module imports are used by the CLI subprocess.
     import price_scraper, automation_screenshots as direct_screenshots
     monkeypatch.setattr(price_scraper, "dismiss_popups_and_interstitials", lambda d: None)
-    monkeypatch.setattr(direct_screenshots, "sync_screenshots_to_sharepoint", lambda: None)
+    monkeypatch.setattr(direct_screenshots, "sync_screenshots_to_sharepoint", lambda folder: None)
     with pytest.raises(ValueError, match="before Engage"):
         automation.main()
     assert chrome.call_count == int(capture)  # capture browser only; no Engage browser
@@ -203,6 +203,7 @@ def test_screenshot_main_filters_menu_retries_selection_and_audits_actual_items(
     assert "Screenshot mode: headless Chrome" in output
     assert "Items: 3 | Need attention: 2" in output
     folder = tmp_path / "shots" / "Test Bill"
+    automation_screenshots.sync_screenshots_to_sharepoint.assert_called_once_with(folder)
     audit = pd.read_csv(folder / "screenshot_audit.csv")
     assert list(audit["Status"]) == ["captured", "missing_url", "invalid_url"]
     assert audit.iloc[0]["Quoted Unit Cost"] == 100
@@ -211,6 +212,71 @@ def test_screenshot_main_filters_menu_retries_selection_and_audits_actual_items(
     driver.quit.assert_called_once()
     assert "--headless=new" in chrome.call_args.kwargs["options"].arguments
     assert hashlib.sha256(path.read_bytes()).digest() == before
+
+
+def test_screenshot_upload_scopes_source_and_destination_to_current_bill(monkeypatch, tmp_path):
+    folder = tmp_path / "shots" / "Test Bill"
+    folder.mkdir(parents=True)
+    image = folder / "Part.png"
+    image.write_bytes(b"product evidence")
+    unrelated = folder.parent / "Other Order"
+    unrelated.mkdir()
+    (unrelated / "Budget_vs_Quoted.xlsx").write_bytes(b"unrelated report")
+    run = MagicMock(return_value=MagicMock(returncode=0))
+    monkeypatch.setattr("subprocess.run", run)
+    automation_screenshots.sync_screenshots_to_sharepoint(folder)
+    args = run.call_args.args[0]
+    assert args[-2:] == [str(folder), "onedrive:OPS-1 Operations/FY27 Finances/screenshots/Test Bill"]
+    assert image.read_bytes() == b"product evidence"
+
+
+def test_screenshot_upload_failure_is_concise_and_preserves_evidence(monkeypatch, tmp_path, capsys):
+    image = tmp_path / "Part.png"
+    image.write_bytes(b"product evidence")
+    error = 'ERROR : Failed to copy: HTTP error 404: The upload session was not found'
+    monkeypatch.setattr("subprocess.run", MagicMock(return_value=MagicMock(returncode=1, stderr="\n".join([error] * 12))))
+    automation_screenshots.sync_screenshots_to_sharepoint(tmp_path)
+    output = capsys.readouterr().out
+    assert output.count(error) == 1
+    assert "Local evidence remains saved" in output
+    assert image.read_bytes() == b"product evidence"
+
+
+def test_bill_budget_timeout_recovers_in_same_window_before_any_items_change(monkeypatch, tmp_path):
+    from selenium.common.exceptions import TimeoutException
+    from mrg_finance import engage_bill_lookup, engage_fields
+    url = engage_bill_lookup.build_bill_url("344042")
+    driver = MagicMock(current_url=url)
+    navigate = MagicMock(side_effect=[TimeoutException(), "Budget Section: B03"])
+    monkeypatch.setattr(engage_bill_lookup, "open_budget_view", navigate)
+    diagnostic = MagicMock()
+    monkeypatch.setattr(engage_fields, "save_engage_diagnostic", diagnostic)
+
+    def retry(prompt):
+        driver.get.assert_not_called()
+        driver.quit.assert_not_called()
+        return ""
+
+    monkeypatch.setattr("builtins.input", retry)
+    assert automation.prepare_bill_budget(driver, url, tmp_path) == "Budget Section: B03"
+    assert navigate.call_count == 2
+    assert all(call.kwargs == {"require_editable": True} for call in navigate.call_args_list)
+    diagnostic.assert_called_once_with(driver, tmp_path)
+    driver.quit.assert_not_called()
+
+
+def test_bill_budget_wrong_request_can_be_cancelled_without_mutation(monkeypatch, tmp_path):
+    from mrg_finance import engage_bill_lookup, engage_fields
+    driver = MagicMock(current_url=engage_bill_lookup.build_bill_url("999"))
+    navigate = MagicMock()
+    monkeypatch.setattr(engage_bill_lookup, "open_budget_view", navigate)
+    monkeypatch.setattr(engage_fields, "save_engage_diagnostic", MagicMock())
+    monkeypatch.setattr("builtins.input", lambda prompt: "cancel")
+    with pytest.raises(SystemExit, match="Bill preparation cancelled"):
+        automation.prepare_bill_budget(driver, engage_bill_lookup.build_bill_url("344042"), tmp_path)
+    navigate.assert_not_called()
+    driver.get.assert_not_called()
+    driver.quit.assert_not_called()
 
 
 def test_screenshot_navigation_failure_invalidates_old_proof_and_saves_audit(screenshot_workbook, monkeypatch, tmp_path):
