@@ -7,13 +7,11 @@ import time
 import re
 import json
 import pandas as pd
-from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 
 # === CONFIG ===
@@ -351,6 +349,7 @@ def main():
     if not args.interactive:
         options.add_argument("--headless=new")
     options.add_argument("--window-size=1920,1200")
+    options.add_argument(f"--user-data-dir={Path('.mrg-finance-browser', 'evidence').resolve()}")
     driver = webdriver.Chrome(service=Service(), options=options)
     driver.set_page_load_timeout(30)
     results = []
@@ -370,7 +369,7 @@ def main():
                     try:
                         navigate_for_evidence(driver, url)
                         dismiss_popups(driver)
-                        result["Screenshot"] = capture_evidence(driver, shot, interactive=args.interactive)
+                        result["Screenshot"] = capture_evidence(driver, shot, interactive=args.interactive, source_url=url)
                         text, confidence = extract_price_from_page(driver, url)
                         value = parse_price(text)
                         result["Quoted Unit Cost"] = value

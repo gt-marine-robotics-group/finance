@@ -2,6 +2,7 @@
 
 from collections import Counter
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+import re
 
 from selenium.webdriver.common.by import By
 
@@ -15,7 +16,10 @@ def money(value):
         raise ValueError(f"Invalid money amount: {value!r}") from None
     if not result.is_finite() or result < 0:
         raise ValueError(f"Amount must be finite and nonnegative: {value!r}")
-    return result.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    try:
+        return result.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    except InvalidOperation:
+        raise ValueError(f"Invalid money amount: {value!r}") from None
 
 
 def require_matching_total(cart_total, requested_amount):
@@ -23,6 +27,34 @@ def require_matching_total(cart_total, requested_amount):
     if cart != request:
         raise ValueError(f"Cart total ${cart} differs from Engage requested amount ${request}. "
                          "Refresh the cart and correct the quote before uploading.")
+
+
+def _amazon_price(element):
+    """Read a visible price, including Amazon's split whole/fraction markup."""
+    if not element.is_displayed():
+        return None
+    # Amazon exposes the complete accessible price in a visually hidden span.
+    # Its Selenium .text is empty, while the visible duplicate is split over lines.
+    for accessible in element.find_elements(By.CSS_SELECTOR, ".a-offscreen"):
+        raw = accessible.get_attribute("textContent")
+        if raw and raw.strip():
+            try:
+                return money(raw)
+            except ValueError:
+                pass
+    try:
+        return money(element.text)
+    except ValueError:
+        whole = element.find_elements(By.CSS_SELECTOR, ".a-price-whole")
+        fraction = element.find_elements(By.CSS_SELECTOR, ".a-price-fraction")
+        if whole and fraction:
+            digits = fraction[0].text.strip()
+            if re.fullmatch(r"\d{2}", digits):
+                try:
+                    return money(f"{whole[0].text.strip().rstrip('.')}.{digits}")
+                except ValueError:
+                    pass
+    return None
 
 
 def read_amazon_cart(driver):
@@ -36,15 +68,45 @@ def read_amazon_cart(driver):
         if not qty:
             controls = row.find_elements(By.CSS_SELECTOR, "select[name='quantity'], input[name='quantity']")
             qty = controls[0].get_attribute("value") if controls else None
-        prices = row.find_elements(By.CSS_SELECTOR, ".sc-product-price, .sc-price")
-        price = next((p.text.strip() for p in prices if p.is_displayed() and p.text.strip()), None)
-        if not asin or not qty or not str(qty).isdigit() or int(qty) <= 0 or not price:
-            raise ValueError("Could not read an Amazon cart row. Use --cart-source personal for manual verification.")
-        items.append({"asin": asin.upper(), "quantity": int(qty), "unit_price": money(price)})
-    subtotal_fields = driver.find_elements(By.CSS_SELECTOR, "#sc-subtotal-amount-activecart")
-    if not items or not subtotal_fields:
-        raise ValueError("Amazon active cart or subtotal not found. Resolve sign-in/CAPTCHA or use personal mode.")
-    subtotal = money(subtotal_fields[0].text)
+        if not qty:
+            quantities = set()
+            for control in row.find_elements(By.CSS_SELECTOR, "button[aria-label*='Quantity is']"):
+                match = re.search(r"\bquantity is\s+(\d+)\b", control.get_attribute("aria-label") or "", re.I)
+                if control.is_displayed() and match:
+                    quantities.add(match[1])
+            if len(quantities) == 1:
+                qty = quantities.pop()
+        price = None
+        # Prefer the explicit current price; do not scrape recommended items or a crossed-out list price.
+        for selector in (".apex-price-to-pay-value", ".sc-product-price, .sc-price"):
+            candidates = {_amazon_price(p) for p in row.find_elements(By.CSS_SELECTOR, selector)} - {None}
+            if len(candidates) > 1:
+                raise ValueError(f"Conflicting Amazon unit prices for {asin}; review the cart before continuing.")
+            if candidates:
+                price = candidates.pop()
+                break
+        missing = []
+        if not asin:
+            missing.append("ASIN")
+        if not qty or not str(qty).isdigit() or int(qty) <= 0:
+            missing.append("quantity")
+        if price is None:
+            missing.append("unit price")
+        if missing:
+            raise ValueError(f"Could not read an Amazon cart row ({asin or 'unknown item'}): "
+                             f"missing {', '.join(missing)}. Check the cart and let it finish loading.")
+        items.append({"asin": asin.upper(), "quantity": int(qty), "unit_price": price})
+    subtotal_fields = driver.find_elements(
+        By.CSS_SELECTOR, "#sc-subtotal-amount-activecart, #sc-subtotal-amount-buybox",
+    )
+    if not items:
+        raise ValueError("No active Amazon cart items found. The cart may be empty; confirm the items were added in this browser.")
+    subtotals = {_amazon_price(field) for field in subtotal_fields} - {None}
+    if not subtotals:
+        raise ValueError("Amazon cart subtotal not found. Return to the cart page and let it finish loading.")
+    if len(subtotals) > 1:
+        raise ValueError("Amazon cart subtotals disagree. Check selected items and reload the cart.")
+    subtotal = subtotals.pop()
     line_total = sum((item["unit_price"] * item["quantity"] for item in items), Decimal("0"))
     require_matching_total(subtotal, line_total)
     return {"items": items, "subtotal": subtotal}

@@ -1,9 +1,11 @@
 import re
-import time
 from typing import Optional
 
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import (
+    ElementClickInterceptedException, ElementNotInteractableException,
+    StaleElementReferenceException, TimeoutException,
+)
 from selenium.webdriver.support.ui import WebDriverWait
 
 
@@ -20,6 +22,10 @@ def build_bill_url(bill_no: str) -> str:
     return ENGAGE_BILL_BASE_URL.format(bill_no=bill_no)
 
 
+def funding_kind_from_title(title):
+    return "budget" if re.search(r"\bbudget\b", str(title), re.I) else "bill"
+
+
 def _normalize_text(value) -> str:
     if value is None:
         return ""
@@ -28,50 +34,6 @@ def _normalize_text(value) -> str:
     value = re.sub(r"<.*?>", " ", value)
     value = re.sub(r"\s+", " ", value)
     return value.strip().lower()
-
-
-def find_line_number_in_bill_html(html: str, item_name: str) -> Optional[int]:
-    """Return the 1-based line number for an item name on an Engage bill page."""
-    if not html or not item_name:
-        return None
-
-    matches = re.findall(
-        r"<a[^>]*ng-click=['\"]editLineItem\(lineItem\)['\"][^>]*>(.*?)</a>",
-        html,
-        flags=re.I | re.S,
-    )
-    if not matches:
-        return None
-
-    normalized_target = _normalize_text(item_name)
-    
-    # Pass 1: Exact match
-    for idx, match in enumerate(matches, start=1):
-        text = _normalize_text(match)
-        if text == normalized_target:
-            return idx
-
-    # Pass 2: Clean alphanumeric match
-    target_clean = re.sub(r"[^a-z0-9]", "", normalized_target)
-    for idx, match in enumerate(matches, start=1):
-        text_clean = re.sub(r"[^a-z0-9]", "", _normalize_text(match))
-        if target_clean and text_clean == target_clean:
-            return idx
-
-    # Pass 3: Token / Substring with closest length
-    best_idx = None
-    best_len_diff = float("inf")
-    for idx, match in enumerate(matches, start=1):
-        text = _normalize_text(match)
-        if not text:
-            continue
-        if normalized_target in text or text in normalized_target:
-            len_diff = abs(len(text) - len(normalized_target))
-            if len_diff < best_len_diff:
-                best_len_diff = len_diff
-                best_idx = idx
-
-    return best_idx
 
 
 def _normalize_stem(word: str) -> str:
@@ -163,212 +125,163 @@ def find_best_item_match(target_name: str, candidate_dict: dict[str, dict]) -> O
     return best_candidate
 
 
-def lookup_bill_item_line_numbers(driver, bill_no: str, item_names: list[str]) -> dict[str, int]:
-    """Visit the Engage bill page, find the actual line numbers, and return a name->line map."""
-    data = lookup_bill_item_locations(driver, bill_no, item_names)
-    return {name: info["line_number"] for name, info in data.items() if isinstance(info, dict) and "line_number" in info}
+def parse_budget_text(text: str) -> dict[str, dict]:
+    """Read explicit section-relative numbers from Engage's visible Budget view.
 
-
-def lookup_bill_item_locations(driver, bill_no: str, item_names: list[str]) -> dict[str, dict]:
-    """Visit the Engage bill page and return item -> {section, line_number}.
-
-    Reverse-engineered from automation.py DOM navigation and extraction logic.
+    The section summary also contains numbers, so require numbered item rows
+    and a section heading/row label. Never substitute Excel IDs or guessed indexes.
     """
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    section = None
+    by_name = {}
+    duplicates = set()
+    section_pattern = r"[A-Z]\d{2}(?:\s*-\s*.+)?"
+    for index, line in enumerate(lines):
+        heading = re.fullmatch(r"Budget Section:\s*(.*)", line, re.I)
+        if heading:
+            title = heading[1] or (lines[index + 1] if index + 1 < len(lines) else "")
+            if re.fullmatch(section_pattern, title):
+                section = title
+            else:
+                section = None
+        match = re.fullmatch(r"(\d+)\.\s*(.*)", line)
+        if not match or int(match[1]) <= 0:
+            continue
+        name = match[2].strip()
+        name_index = index
+        if not name and index + 1 < len(lines):
+            name_index += 1
+            name = lines[name_index]
+        row_section = None
+        inline = re.search(r"\s+([A-Z]\d{2}\s*-\s*.*)$", name)
+        if inline:
+            row_section = re.split(r"\s+\d+\s*[x×]\s*\$|\s+\$", inline[1])[0].strip()
+            if section and row_section[:3] == section[:3]:
+                row_section = section
+            name = name[:inline.start()].strip()
+        elif name_index + 1 < len(lines) and re.fullmatch(section_pattern, lines[name_index + 1]):
+            row_section = lines[name_index + 1]
+        actual_section = row_section or section
+        name = name.split("\t")[0].strip()
+        if not name or not actual_section or re.fullmatch(section_pattern, name):
+            continue
+        norm = _normalize_text(name)
+        info = {"section": actual_section, "line_number": int(match[1]),
+                "section_line_number": int(match[1])}
+        if norm in by_name and by_name[norm] != info:
+            duplicates.add(norm)
+        else:
+            by_name[norm] = info
+    # An identically named item in two sections needs human disambiguation.
+    return {name: info for name, info in by_name.items() if name not in duplicates}
+
+
+def open_budget_view(driver):
+    """Expand the request Menu before selecting Budget, then wait for its data."""
+    menu_clicked = False
+    budget_clicked = False
+    upper, lower = "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"
+    label = f"translate(normalize-space(.), '{upper}', '{lower}')"
+
+    def ready(d):
+        nonlocal menu_clicked, budget_clicked
+        body = d.find_element(By.TAG_NAME, "body").text or ""
+        if parse_budget_text(body):
+            return body
+        if not budget_clicked:
+            for tab in d.find_elements(By.XPATH,
+                    f"//a[{label}='budget' or contains(@analytics-event, 'Tab Budget')] | "
+                    f"//button[{label}='budget'] | //*[@role='tab' and {label}='budget']"):
+                if tab.is_displayed() and tab.is_enabled():
+                    tab.click()
+                    budget_clicked = True
+                    return False
+        if not menu_clicked:
+            for menu in d.find_elements(By.XPATH,
+                    f"//a[contains({label}, 'menu') and not(contains({label}, 'close'))] | "
+                    f"//button[contains({label}, 'menu') and not(contains({label}, 'close'))]"):
+                if menu.is_displayed() and menu.is_enabled():
+                    menu.click()
+                    menu_clicked = True
+                    return False
+        return False
+
+    return WebDriverWait(driver, 25, ignored_exceptions=(
+        StaleElementReferenceException, ElementClickInterceptedException,
+        ElementNotInteractableException,
+    )).until(ready)
+
+
+def prompt_verified_location():
+    """Accept 'B03 Line 1' or ask for section after a bare line number."""
+    while True:
+        answer = input("  Enter verified section and line (e.g. B03 Line 1), or a line number, or 'cancel': ").strip()
+        if answer.lower() in ("cancel", "quit", "q"):
+            raise SystemExit("Engage reference entry cancelled; comparison workbook is saved.")
+        combined = re.fullmatch(r"([A-Z]\d{2})\s*[,/-]?\s*(?:line\s*)?(\d+)", answer, re.I)
+        bare = re.fullmatch(r"(?:line\s*)?(\d+)", answer, re.I)
+        if combined and int(combined[2]) > 0:
+            return int(combined[2]), combined[1].upper()
+        if bare and int(bare[1]) > 0:
+            while True:
+                section = input("  Enter verified budget section (e.g. B03), or 'cancel': ").strip()
+                if section.lower() in ("cancel", "quit", "q"):
+                    raise SystemExit("Engage reference entry cancelled; comparison workbook is saved.")
+                if re.fullmatch(r"[A-Z]\d{2}(?:\s*-\s*.+)?", section, re.I):
+                    return int(bare[1]), section[:3].upper() + section[3:]
+                print("  Use the section shown in Engage, for example B03. Chrome is still open.")
+        else:
+            print("  Use B03 Line 1 or a positive line number. Chrome is still open.")
+
+
+def confirm_continue_to_engage():
+    while True:
+        answer = input("\nContinue to Engage with this verified amount? [Y/n]: ").strip().lower()
+        if answer in ("", "y", "yes"):
+            return True
+        if answer in ("n", "no", "cancel", "q", "quit"):
+            return False
+        print("Press Enter to continue, or type 'n' to stop with the comparison workbook saved.")
+
+
+def prompt_fee_reference(fee, amount):
+    while True:
+        ref = input(f"Verified bill/line/section funding {fee.lower()} (${amount}), or 'cancel': ").strip()
+        if ref.lower() in ("cancel", "quit", "q"):
+            raise SystemExit("Fee funding entry cancelled; comparison workbook is saved.")
+        if ref:
+            return ref
+        print(f"{fee} is included in the requested amount and needs a funding reference. "
+              "Check its bill/section/line in Engage and retry. Both Chrome windows remain open.")
+
+
+def lookup_bill_item_locations(driver, bill_no: str, item_names: list[str], *, navigate=True) -> dict[str, dict]:
+    """Open Menu -> Budget and match visible, explicit section/line references."""
     if not bill_no or not item_names:
         return {}
-
-    bill_url = build_bill_url(bill_no)
-    print(f"\n  🔍 Resolving live section and line numbers from Engage for Bill #{bill_no}...")
-    print(f"     🌐 Navigating to {bill_url}")
-    driver.get(bill_url)
-
-    # 1) Click the "Tab Budget" tab exactly as in automation.py (line 485-489)
+    print(f"\n  Resolving Engage funding locations for request #{bill_no}...")
+    if navigate:
+        driver.get(build_bill_url(bill_no))
+    elif not re.search(rf"#/edit/{re.escape(str(bill_no))}(?:[?&]|$)", driver.current_url or ""):
+        print("  Open this bill's Budget view before retrying; the current page is a different request.")
+        return {}
     try:
-        budget_tab = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.XPATH, "//a[contains(@analytics-event, 'Tab Budget')]"))
-        )
-        budget_tab.click()
-        print("     👆 Clicked 'Tab Budget' tab")
-        time.sleep(5)
-    except Exception as e:
-        print(f"     ℹ️ Budget tab click notice: {e}")
-        time.sleep(3)
-
-    by_name = {}
-    section_count = 0
-
-    # 2) Extract sections and line items using section containers (from automation.py line 542-546 & 260-266)
-    try:
-        section_anchors = driver.find_elements(
-            By.XPATH, "//h4[contains(@class, 'groupTitle')]/a | //h4[contains(@class, 'groupTitle')]"
-        )
-        seen_secs = set()
-        unique_anchors = []
-        for sa in section_anchors:
-            txt = sa.text.strip()
-            if txt and txt not in seen_secs:
-                seen_secs.add(txt)
-                unique_anchors.append(sa)
-
-        section_count = len(unique_anchors)
-        overall_line_counter = 1
-
-        for anchor in unique_anchors:
-            sec_name = anchor.text.strip()
-            try:
-                # Traverse up 3 parent levels to section container as in automation.py
-                container = anchor.find_element(By.XPATH, "./../../..")
-
-                sec_items = []
-
-                # Strategy 1: Parse container text lines with explicit line numbers
-                raw_text = container.text or ""
-                lines = [ln.strip() for ln in raw_text.splitlines() if ln.strip()]
-
-                def _clean_item_name(raw_val: str) -> str:
-                    c = raw_val.split("\t")[0].strip()
-                    c = re.sub(r"\s+B\d{2}\s*-.*$", "", c, flags=re.I)
-                    c = re.sub(r"\s+\d+\s*x\s*\$?\d+.*$", "", c, flags=re.I)
-                    c = re.sub(r"\s+\$?\d+[\d.,]*$", "", c)
-                    return c.strip()
-
-                # Single-line format (tab or space separated)
-                for ln in lines:
-                    m = re.match(r"^\s*(\d+)\.\s*([^\n\r]+)", ln)
-                    if m:
-                        explicit_num = int(m.group(1))
-                        cleaned_name = _clean_item_name(m.group(2))
-                        norm = _normalize_text(cleaned_name)
-                        if norm and norm != _normalize_text(sec_name) and len(norm) >= 2:
-                            if not any(skip in norm for skip in ["add line item", "delete section", "section total", "edit section"]):
-                                sec_items.append((cleaned_name, norm, explicit_num))
-
-                # Multiline format (line number on line i, item name on line i+1)
-                if not sec_items:
-                    i = 0
-                    while i < len(lines):
-                        ln = lines[i]
-                        m_single = re.match(r"^(\d+)\.?$", ln)
-                        if m_single and i + 1 < len(lines):
-                            explicit_num = int(m_single.group(1))
-                            name_candidate = _clean_item_name(lines[i + 1])
-                            norm = _normalize_text(name_candidate)
-                            if norm and len(norm) >= 2 and norm != _normalize_text(sec_name):
-                                if not any(skip in norm for skip in ["add line item", "delete section", "section total", "edit section"]):
-                                    if not re.match(r"^\d+\.?$", name_candidate) and not re.match(r"^B\d{2}\s*-", name_candidate):
-                                        sec_items.append((name_candidate, norm, explicit_num))
-                                        i += 1
-                        i += 1
-
-                # Strategy 2: Check table rows (tr) inside container
-                if not sec_items:
-                    rows = container.find_elements(By.TAG_NAME, "tr")
-                    for r in rows:
-                        cells = r.find_elements(By.TAG_NAME, "td")
-                        if len(cells) >= 2:
-                            c0_text = cells[0].text.strip()
-                            c1_text = _clean_item_name(cells[1].text.strip())
-                            m = re.match(r"^(\d+)\.?", c0_text)
-                            if m and c1_text:
-                                explicit_num = int(m.group(1))
-                                norm = _normalize_text(c1_text)
-                                if norm and len(norm) >= 2 and norm != _normalize_text(sec_name):
-                                    sec_items.append((c1_text, norm, explicit_num))
-
-                # Strategy 3: Find element nodes inside container
-                if not sec_items:
-                    line_item_elements = container.find_elements(
-                        By.XPATH,
-                        ".//a[contains(@ng-click, 'lineItem') or contains(@ng-click, 'LineItem')] | "
-                        ".//tr[contains(@class, 'ng-scope') or contains(@ng-repeat, 'line')] | "
-                        ".//div[contains(@class, 'line-item') or contains(@class, 'budget-item')]"
-                    )
-                    for li in line_item_elements:
-                        txt = li.text.strip()
-                        m = re.match(r"^(\d+)\.\s*(.*)", txt)
-                        explicit_num = int(m.group(1)) if m else None
-                        raw_txt = m.group(2).strip() if m else txt
-                        cleaned_txt = _clean_item_name(raw_txt)
-                        norm = _normalize_text(cleaned_txt)
-                        if norm and norm != _normalize_text(sec_name) and len(norm) >= 2:
-                            if not any(skip in norm for skip in ["add line item", "delete section", "section total", "edit section"]):
-                                sec_items.append((cleaned_txt, norm, explicit_num))
-
-                for sec_line_idx, item_tuple in enumerate(sec_items, start=1):
-                    orig_txt = item_tuple[0]
-                    norm_txt = item_tuple[1]
-                    explicit_num = item_tuple[2] if len(item_tuple) > 2 and item_tuple[2] is not None else sec_line_idx
-
-                    if norm_txt not in by_name:
-                        by_name[norm_txt] = {
-                            "section": sec_name,
-                            "line_number": explicit_num,
-                            "section_line_number": explicit_num,
-                        }
-            except Exception:
-                pass
-    except Exception:
-        pass
-
-    # 3) Fallback if section container traversal didn't find items: find line items globally
+        body = open_budget_view(driver)
+        by_name = parse_budget_text(body)
+    except TimeoutException:
+        print("  Could not open/read Menu → Budget. Chrome remains open for recovery.")
+        return {}
     if not by_name:
-        try:
-            line_items = driver.find_elements(
-                By.XPATH, "//a[@ng-click='editLineItem(lineItem)']"
-            )
-            for idx, li in enumerate(line_items, start=1):
-                li_text = li.text.strip()
-                norm_text = _normalize_text(li_text)
-                if norm_text:
-                    by_name[norm_text] = {
-                        "section": "Unknown Section",
-                        "line_number": idx,
-                        "section_line_number": idx,
-                    }
-        except Exception:
-            pass
-
-    # 4) Robust Fallback: Scan full page text lines for numbered items (e.g. 34. Toggle Swtich)
-    if not by_name:
-        try:
-            body_text = driver.find_element(By.TAG_NAME, "body").text or ""
-            current_sec = "B06 - Non-Inventoried Items"
-            for ln in body_text.splitlines():
-                ln = ln.strip()
-                if not ln:
-                    continue
-                if re.match(r"^B\d{2}\s*-", ln):
-                    current_sec = ln.split("\t")[0].strip()
-                    continue
-                m = re.match(r"^\s*(\d+)\.\s*(.+)$", ln)
-                if m:
-                    num = int(m.group(1))
-                    raw = m.group(2)
-                    sec_m = re.search(r"(B\d{2}\s*-\s*[A-Za-z0-9\s\-_]+)", raw)
-                    sec = sec_m.group(1).strip() if sec_m else current_sec
-                    cleaned = _clean_item_name(raw)
-                    norm = _normalize_text(cleaned)
-                    if norm and norm != _normalize_text(sec) and len(norm) >= 2:
-                        if not any(skip in norm for skip in ["add line item", "delete section", "section total", "edit section"]):
-                            if norm not in by_name:
-                                by_name[norm] = {
-                                    "section": sec,
-                                    "line_number": num,
-                                    "section_line_number": num,
-                                }
-        except Exception:
-            pass
-
-    print(f"     ✅ Found {len(by_name)} total line items across {section_count or len(set(v.get('section') for v in by_name.values()))} section(s) on Engage.")
-
-    # 4) Match target item names against extracted Engage line items using multi-tiered matcher
+        print("  Budget view loaded, but no verified numbered items could be read.")
+        return {}
+    sections = {info["section"] for info in by_name.values()}
+    print(f"  Read {len(by_name)} numbered items in {len(sections)} nonempty section(s).")
     result = {}
-    for item_name in item_names:
-        if not item_name:
-            continue
-        match_info = find_best_item_match(item_name, by_name)
-        if match_info:
-            result[item_name] = match_info
-
-    print(f"     🎯 Matched {len(result)} of {len(item_names)} requested item(s) to live Engage locations.")
+    title = re.search(r"(?im)^Request:\s*(.+)$", body)
+    kind = funding_kind_from_title(title[1]) if title else None
+    for name in item_names:
+        info = find_best_item_match(name, by_name)
+        if info:
+            result[name] = {**info, **({"funding_kind": kind} if kind else {})}
+    print(f"  Matched {len(result)} of {len(item_names)} requested items.")
     return result

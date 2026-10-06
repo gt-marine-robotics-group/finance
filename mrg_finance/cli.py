@@ -202,8 +202,6 @@ def cmd_screenshots(args):
         cmd.extend(["--bill", args.bill])
     if getattr(args, "interactive", False):
         cmd.append("--interactive")
-    if getattr(args, "no_review", False):
-        cmd.append("--no-review")
     res = subprocess.run(cmd)
     sys.exit(res.returncode)
 
@@ -220,8 +218,6 @@ def cmd_bill_request(args):
         cmd.extend(["--bill", args.bill])
     if getattr(args, "fresh", False):
         cmd.append("--fresh")
-    if getattr(args, "no_review", False):
-        cmd.append("--no-review")
     res = subprocess.run(cmd)
     sys.exit(res.returncode)
 
@@ -232,6 +228,7 @@ def cmd_bill_request(args):
 def cmd_purchase(args):
     """Create purchase requests on Engage from the Ordering sheet."""
     import spreadsheet_utils
+    from mrg_finance.purchase_sources import purchase_source
 
     df_order = load_ordering()
 
@@ -277,11 +274,7 @@ def cmd_purchase(args):
             or spreadsheet_utils.get_col_val(b_dict, "item_name")
             or ""
         )
-        vendor = (
-            spreadsheet_utils.get_col_val(d, "vendor")
-            or spreadsheet_utils.get_col_val(b_dict, "vendor")
-            or ""
-        )
+        _, vendor = purchase_source(d, b_dict)
         qty = spreadsheet_utils.safe_float(
             spreadsheet_utils.get_col_val(d, "quantity")
             or spreadsheet_utils.get_col_val(b_dict, "quantity")
@@ -324,17 +317,16 @@ def cmd_purchase(args):
             orders[oid] = []
         orders[oid].append(row)
 
-    print(f"\nPending Orders ({len(orders)}):\n")
     order_list = list(orders.items())
-    for i, (oid, items) in enumerate(order_list, 1):
-        resolved = [_resolve_item(it) for it in items]
-        vendor = _extract_vendor(oid, resolved)
-        total = sum(it["allocation"] for it in resolved)
-        print(f"  {i}. {oid} — {vendor} — {len(items)} items — ${total:.2f}")
-
     if args.order:
         selected_oid = args.order
     else:
+        print(f"\nPending Orders ({len(orders)}):\n")
+        for i, (oid, items) in enumerate(order_list, 1):
+            resolved = [_resolve_item(it) for it in items]
+            vendor = _extract_vendor(oid, resolved)
+            total = sum(it["allocation"] for it in resolved)
+            print(f"  {i}. {oid} — {vendor} — {len(items)} items — ${total:.2f}")
         choice = input("\nSelect order (number or ID): ").strip()
         if choice.isdigit() and 1 <= int(choice) <= len(order_list):
             selected_oid = order_list[int(choice) - 1][0]
@@ -345,35 +337,10 @@ def cmd_purchase(args):
         print(f"Order '{selected_oid}' not found")
         sys.exit(1)
 
-    order_items = orders[selected_oid]
-    resolved_order_items = [_resolve_item(it) for it in order_items]
-    vendor = _extract_vendor(selected_oid, resolved_order_items)
-
-    print(f"\n{'='*60}")
-    print(f"Purchase Request: {selected_oid}")
-    print(f"Vendor: {vendor}")
-    print(f"{'='*60}")
-    print(f"\n{'Item':<35} {'Qty':<5} {'Allocation':<12}")
-    print("-" * 55)
-    total = 0.0
-    for it in resolved_order_items:
-        name = it["name"][:34]
-        qty_str = str(int(it["qty"])) if it["qty"].is_integer() else f"{it['qty']:.1f}"
-        alloc = it["allocation"]
-        total += alloc
-        print(f"  {name:<33} {qty_str:<5} ${alloc:.2f}")
-    print(f"\n  Total: ${total:.2f}")
-
-    confirm = input("\nPrepare this order and verify its vendor cart? [Y/n]: ").strip().lower()
-    if confirm == "n":
-        print("Cancelled.")
-        sys.exit(0)
-
-    # Run cart preparation and Engage automation with the selected order
+    cart_source = getattr(args, "cart_source", None) or "automated"
+    # The purchase script owns the summary and preparation confirmation.
     py_exe = get_python_executable()
-    cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation_purchase.py"), "--order", selected_oid, "--excel-path", get_xlsx_path(), "--cart-source", getattr(args, "cart_source", "automated")]
-    if getattr(args, "no_review", False):
-        cmd.append("--no-review")
+    cmd = [py_exe, os.path.join(SCRIPT_DIR, "automation_purchase.py"), "--order", selected_oid, "--excel-path", get_xlsx_path(), "--cart-source", cart_source]
     res = subprocess.run(cmd)
     sys.exit(res.returncode)
 
@@ -383,12 +350,10 @@ def cmd_purchase(args):
 # ============================================================
 def cmd_price_check(args):
     """Check current prices vs allocation, generate Amazon cart."""
-    import re
     import time
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
     from selenium.webdriver.chrome.service import Service
-    from selenium.webdriver.common.by import By
 
     df = load_xlsx()
     bill_title = select_bill(df, args.bill)
@@ -613,7 +578,7 @@ Examples:
     p_pr.add_argument("--order", "-o", help="Order ID (skips interactive selection)")
     p_pr.add_argument("--no-review", action="store_true", help=argparse.SUPPRESS)
     p_pr.add_argument("--cart-source", choices=("automated", "personal"), default="automated",
-                      help="Build automatically or sign into your personal account and share the real cart")
+                      help="Cart source (default: automated); attempts Amazon/DigiKey additions. Personal skips additions. Reads supported carts automatically")
 
     # price-check
     p_pc = sub.add_parser("price-check", help="Check current prices vs allocation")

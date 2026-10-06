@@ -7,25 +7,23 @@ import time
 from datetime import date
 import pandas as pd
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import (
-    ElementClickInterceptedException,
-    StaleElementReferenceException,
     TimeoutException,
 )
-from selenium.webdriver.common.action_chains import ActionChains
-from selenium.webdriver.support.ui import Select
 try:
-    from engage_bill_lookup import build_bill_url, lookup_bill_item_locations
+    from engage_bill_lookup import (lookup_bill_item_locations,
+                                    prompt_verified_location, confirm_continue_to_engage, prompt_fee_reference,
+                                    funding_kind_from_title)
 except ModuleNotFoundError:
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     if project_root not in sys.path:
         sys.path.insert(0, project_root)
-    from engage_bill_lookup import build_bill_url, lookup_bill_item_locations
+    from engage_bill_lookup import (lookup_bill_item_locations,
+                                    prompt_verified_location, confirm_continue_to_engage, prompt_fee_reference,
+                                    funding_kind_from_title)
 import getpass
 from pathlib import Path
 
@@ -34,9 +32,13 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 from mrg_finance.purchase_cart import prepare_cart, recheck_cart
 from mrg_finance.purchase_validation import money, require_matching_total
-from mrg_finance.engage_fields import fill_purchase_fields
+from mrg_finance.engage_fields import fill_purchase_fields, run_engage_step, save_engage_diagnostic
 from mrg_finance.vendor_payee import lookup_vendor_payee, vendor_key
 from mrg_finance.screenshot_capture import save_page_screenshot
+from mrg_finance.purchase_sources import (
+    CartReplacement, OrderingLinkStore, edit_links_before_cart,
+    offer_quote_replacements, purchase_source,
+)
 
 # === CONFIG & PATHS ===
 CWD_XLSX = os.path.join(os.getcwd(), "FY27_Bills_Budget.xlsx")
@@ -134,14 +136,6 @@ def main():
             print(f"⚠️ rclone failed: {result.stderr.strip()}")
             print("Continuing with local copy...")
 
-    # Prompt for credentials if empty
-    if not USERNAME:
-        USERNAME = input("Enter GT username: ").strip()
-    if not PASSWORD:
-        PASSWORD = getpass.getpass("Enter GT password (for CampusLabs + Duo MFA): ")
-
-
-
     # === Load spreadsheet sheets ===
     import warnings
     warnings.filterwarnings('ignore')
@@ -160,6 +154,7 @@ def main():
                 bill_item_map[b_id] = r_dict
 
     df_orders = spreadsheet_utils.read_sheet_robust(excel_file, ["Ordering", "Orders", "OrderT"])
+    excel_file.close()
 
     # Check for Order ID column name
     oid_col = "Order ID"
@@ -187,8 +182,9 @@ def main():
     bill_no = ""
 
     order_groups = {}
-    for _, row in df_orders.iterrows():
+    for position, (_, row) in enumerate(df_orders.iterrows()):
         r_dict = row.to_dict()
+        r_dict["_ordering_row"] = df_orders.attrs["header_row"] + 1 + position
         order_id = str(spreadsheet_utils.get_col_val(r_dict, "order_id") or row.get(oid_col, "")).strip()
         item_name = str(spreadsheet_utils.get_col_val(r_dict, "item_name") or "").strip()
         bill_item_id = str(spreadsheet_utils.get_col_val(r_dict, "bill_item_id") or "").replace(".0", "").strip()
@@ -210,14 +206,15 @@ def main():
         exit(0)
 
     order_ids = list(order_groups.keys())
-    print("\nAvailable Orders:")
-    for i, oid in enumerate(order_ids, 1):
+    if not pre_selected_order:
+        print("\nAvailable Orders:")
+    for i, oid in enumerate(order_ids if not pre_selected_order else [], 1):
         items_in_o = order_groups[oid]
         v_name = ""
         for itm in items_in_o:
             b_id = str(spreadsheet_utils.get_col_val(itm, "bill_item_id") or "").replace(".0", "").strip()
             b_row = bill_item_map.get(b_id, {})
-            v = str(spreadsheet_utils.get_col_val(itm, "vendor") or spreadsheet_utils.get_col_val(b_row, "vendor") or "").strip()
+            _, v = purchase_source(itm, b_row)
             if v:
                 v_name = v
                 break
@@ -230,7 +227,6 @@ def main():
 
     if pre_selected_order:
         selected_order_id = pre_selected_order
-        print(f"\nUsing order: {selected_order_id}")
     else:
         choice = input("\nSelect order (number or Order ID): ").strip()
         if choice.isdigit() and 1 <= int(choice) <= len(order_ids):
@@ -249,7 +245,7 @@ def main():
         r_dict = row if isinstance(row, dict) else row.to_dict()
         b_id = str(spreadsheet_utils.get_col_val(r_dict, "bill_item_id") or "").replace(".0", "").strip()
         b_row = bill_item_map.get(b_id, {})
-        v = str(spreadsheet_utils.get_col_val(r_dict, "vendor") or spreadsheet_utils.get_col_val(b_row, "vendor") or "").strip()
+        _, v = purchase_source(r_dict, b_row)
         if v:
             vendor_name = v
             break
@@ -273,24 +269,26 @@ def main():
 
         item_name = str(spreadsheet_utils.get_col_val(r_dict, "item_name") or spreadsheet_utils.get_col_val(b_row, "item_name") or "").strip()
         description = str(spreadsheet_utils.get_col_val(r_dict, "description") or spreadsheet_utils.get_col_val(b_row, "description") or "").strip()
-        link = str(spreadsheet_utils.get_col_val(r_dict, "link") or spreadsheet_utils.get_col_val(b_row, "link") or "").strip()
+        link, item_vendor = purchase_source(r_dict, b_row, vendor_name)
         source_bill_title = str(spreadsheet_utils.get_col_val(b_row, "bill_title") or spreadsheet_utils.get_col_val(r_dict, "bill_title") or "").strip()
 
-        cost = safe_float(spreadsheet_utils.get_col_val(r_dict, "cost") or spreadsheet_utils.get_col_val(b_row, "cost") or spreadsheet_utils.get_col_val(r_dict, "allocation") or 0.0)
+        approved_cost = spreadsheet_utils.get_col_val(b_row, "cost")
+        if approved_cost in (None, ""):
+            approved_cost = spreadsheet_utils.get_col_val(r_dict, "cost") or spreadsheet_utils.get_col_val(r_dict, "allocation") or 0.0
+        cost = float(money(approved_cost))
         raw_qty = spreadsheet_utils.get_col_val(r_dict, "quantity")
         raw_qty = 1 if raw_qty in (None, "") else raw_qty
         qty = safe_int(raw_qty)
         if str(float(raw_qty)) != str(float(qty)):
             raise SystemExit(f"Quantity must be a whole number for {item_name}.")
-        item_vendor = str(spreadsheet_utils.get_col_val(r_dict, "vendor") or spreadsheet_utils.get_col_val(b_row, "vendor") or vendor_name)
         if vendor_key(item_vendor) != vendor_key(vendor_name):
             raise SystemExit("Each Order ID must contain only one vendor; split this order before purchasing.")
-        money(cost)
         if qty <= 0 or not item_bill_no or not item_name or not link:
             raise SystemExit(f"Invalid order row: {item_name or b_id}. Need positive quantity, bill number, and product link.")
         total = cost * qty
 
-        bill_line_ref = f"Bill {item_bill_no or '?'}, Line {b_id or i+1}"
+        funding_kind = funding_kind_from_title(source_bill_title)
+        bill_line_ref = f"{funding_kind.title()} {item_bill_no or '?'}, Line {b_id or i+1}"
 
         requests_to_submit.append({
             "item_name": item_name,
@@ -303,13 +301,17 @@ def main():
             "engage_line_ref": None,
             "bill_item_id": b_id,
             "source_bill_title": source_bill_title,
+            "funding_kind": funding_kind,
             "link": link,
+            "ordering_row": r_dict["_ordering_row"],
         })
 
     # === Build purchase request list ===
     # === Display summary ===
     print(f"\n{'='*60}")
-    print(f"📋 Purchase Request for: {bill_title} (Bill #{bill_no})")
+    source_kinds = {r["funding_kind"] for r in requests_to_submit}
+    source_label = next(iter(source_kinds)).title() if len(source_kinds) == 1 else "Funding request"
+    print(f"📋 Purchase Request for: {bill_title} ({source_label} #{bill_no})")
     print(f"{'='*60}")
     print(f"\n{'Bill Item ID':<12} {'Item Name':<38} {'Qty':<5} {'Approved':<10} {'Allocation'}")
     print("-" * 75)
@@ -332,7 +334,23 @@ def main():
     if input("\nPrepare and verify vendor cart? [Y/n]: ").strip().lower() in ("n", "no"):
         raise SystemExit(0)
     try:
-        cart = prepare_cart(requests_to_submit, vendor_name, selected_order_id, source)
+        store = OrderingLinkStore(XLSX_PATH, selected_order_id, requests_to_submit, df_orders.attrs["header_row"])
+        vendor_name = edit_links_before_cart(requests_to_submit, vendor_name, store)
+        def save_cart_link(url):
+            count = spreadsheet_utils.update_order_table_links(XLSX_PATH, selected_order_id,
+                share_cart_url=url, expected_rows=len(requests_to_submit))
+            if count != len(requests_to_submit):
+                raise ValueError("The Share-A-Cart URL was not saved to every selected Ordering row.")
+            print(f"Saved and verified Share-A-Cart URL in Ordering ({count} rows): {url}\n"
+                  f"Workbook: {os.path.abspath(XLSX_PATH)}")
+        while True:
+            try:
+                cart = prepare_cart(requests_to_submit, vendor_name, selected_order_id, source,
+                                    quote_review=lambda items, vendor: offer_quote_replacements(items, vendor, store),
+                                    save_share_url=save_cart_link)
+                break
+            except CartReplacement as replacement:
+                vendor_name = replacement.vendor
     except Exception as error:
         print(f"\nPurchase stopped before Engage: {error}")
         raise SystemExit(1) from error
@@ -356,10 +374,26 @@ def main():
             print(f"{r['item_name'][:35]:<35} {r['quantity']:>4} ${r['cost']:>14.2f} ${r['quoted_unit_cost']:>11.2f}")
         print(f"Payee: {payee['name']}\nAddress: {payee.get('address', 'Needs manual review')}")
         print(f"Payee source: {payee.get('source') or 'No structured contact data found on vendor site'}")
-        if share_cart_url:
-            spreadsheet_utils.update_order_table_links(XLSX_PATH, selected_order_id, share_cart_url=share_cart_url)
-        if input("\nContinue to Engage with this verified amount? [y/N]: ").strip().lower() not in ("y", "yes"):
+        import order_excel_builder
+        preview_path, preview_csv = order_excel_builder.generate_order_budget_vs_quoted_excel(
+            order_id=selected_order_id, requests_to_submit=requests_to_submit,
+            scraped_results=scraped_results, output_dir=order_shot_dir,
+            preliminary=True, cart_quote=cart,
+        )
+        print(f"Automatically filled comparison workbook: {os.path.abspath(preview_path)}\n"
+              f"CSV: {os.path.abspath(preview_csv)}\n"
+              "Cart prices and charges are saved. Funding line/section references will be completed after Engage lookup.\n"
+              "Close the comparison workbook before continuing so those references can be updated.")
+        print("Press Enter to open and fill Engage, or type 'n' to stop with the comparison workbook saved; "
+              "final submission remains manual.")
+        if not confirm_continue_to_engage():
             raise SystemExit(0)
+
+        # Request credentials only after the cart and amount have been reviewed.
+        if not USERNAME:
+            USERNAME = input("Enter GT username: ").strip()
+        if not PASSWORD:
+            PASSWORD = getpass.getpass("Enter GT password (for CampusLabs + Duo MFA): ")
 
         # === Selenium Setup ===
         print("\n🌐 Launching Chrome browser...")
@@ -422,19 +456,6 @@ def main():
             input("  Press Enter after completing Duo MFA in your browser window → ")
         print("✅ Duo MFA Login verified!")
 
-        # Navigate to the budget requests area and click the Budget tab so the item bill edit pages
-        # are actually available in the DOM before we look up section/line numbers.
-        print("\n🌐 Navigating to Engage budgeting requests area...")
-        driver.get("https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/budgeting/requests")
-        try:
-            budget_tab = WebDriverWait(driver, 20).until(
-                EC.element_to_be_clickable((By.XPATH, "//a[contains(@analytics-event, 'Tab Budget')]"))
-            )
-            budget_tab.click()
-            time.sleep(3)
-        except Exception:
-            pass
-
         bill_line_cache = {}
         # Group items by bill number so we visit each bill page only once.
         bills_to_lookup = {}
@@ -446,68 +467,79 @@ def main():
         print(f"🔍 Starting live bill line location lookup for {len(bills_to_lookup)} bill(s)...")
         for bill_number, item_names in bills_to_lookup.items():
             lookup = lookup_bill_item_locations(driver, bill_number, item_names)
-            if lookup:
-                bill_line_cache[bill_number] = lookup
-            else:
-                print(f"  ⚠️ Could not resolve live Engage bill sections/line numbers from bill {bill_number}; using spreadsheet reference fallback.")
+            while not lookup:
+                diagnostic = Path(order_shot_dir) / "engage_diagnostics" / f"bill_{bill_number}.png"
+                try:
+                    save_page_screenshot(driver, diagnostic, full_page=False)
+                    print(f"  Lookup diagnostic: {diagnostic}")
+                except Exception:
+                    pass
+                print("  Open Menu → Budget in this Chrome window. No funding references have been guessed.")
+                action = input("  Enter to retry this bill, 'manual' to enter verified references, or 'cancel': ").strip().lower()
+                if action in ("cancel", "quit", "q"):
+                    raise SystemExit("Engage lookup cancelled; comparison workbook is saved.")
+                if action == "manual":
+                    break
+                if action:
+                    print("  Press Enter, type 'manual', or type 'cancel'.")
+                    continue
+                lookup = lookup_bill_item_locations(driver, bill_number, item_names, navigate=False)
+            bill_line_cache[bill_number] = lookup
 
         print("\n📋 Resolved Engage Line References:")
         for r in requests_to_submit:
             bill_no_for_item = str(r.get("bill_no") or bill_no or "").strip()
-            b_id = str(r.get("bill_item_id") or "").strip()
             cache_for_bill = bill_line_cache.get(bill_no_for_item) or {}
             location = cache_for_bill.get(r["item_name"])
-            if not location and cache_for_bill:
-                import engage_bill_lookup
-                location = engage_bill_lookup.find_best_item_match(r["item_name"], cache_for_bill)
+            r["funding_kind"] = (location or {}).get("funding_kind") or r["funding_kind"]
+            funding_label = r["funding_kind"].title()
 
-            if location and (location.get("section_line_number") or location.get("line_number")):
+            if location and location.get("section") not in (None, "", "Unknown Section") and (location.get("section_line_number") or location.get("line_number")):
                 section_name = str(location.get("section") or "").strip()
                 # Prioritize line position within section (section_line_number) over global bill count
                 line_id = location.get("section_line_number") or location.get("line_number")
                 r["resolved_location"] = location
                 r["resolved_section"] = section_name
                 r["resolved_line_id"] = line_id
-                if section_name and section_name != "Unknown Section":
-                    r["engage_line_ref"] = f"Bill {bill_no_for_item}, {section_name}, Line {line_id}"
-                    r["sga_line_text"] = f"${r['total']:.2f}, Line {line_id}, Bill {bill_no_for_item}, {section_name}"
-                else:
-                    r["engage_line_ref"] = f"Bill {bill_no_for_item}, Line {line_id}"
-                    r["sga_line_text"] = f"${r['total']:.2f}, Line {line_id}, Bill {bill_no_for_item}"
+                r["engage_line_ref"] = f"{funding_label} {bill_no_for_item}, {section_name}, Line {line_id}"
+                r["sga_line_text"] = f"${r['total']:.2f}, Line {line_id}, {funding_label} {bill_no_for_item}, {section_name}"
                 r["bill_line_ref"] = r["engage_line_ref"]
                 print(f"  ✓ '{r['item_name']}' -> {r['engage_line_ref']}")
             else:
                 print(f"  Engage could not match '{r['item_name']}' in Bill {bill_no_for_item}.")
-                line_id = input("  Enter its verified Engage line number (not the Excel Bill Item ID): ").strip()
-                section_name = input("  Enter its verified budget section: ").strip()
-                if not bill_no_for_item or not line_id.isdigit() or int(line_id) <= 0 or not section_name:
-                    raise SystemExit("Missing verified bill/line/section; request stopped.")
+                line_id, section_name = prompt_verified_location()
+                if not bill_no_for_item:
+                    raise SystemExit("Missing verified bill number; request stopped.")
                 r["resolved_line_id"] = line_id
                 r["resolved_section"] = section_name
-                r["engage_line_ref"] = f"Bill {bill_no_for_item}, {section_name}, Line {line_id}"
+                r["engage_line_ref"] = f"{funding_label} {bill_no_for_item}, {section_name}, Line {line_id}"
                 r["bill_line_ref"] = r["engage_line_ref"]
-                r["sga_line_text"] = f"${r['total']:.2f}, Line {line_id}, Bill {bill_no_for_item}, {section_name}"
+                r["sga_line_text"] = f"${r['total']:.2f}, Line {line_id}, {funding_label} {bill_no_for_item}, {section_name}"
 
         # === Submit Purchase Requests ===
-        results = {"success": [], "failed": []}
 
         # Subject line format: Marine Robotics Group "Vendor" Purchase Request YYYY-MM-DD
         order_subject = f"Marine Robotics Group {vendor_name} Purchase Request {purchase_date}"
 
 
         # Single source of truth for Engage form texts
-        sga_bill_box_text = "\n".join(r["sga_line_text"] for r in requests_to_submit)
+        funding_lines = {}
+        for r in requests_to_submit:
+            kind = r["funding_kind"]
+            funding_lines[kind] = "\n".join(filter(None, (funding_lines.get(kind), r["sga_line_text"])))
         order_bill_refs = "\n".join(r["engage_line_ref"] for r in requests_to_submit)
         for fee, value in (("Shipping", cart["shipping"]), ("Tax", cart["tax"])):
             if value:
-                ref = input(f"Verified bill/line/section funding {fee.lower()} (${value}): ").strip()
-                if not ref:
-                    raise SystemExit(f"Missing {fee.lower()} funding reference.")
-                sga_bill_box_text += f"\n${value}, {fee}, {ref}"
+                while True:
+                    ref = prompt_fee_reference(fee, value)
+                    if len(funding_lines) == 1 or "budget" in ref.lower() or "bill" in ref.lower():
+                        break
+                    print("This order uses both Budget and Bill funding. Include Budget or Bill in the fee reference.")
+                kind = funding_kind_from_title(ref) if "bill" in ref.lower() or "budget" in ref.lower() else next(iter(funding_lines))
+                funding_lines[kind] = "\n".join(filter(None, (funding_lines.get(kind), f"${value}, {fee}, {ref}")))
                 order_bill_refs += f"\n{ref}"
 
         # === Generate Budget vs Quoted Full Detail Excel & CSV Comparison Reports ===
-        import order_excel_builder
         os.makedirs(order_shot_dir, exist_ok=True)
 
         excel_detail_path, csv_detail_path = order_excel_builder.generate_order_budget_vs_quoted_excel(
@@ -515,7 +547,7 @@ def main():
             requests_to_submit=requests_to_submit,
             bill_line_cache=bill_line_cache,
             scraped_results=scraped_results,
-            output_dir=order_shot_dir
+            output_dir=order_shot_dir, cart_quote=cart,
         )
         print(f"  Comparison spreadsheet: {os.path.abspath(excel_detail_path)}")
         print(f"  CSV: {os.path.abspath(csv_detail_path)}")
@@ -560,26 +592,24 @@ def main():
                 pass
 
             # Verify precise custom fields before attaching any documentation.
-            input("Select the funding Category/Account and SGA Bill option in Engage to show its questions, then Enter: ")
-            amount_field = fill_purchase_fields(
+            expected_funding = " and ".join("SGA " + kind.title() for kind in funding_lines)
+            input(f"Select the funding Category/Account and {expected_funding} option in Engage, then Enter: ")
+            amount_field = run_engage_step(driver, order_shot_dir, "Engage form filling", lambda: fill_purchase_fields(
                 driver, amount=order_amount, cart_total=cart["total"],
-                bill_refs=order_bill_refs, sga_lines=sga_bill_box_text, payee=payee,
-            )
-            recheck_cart(cart, requests_to_submit)
-            require_matching_total(cart["total"], amount_field.get_attribute("value"))
+                bill_refs=order_bill_refs, payee=payee,
+                funding_lines=funding_lines,
+            ))
+            def verify_before_upload():
+                recheck_cart(cart, requests_to_submit)
+                require_matching_total(cart["total"], amount_field.get_attribute("value"))
+            run_engage_step(driver, order_shot_dir, "Cart/Engage amount verification", verify_before_upload)
             # Add a reconciliation sheet so fees and total charged remain explicit.
             import openpyxl
             report = openpyxl.load_workbook(excel_detail_path)
-            reconciliation = report.create_sheet("Cart Reconciliation")
-            for row in (("Order", selected_order_id), ("Approved allocation", grand_total),
-                        ("Merchandise", float(cart["subtotal"])), ("Shipping", float(cart["shipping"])),
-                        ("Tax", float(cart["tax"])), ("Vendor total", order_amount),
-                        ("Engage amount", float(money(amount_field.get_attribute("value")))),
-                        ("Payee", payee["name"]), ("Payee address", payee.get("address", "")),
-                        ("Payee source", payee.get("source", ""))):
-                reconciliation.append(row)
-            reconciliation.column_dimensions["A"].width = 25
-            reconciliation.column_dimensions["B"].width = 65
+            order_excel_builder.write_cart_reconciliation(
+                report, selected_order_id, cart, approved_allocation=grand_total,
+                engage_amount=money(amount_field.get_attribute("value")), payee=payee,
+            )
             report.save(excel_detail_path)
             report.close()
             file_inputs = driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
@@ -594,7 +624,7 @@ def main():
             # PAUSE — let user review and submit manually
             print(f"\n  ⏸️  Form pre-filled with {len(requests_to_submit)} items totaling ${order_amount:.2f}")
             print(f"     Review and fill remaining fields (Category, Account, etc.)")
-            print(f"     Bill #{bill_no}")
+            print(f"     Funding: {', '.join(sorted({r['funding_kind'].title() + ' ' + r['bill_no'] for r in requests_to_submit}))}")
             input(f"     Press Enter after you submit this purchase request → ")
 
             # Capture Engage Purchase Request URL
@@ -607,7 +637,6 @@ def main():
             except Exception:
                 pass
 
-            prompt_default = f" [{engage_url}]" if engage_url else ""
             user_engage = input(f"  👉 Enter submitted Engage Request URL (or Enter to {f'use {engage_url}' if engage_url else 'skip'}): ").strip()
             if user_engage:
                 engage_url = user_engage
@@ -645,14 +674,9 @@ def main():
 
         except Exception as e:
             print(f"\nPurchase stopped: {e}")
-            try:
-                diagnostic = save_page_screenshot(driver, os.path.join(order_shot_dir, "engage_form_error.png"))
-                print(f"Engage form diagnostic: {diagnostic}")
-                fields = driver.execute_script("return [...document.querySelectorAll('input,textarea,select')].map(e => ({id:e.id,name:e.name,type:e.type,labels:[...(e.labels || [])].map(l => l.innerText)}));")
-                import json
-                Path(order_shot_dir, "engage_fields.json").write_text(json.dumps(fields, indent=2), encoding="utf-8")
-            except Exception:
-                pass
+            save_engage_diagnostic(driver, order_shot_dir)
+            input("Both Chrome windows remain open. Inspect or finish the form manually; "
+                  "press Enter only when you are ready to end this run and close them: ")
             raise SystemExit(1) from e
 
     finally:

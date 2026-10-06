@@ -101,6 +101,22 @@ def _find_screenshot(item_name, bill_title=""):
     return None
 
 
+def _verified_screenshot(item_name, bill_title, url):
+    from mrg_finance.screenshot_capture import validate_evidence
+    path = _find_screenshot(item_name, bill_title)
+    return path if path and validate_evidence(path, source_url=url or None) else None
+
+
+def require_bill_evidence(items, bill_title):
+    """Stop before opening Engage if any linked product lacks checked evidence."""
+    missing = [name for name, url in items if url.startswith("http")
+               and not _verified_screenshot(name, bill_title, url)]
+    if missing:
+        raise ValueError("Bill stopped before Engage: missing or unverified product screenshots for "
+                         + ", ".join(missing)
+                         + ". Run screenshots --interactive for this bill and complete verification first.")
+
+
 def safe_int(val, default=0):
     try:
         return int(float(val))
@@ -283,8 +299,8 @@ def main():
 
     import spreadsheet_utils
     if CSV_FILE.endswith(".xlsx"):
-        ef = pd.ExcelFile(CSV_FILE)
-        _df_temp = spreadsheet_utils.read_sheet_robust(ef, ["Bills", "Bill", "Budget"])
+        with pd.ExcelFile(CSV_FILE) as ef:
+            _df_temp = spreadsheet_utils.read_sheet_robust(ef, ["Bills", "Bill", "Budget"])
     else:
         _df_temp = pd.read_csv(CSV_FILE)
     _df_temp = _df_temp.astype(object).fillna("")
@@ -341,7 +357,7 @@ def main():
         item_name = str(row.get("Item Name", "")).strip()
         url = str(row.get("Link", "")).strip()
         if item_name:
-            found_shot = _find_screenshot(item_name, BILL_NO)
+            found_shot = _verified_screenshot(item_name, BILL_NO, url)
             if found_shot and os.path.exists(found_shot):
                 existing_items.append((item_name, url, found_shot))
             else:
@@ -350,14 +366,14 @@ def main():
                 missing_items.append((item_name, url, expected_shot))
 
     print(f"\n📸 Screenshot Audit for '{BILL_NO}':")
-    print(f"   ✅ Existing ground-truth screenshots: {len(existing_items)}")
-    print(f"   ⚠️ Missing screenshots: {len(missing_items)}")
+    print(f"   ✅ Checked screenshots: {len(existing_items)}")
+    print(f"   ⚠️ Missing or unverified screenshots: {len(missing_items)}")
 
     items_to_capture = []
     if missing_items:
         print("\nItems missing screenshots:")
         for m_name, m_url, _ in missing_items:
-            print(f"   - {m_name} ('Link available' if m_url else 'No link')")
+            print(f"   - {m_name} ({'Link available' if m_url else 'No link'})")
 
         take_missing = input("\nCapture missing screenshots in Chrome? (Y/n): ").strip().lower()
         if take_missing in ("", "y", "yes"):
@@ -368,12 +384,16 @@ def main():
             items_to_capture = existing_items
 
     if items_to_capture:
+        from mrg_finance.screenshot_capture import invalidate_evidence
+        for _, _, shot_path in items_to_capture:
+            invalidate_evidence(shot_path)
         print(f"\nLaunching Chrome to capture {len(items_to_capture)} screenshot(s); solve CAPTCHAs when prompted.")
         from selenium.webdriver.chrome.options import Options
         from selenium.webdriver.chrome.service import Service
 
         c_opts = Options()
         c_opts.add_argument("--window-size=1920,1080")
+        c_opts.add_argument(f"--user-data-dir={os.path.abspath(os.path.join('.mrg-finance-browser', 'evidence'))}")
         c_opts.add_argument("--no-sandbox")
         c_opts.add_argument("--disable-dev-shm-usage")
 
@@ -395,7 +415,7 @@ def main():
                     time.sleep(2)
                     import price_scraper
                     price_scraper.dismiss_popups_and_interstitials(c_driver)
-                    capture_evidence(c_driver, shot_path, interactive=True)
+                    capture_evidence(c_driver, shot_path, interactive=True, source_url=m_url)
                     print(f"✅ Saved ({os.path.basename(shot_path)})")
                 except Exception as err:
                     print(f"❌ Failed: {err}")
@@ -406,7 +426,9 @@ def main():
         except Exception as chrome_err:
             print(f"⚠️ Could not start Chrome for screenshots: {chrome_err}")
 
-    print(f"Review the workbook and screenshots in {os.path.abspath(SCREENSHOT_DIR)} before proceeding.")
+    require_bill_evidence([(str(row.get("Item Name", "")).strip(), str(row.get("Link", "")).strip())
+                           for _, row in bill_items_df.iterrows()], BILL_NO)
+    print(f"Review the workbook and checked screenshots in {os.path.abspath(SCREENSHOT_DIR)} before proceeding.")
 
     del _df_temp, _titles
 
@@ -617,8 +639,11 @@ def main():
                     price_field.clear()
                     price_field.send_keys(str(safe_float(item.get("Cost", 0.0))))
 
-                    # Upload file if exists
-                    local_path = _find_screenshot(item_name, BILL_NO)
+                    # Revalidate the source and bytes immediately before upload.
+                    item_url = str(item.get("Link", "")).strip()
+                    local_path = _verified_screenshot(item_name, BILL_NO, item_url)
+                    if item_url.startswith("http") and not local_path:
+                        raise RuntimeError(f"Screenshot evidence changed for {item_name}; attachment upload stopped.")
                     if local_path:
                         file_input = driver.find_element(By.ID, "fileUploadInput")
                         driver.execute_script("arguments[0].style.display='block';", file_input)

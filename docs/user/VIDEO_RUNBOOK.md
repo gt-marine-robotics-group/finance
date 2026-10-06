@@ -1,211 +1,273 @@
-# MRG Finance video recording runbook
+# MRG Finance: quick video recording script
 
-This walkthrough follows the current v0.2.11 CLI. Record an 8–12 minute main video covering installation, a funding bill, and a purchase against an approved bill. Put developer tests, offline usage, and the full rclone setup in separate chapters or companion videos.
+Record **six short clips**, then join them into an 8–10 minute walkthrough. Follow the numbered sections below in order. Commands are ready to paste; **Say** is your narration; **Show** is the shot to keep. This assumes the feature changes have been merged into `main`.
 
-## Before recording
+Use your existing OneDrive-synced workbook. Keep your installed tools and rclone configuration. **No uninstall, clean clone, or test-suite demonstration is needed.**
 
-Prepare these two examples:
+## Before you press Record — five-minute setup
 
-- **Funding example:** a small real bill with two or three items in the Bills sheet, with product links, quantities, costs, and budget sections. Have its existing editable Engage budget-request draft ready. The CLI uses `Bill No.` to open that draft, or asks for its Engage edit URL when the number is blank.
-- **Purchase example:** a separate pending order referencing an already approved bill, with the official bill number and quantities recorded in Ordering. Use one vendor per Order ID. Have the actual Engage line numbers and funding references for any shipping/tax ready.
+1. Choose two examples: a small funding bill with an editable Engage draft, and a pending purchase against a **separate, already approved budget or bill**. Each purchase order must use one vendor. Keep their menu numbers/IDs and any draft URL in a private note.
+2. Save the synced workbook and let OneDrive finish syncing. Show it when needed, then **close Excel before the CLI writes links**. Close comparison reports before continuing their update/upload step.
+3. Use Terminal at 18–20 pt, with Chrome/Excel alongside it. Turn on Do Not Disturb. Keep passwords, MFA, account details, and payment information out of recordings.
+4. Create your recording folder and working directory:
 
-Explain the approval gap on camera: submitting a new funding bill does not immediately make it available for purchasing. Switch to the already approved example for the purchase segment.
+   ```bash
+   mkdir -p "$HOME/mrg/finance/scratch/video/raw" "$HOME/mrg/finance/scratch/video/exports" "$HOME/mrg/finance/scratch/video/demo"
+   cd "$HOME/mrg/finance/scratch/video/demo"
+   ```
 
-Rehearse once before recording. The new purchase flow has passed offline simulations and a synthetic Chrome form test; the authenticated Engage form still needs a real-order smoke test. Check that its Category/Account, SGA questions, payee fields, and attachment controls appear as expected.
+   Run the video's commands from this Terminal. Screenshots/reports go into `demo/screenshots/`. Your workbook stays in OneDrive; no copy is needed. `scratch/` is ignored by Git.
+5. Press **Shift–Command–5 → Record Selected Portion**. In Options, select your microphone, enable Show Mouse Clicks, and save to `/Users/aaronwu/mrg/finance/scratch/video/raw`. Record a 20-second test and play it back to check voice and text readability. [Apple recording instructions](https://support.apple.com/en-us/102618)
 
-Use an authorized real request when demonstrating Engage. `bill-request` saves line items and attachments into the live draft. `purchase` builds carts, writes cart links to the workbook, and uploads evidence before you manually submit. There is no CLI dry-run mode. Omitting `--fresh` skips the initial download; screenshot and purchase flows can still attempt SharePoint uploads when rclone is configured.
+Stop with **Command–Control–Esc**. The Mac recorder has no pause button: stop before login, resume afterward, and name the continuation `-part2.mov`. Leave two seconds at each end. If you stumble, pause and repeat the sentence; keep the raw take.
 
-Keep terminal text readable at 16–18 pt. Show Terminal and the workbook/browser together, then zoom into the current task. Pause or crop GT/Amazon sign-in and MFA; keep account menus, addresses, payment details, and notification popups out of the recording. Record short clips so waiting for pages and authentication can be cut out.
+Use actual requests you intend to prepare. `bill-request` writes to the live draft; `purchase` writes workbook links and fills/uploads into Engage. There is no dry-run mode. Rehearse without submitting the same request twice.
 
-Do not delete your working repository, virtual environment, or rclone configuration for the main video. A separate recording directory or computer user account gives you a clean setup without losing your normal environment.
+## Clip 1 — Install the CLI · 45–60 seconds
 
-## 1. Installation — about one minute
+**Save as:** `01-install.mov`
 
-Have uv, Google Chrome, Git, and access to the finance workbook ready. If uv itself is part of the lesson, record its installation as a short separate clip using the [official installation instructions](https://docs.astral.sh/uv/getting-started/installation/).
+**Say:** “MRG Finance uses our finance spreadsheet to prepare funding bills and purchase requests. I'll install it, connect SharePoint, then show both workflows.”
 
-For a published version, the end-user command is:
-
-```bash
-uv tool install git+https://github.com/gt-marine-robotics-group/finance.git
-mrg-finance --help
-```
-
-If the executable is not on PATH, run `uv tool update-shell` and reopen the terminal. See [uv's tools guide](https://docs.astral.sh/uv/guides/tools/).
-
-**For recording the current local changes:** they are still uncommitted at the time this guide was written. A new clone or GitHub installation will not include those changes until they are published. Install from the current checkout instead:
+Run:
 
 ```bash
-uv tool install --force .
+uv tool install --force "git+https://github.com/gt-marine-robotics-group/finance.git@main"
 mrg-finance --help
 mrg-finance purchase --help
 ```
 
-Show `--cart-source {automated,personal}` in purchase help to establish that you are using the updated tool. Use `uv tool list` to show the installed version.
+**Show:** successful installation and the `bill-request`, `purchase`, `screenshots`, and `doctor` commands. Cut the download wait.
 
-**Say:** “uv installs the CLI in its own environment. The workbook contains our purchasing data, and the CLI helps prepare the evidence and Engage forms.”
+**Say:** “Automated is the default cart source. Amazon and DigiKey use their own Chrome cart windows. The personal flag skips automatic additions so I can build the cart myself.”
 
-Do not describe a local-checkout installation as the GitHub one-liner. Choose the clip matching the code you actually installed.
+If uv is missing, install it using the [official uv instructions](https://docs.astral.sh/uv/getting-started/installation/). If `mrg-finance` is not found, run `uv tool update-shell` and reopen Terminal. Git is needed for this GitHub installation. Selenium Manager uses installed Chrome or downloads Chrome for Testing and its driver; the first uncached browser run needs internet. [Selenium browser management](https://www.selenium.dev/documentation/selenium_manager/)
 
-## 2. Workbook and diagnostics — about one minute
+**Overlay to add later:** `1. Install`
 
-Place `FY27_Bills_Budget.xlsx` in the recording's working directory. Show the Bills and Ordering tabs and explain:
+## Clip 2 — Install/connect rclone · 1–2 minutes
 
-- Bills holds the funding items and approved costs.
-- Ordering selects Bill Item IDs and the quantities being purchased now.
-- Bill Item IDs are spreadsheet identifiers; Engage has its own line numbers.
-- Formulas should remain intact. Enter only the editable fields.
+**Save as:** `02-rclone.mov`
 
-For a custom file path, set it explicitly rather than depending on auto-discovery:
+**Say:** “OneDrive syncs the workbook I edit. rclone lets the CLI transfer the workbook and screenshots directly to and from SharePoint.”
+
+Run:
 
 ```bash
-export FINANCE_XLSX_PATH="/absolute/path/to/FY27_Bills_Budget.xlsx"
+brew install rclone
+rclone version
+rclone listremotes
+```
+
+If `onedrive:` already appears, **keep it** and go straight to the connection check. Explain the setup table on screen. If you need to demonstrate a new connection, run `rclone config` and use these choices:
+
+| Prompt | Choose |
+| --- | --- |
+| New remote | `n` |
+| Name | `onedrive` — exact lowercase name |
+| Storage | Microsoft OneDrive / `onedrive` |
+| Client ID / secret | Leave blank |
+| Region / advanced config | Global/default; `n` for advanced |
+| Browser authentication | `y`; GT account and Duo |
+| Connection type | SharePoint site |
+| Site URL | `https://gtvault.sharepoint.com/sites/MarineRoboticsGroup` |
+| Library | Documents |
+| Confirm / quit | `y`, then `q` |
+
+Choose by label; wizard numbers can change. **Stop recording before authentication and keep it stopped through the final configuration summary**, which can show tokens. Resume for this connection check:
+
+```bash
+rclone lsf "onedrive:OPS-1 Operations/FY27 Finances"
+```
+
+**Show:** `FY27_Bills_Budget.xlsx` in the results.
+
+**Say:** “The remote is named onedrive and points at the MRG SharePoint library. Fresh downloads the cloud copy before a command. Today I'll use my already synced workbook.”
+
+Show `mrg-finance doctor --fresh` as a caption; omit `--fresh` from the remaining demo commands. Run a refresh only after checking the destination, closing Excel, and finishing OneDrive sync. Omitting `--fresh` skips the initial download; screenshot/purchase commands can still upload through configured rclone.
+
+[Official rclone SharePoint setup](https://rclone.org/onedrive/) · [Homebrew rclone](https://formulae.brew.sh/formula/rclone)
+
+**Overlay:** `2. Connect SharePoint` → `OneDrive: workbook sync | rclone: CLI transfers`
+
+## Clip 3 — Show the workbook and doctor · 45–60 seconds
+
+**Save as:** `03-workbook.mov`
+
+**Show:** your funding example in Bills and your approved purchase example in Ordering.
+
+**Say:** “Bills holds the funding items and approved costs. Ordering selects the items and quantities we're purchasing. Spreadsheet item IDs are different from Engage line numbers.”
+
+Run:
+
+```bash
 mrg-finance doctor
 ```
 
-In PowerShell, use `$env:FINANCE_XLSX_PATH = "C:\path\FY27_Bills_Budget.xlsx"`.
-
-The environment override takes priority in the CLI; otherwise it checks the current directory, the fixed `~/mrg/finance/` location, and the configured macOS OneDrive location. An arbitrary cloned repository directory is not automatically a fallback when you run from somewhere else.
-
-Show warnings such as missing bill numbers, nonpositive costs, duplicate IDs, or unresolved Ordering references. A missing official bill number can be expected for a new funding draft. Do not call this proof that every formula is correct or that a vendor URL is reachable; doctor checks workbook data and basic URL formatting.
-
-**Say:** “Doctor catches common workbook problems before we prepare a request.”
-
-## 3. Funding bill — about two to three minutes
-
-Replace every quoted placeholder below with a bill title or Order ID that exists in your workbook.
-
-First show the small funding example in Bills. Capture its product evidence:
+**Check `Target file:`.** If it is your OneDrive workbook, continue. If it points somewhere else, run this on this Mac and repeat doctor:
 
 ```bash
-mrg-finance screenshots --bill "<FUNDING_BILL_TITLE>" --interactive
+export FINANCE_XLSX_PATH="$HOME/Library/CloudStorage/OneDrive-GeorgiaInstituteofTechnology/Documents - Marine Robotics Group/OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx"
+mrg-finance doctor
 ```
 
-Show one product page, the saved screenshot, and `screenshots/<Bill Title>/screenshot_audit.csv` in Excel. Keep the spreadsheet cost consistent with the intended funding request. The audit records scraped prices; it does not overwrite the approved/requested workbook costs.
+This selects the existing file; it does not copy it. You only need the export when auto-discovery picks the wrong file, and it applies to this Terminal session. Another Mac needs its own actual path.
 
-If a CAPTCHA appears naturally, show the notification and the separate `challenges/` diagnostic folder, then solve it in Chrome and retry. Do not rely on a CAPTCHA occurring during the live recording. A previous diagnostic clip can illustrate this feature if labeled as a separate example.
+**Say:** “Doctor checks common workbook data problems. I'll check its file path and resolve any warnings relevant to these examples.”
 
-Then run:
+**Show:** path and diagnostic results. Close Excel after the shot. A new funding draft can legitimately lack an approved bill number; doctor does not verify every formula or live vendor page.
+
+**Overlay:** `3. Check the workbook`
+
+## Clip 4 — Screenshots and funding bill · 2 minutes
+
+**Save as:** `04-bill.mov`, with `-part2` after GT login
+
+**Say:** “First I'll capture product evidence, review it, and add the funding items to our Engage draft.”
+
+Run:
 
 ```bash
-mrg-finance bill-request --bill "<FUNDING_BILL_TITLE>"
+mrg-finance screenshots --interactive
 ```
 
-Show these steps:
+Select your prepared funding bill at **Select bill title or number**. Show one product page, its screenshot, and the printed `screenshot_audit.csv` in Excel. Review them, then close Excel. Keep the `.evidence.json` sidecars with the images; the bill flow verifies the URL and image bytes. The audit does not overwrite requested workbook costs.
 
-1. Select the prepared draft through its bill number, or paste its Engage edit URL when prompted. This command fills an existing draft; it does not create the initial draft shell.
-2. Review the screenshot audit. Existing screenshots can be reused; capture missing evidence if prompted.
-3. Review the per-section item list and total, then confirm Proceed.
-4. Cut around GT credentials and Duo MFA.
-5. Show the automation entering one line's name, description, quantity, cost, and screenshot, then saving it.
-6. Show the final added/skipped/failed counts and review the resulting draft in Engage. The CLI's completion message reports line-item entry, not SGA approval.
-7. Complete the draft's final submission in Engage when appropriate for the real request. Later, record the official approved bill number in the workbook.
-
-**Say:** “Bill-request puts our funding items and quote evidence into the Engage draft. Approval happens afterward; for the purchase demonstration, I'll switch to an already approved bill.”
-
-## 4. Purchase — about four to five minutes
-
-Show the prepared pending order in Ordering. Use personal mode as the main demonstration because it shows the real account's cart and Share-A-Cart contents:
+Run:
 
 ```bash
-mrg-finance purchase --order "<APPROVED_ORDER_ID>" --cart-source personal
+mrg-finance bill-request
 ```
 
-Explain the alternative briefly: omitting `--cart-source personal` attempts automated Amazon cart building. Both modes verify the real cart before proceeding.
-
-Record these moments in order:
-
-1. **Select and prepare:** show the pending order, allocation, workbook path, and evidence directory. Confirm the order and cart-preparation prompts.
-2. **Personal browser:** sign into Amazon in the Chrome window opened by the CLI. This is a dedicated profile under `.mrg-finance-browser/` in the working directory, not your already open browser. Install Share-A-Cart there before the main take if needed. Cut around sign-in.
-3. **Actual cart:** build the order using only its listed items. Check seller limits and quantities. Return to the cart page and press Enter in the terminal when ready. The CLI compares the active cart's ASINs and quantities with Ordering and reads its prices/subtotal.
-4. **Charges:** enter shipping and tax as shown by the vendor, then enter the final total. Do not treat “not yet calculated” as zero. This total must match merchandise plus shipping and tax to the cent.
-5. **Sharing:** create a Share-A-Cart link with the extension from that actual cart and paste it into the terminal.
-6. **Quote review:** show approved versus cart unit prices, the total including fees, the variance from allocation, and vendor payee details. Confirm sufficient funding and continue to Engage.
-7. **Bill references:** after GT authentication, show the approved-bill lookup. If a match fails, enter the verified Engage line and section. Provide funding references for shipping/tax if prompted.
-8. **Spreadsheet:** open the generated comparison workbook from the printed path. Show the line-item budget, quote, variance, section, and bill/line references. Close the report before pressing Enter to continue; the CLI updates it again during upload.
-9. **Engage questions:** when prompted, select the funding Category/Account and SGA Bill option in Engage to reveal the custom questions, then return to Terminal and press Enter.
-10. **Final check:** show the CLI rechecking the cart and asking you to reconfirm the vendor total immediately before uploading.
-11. **Filled form:** zoom into the fields below and the two uploaded attachments. After upload, reopen the report if you want to show its Cart Reconciliation tab, which is added at this stage.
-12. **Finish:** review/sign/submit the real request manually in Engage, return to Terminal, and confirm the submitted URL. Show the cart and request links recorded in Ordering and the SharePoint sync result. If you only recorded form preparation, stop the clip before submission and label it “prepared draft”; do not claim a submitted request.
-
-| Show in Engage | What the viewer should see |
+| When this happens | Do this |
 | --- | --- |
-| Requested Amount | Verified full vendor total, including shipping/tax |
+| GT credentials / Duo | Stop recording; resume after authentication. |
+| Bill-title menu | Select the same bill. |
+| Missing Bill No. | Paste your prepared Engage draft edit URL. |
+| Re-capture screenshots? | Type `n` after reviewing the captures. |
+| Section/item preview; Proceed? | Check names, costs, quantities, and sections; press Enter to continue. |
+| Existing items; Choice [1/2] | **Type `2`** to keep existing items and skip duplicates. Do not press Enter: the current default clears existing lines. |
+| Automated entry | Record one complete item and screenshot upload. Cut repeated entry. |
+| Completion | Show counts and inspect the draft; resolve failures before calling it complete. |
+
+**Say:** “The CLI has prepared the funding draft. Approval happens later. For purchasing, I'll switch to a separate approved example.”
+
+**Show:** the approved budget/bill and its pending order for five seconds. Submit the funding draft only when ready; CLI completion means line entry, not approval.
+
+**Overlay:** `4. Prepare funding` → `Funding → approval → purchase`
+
+## Clip 5 — Purchase · 3–4 minutes
+
+**Save as:** `05-purchase.mov`, with continuations around sign-in
+
+**Say:** “Prices can change after funding approval. Purchase checks the current cart, fills a comparison workbook, and uses that verified amount in Engage.”
+
+Run the default workflow and select your prepared order:
+
+```bash
+mrg-finance purchase
+```
+
+There is **one preparation confirmation** and no cart-source menu. The product URLs determine the vendor, even if the Order ID still contains an older vendor name. For an optional personal Amazon demonstration, use `mrg-finance purchase --cart-source personal` instead; you add items yourself in the dedicated Chrome window.
+
+Follow this checklist in order:
+
+| Step / prompt | Action and shot to keep |
+| --- | --- |
+| Order selection | Select the prepared order. Show allocation, workbook path, and evidence directory. |
+| Prepare and verify vendor cart? [Y/n] | Press Enter. |
+| Change product links before building the cart? [y/N] | Press Enter for the planned demo. See the optional replacement clip below. |
+| Product-price check | Show one current price versus approved cost. If over budget, Enter keeps it; a replacement HTTPS URL changes it. If unreadable, Enter tries the cart; manual price entry is optional. |
+| Vendor Chrome opens | Complete sign-in/verification in **this** window off camera. Automatic mode attempts additions. If it needs help, check what's already added before adding again. Keep only this order's products and exact quantities. |
+| Cart verification | Leave the cart page visible. Press Enter when prompted; DigiKey attempts automatic reading without this readiness prompt in automated mode. Show the verified items/subtotal. |
+| Charges — Amazon | Enter the actual shipping, tax, and final vendor total without `$`. Enter uses zero only for shipping/tax when the vendor shows zero. **Type the final total explicitly.** Never treat uncalculated charges as zero. |
+| Charges — DigiKey | Supported carts supply the quote automatically. GT accountant purchases use $0 shipping; the report retains the public shipping estimate separately. Merchandise and tax remain verified. |
+| Share-A-Cart Link/Code | Create a fresh link with the extension in the vendor Chrome window and paste it. If automated Amazon offers a newly generated link, Enter accepts it after review. Show **Saved and verified Share-A-Cart URL in Ordering**. |
+| Comparison workbook | Open the printed `.xlsx`. Show approved/cart prices, variance, and Cart Reconciliation charges. Funding references are pending at this point. **Close it.** |
+| Continue to Engage? [Y/n] | Press Enter after review. `n` stops with the comparison saved. |
+| GT credentials / Duo | Stop recording; resume after login. |
+| Funding lookup | Show Menu → Budget lookup and verified section/line. Nonzero requested fees need funding references. |
+| Review comparison spreadsheet | Show completed funding references, then close the report and press Enter. |
+| Select Category/Account and SGA option | In Engage select the prompted **SGA Budget or SGA Bill**, then press Enter in Terminal. Use the source that actually funds this order. |
+| Before upload | Show cart/amount recheck. Amazon asks you to reconfirm the final vendor total; supported DigiKey quotes recheck automatically. |
+| Filled form | Show the fields below and both attachments. |
+| Finish | Review/sign/submit manually. Only then press Enter at the submission prompt and confirm the real resulting URL. Show saved workbook links and the actual cloud-sync result. |
+
+**Show these Engage fields:**
+
+| Field | Expected content |
+| --- | --- |
+| Requested Amount | Verified payable amount; includes tax and applicable shipping |
 | Description | Share-A-Cart link |
-| Budget/Bill # and Request Line # | Verified Engage bill/line/section references |
-| SGA Bill | Quoted amount per funding line, plus allocated fees |
-| Payee | Vendor name and available official contact details |
-| Attachments | `cart.png` and the comparison `.xlsx` |
+| Budget/Bill # and Request Line # | Verified funding number, section, line |
+| Selected SGA Budget / SGA Bill answer | Quoted amounts and matching funding references |
+| Payee and Payee Email | Vendor name/address and verified email when available; DigiKey uses `orders@digikey.com` |
+| Attachments | `cart.png` and comparison `.xlsx` |
 
-**Say:** “An approved price is our baseline, but the purchase request uses the current vendor total. We verify the actual cart, keep the comparison spreadsheet, and check the amount again before uploading to Engage.”
+**Say:** “The amount matches the verified payable quote. Funding references and payee details go into their own fields. I review and submit the request myself.”
 
-If quantities or prices change, show the stop message and explain that the order/quote needs correction and rerunning. Do not present a seller quantity limit as something Share-A-Cart can override.
+If recording **form preparation only**, finish before submission and label the result `Prepared form — not submitted`. Stop recording, then end the waiting CLI with Control-C. Do not acknowledge a submission that did not happen.
 
-## 5. Optional feature clips
+**Overlays:** `5. Verify and prepare purchase`, then `Verified payable amount = Engage amount`. Highlight one field at a time.
 
-Choose one or two for the main video; put the rest in separate chapters.
+## Clip 6 — Result and closing · 20–30 seconds
 
-| Feature | Command or shot | Accurate explanation |
-| --- | --- | --- |
-| Price audit | `mrg-finance price-check --bill "<BILL_TITLE>"` | Headless Chrome price comparison and an Amazon add-to-cart URL. Missing prices fall back to allocations in the summary, so this is an estimate, not a verified purchase quote. |
-| Standalone report | `mrg-finance report --order "<ORDER_ID>"` | Formatted line-item comparison with subtotal/grand-total formulas; prices may fall back to the baseline. Do not promise executive KPI cards that this generator does not create. |
-| CAPTCHA handling | `mrg-finance screenshots --bill "<BILL_TITLE>" --interactive` | Visible Chrome, retry after manual solving, and diagnostic screenshots kept separate from evidence. |
-| DigiKey | Show a real DigiKey cart and extension-generated link | [Share-A-Cart supports DigiKey](https://share-a-cart.com/supported/digikey). Both parties need the Everything extension; DigiKey quote prices and quantities are manually confirmed by this CLI. |
-| Cloud refresh | `mrg-finance doctor --fresh` | Downloads before checking the workbook; the detailed rclone setup belongs in a separate clip. |
+**Save as:** `06-result.mov`
 
-Run a standalone `report` demonstration **before** purchase, or use a different order. It writes the same report filenames and can overwrite a purchase's verified report with a freshly scraped or fallback report. Likewise, the price-check add-to-cart link can add extra items to a browser cart; keep it separate from the cart you will verify in purchase.
+**Show:** saved Share-A-Cart/request links in Ordering, plus the comparison workbook.
 
-## Main-video timeline
+**Say:** “The workbook keeps our funding references and order links. The CLI prepares evidence, verifies the current quote, and fills Engage. The bill and purchase guides contain the full steps.”
 
-These are edited-screen-time targets. Record authentication, page loads, and full automation separately and shorten the waits in editing.
+Link [Bill requests](BILL_REQUEST_GUIDE.md), [Purchase requests](PURCHASE_GUIDE.md), and [CLI usage](CLI_GUIDE.md) in the video description.
 
-| Time | Segment |
-| --- | --- |
-| 0:00–0:20 | What the tool does: funding bill → approval → purchase |
-| 0:20–1:20 | Installation and CLI help |
-| 1:20–2:10 | Workbook fields and doctor |
-| 2:10–4:40 | Product screenshots and funding bill draft |
-| 4:40–9:10 | Personal cart, verified quote, report, Engage fields and attachments |
-| 9:10–9:40 | Submitted-request link and workbook logging |
-| 9:40–10:20 | One optional feature and where to find the guides |
+## If a step needs attention
 
-For a four-minute overview, use short clips from these recordings. Treat it as a feature overview rather than a complete follow-along tutorial.
+- **CAPTCHA:** solve it in the visible Chrome window, then Enter to retry. Challenge screenshots stay under `challenges/`, separate from usable evidence. If it keeps looping, cancel and resolve access before filming that segment.
+- **Cart mismatch/addition failure:** keep Chrome open, correct products/quantities, and retry. Check whether an item was already added; do not duplicate it. Seller limits must be respected.
+- **Share-A-Cart missing:** while the CLI waits, open the [official Chrome extension listing](https://chromewebstore.google.com/detail/share-a-cart-%E2%80%93-easily-sha/hcjohblbkdgcoikaedjndgbcgcfoojmj) in a new tab in the **vendor cart window**. Add the extension, return to the cart, and create its Cart ID. Install once per vendor profile; it persists across runs. The separate incognito Engage window is not the installation target. DigiKey recipients also need the extension to load the shared cart. [DigiKey support](https://share-a-cart.com/supported/digikey)
+- **Workbook save fails:** close Excel, let OneDrive finish, then retry in the waiting CLI. Keep the URL; `share_a_cart.json` is the recovery copy. Do not continue without a saved link.
+- **Engage lookup/form problem:** both windows stay open. Correct the current page/selection and retry. Open Menu → Budget if needed; manual references accept `B03 Line 1`. Diagnostics are in the printed order folder. Changed payable prices require a refreshed quote.
 
-## Companion clip: developer installation and tests
+Cart profiles live under `~/Library/Application Support/mrg-finance/chrome/<vendor>/` on Mac. Screenshot sessions use `.mrg-finance-browser/evidence/` in the working directory. These are separate from ordinary Chrome.
 
-After the current changes are published:
+## Optional extras — record only after the main clips
 
-```bash
-git clone https://github.com/gt-marine-robotics-group/finance.git
-cd finance
-uv sync
-uv run mrg-finance --help
-uv run pytest -q
-```
+Pick **one** 30-second feature if time allows:
 
-Before publication, use the existing updated checkout. At the time of writing, the normal test run reports **53 passed, 1 skipped**. The skipped test is an opt-in local Chrome DOM test. Timing varies. Describe these as offline simulations/regression checks, not actual Engage submissions.
+- **Product replacement:** answer `y` at Change product links, choose the item number, paste a replacement URL, then Enter when done. Show the saved Ordering Link/Vendor and new cart. All links in an order must identify one vendor; otherwise replace the remaining links or split the order. Approved Bills costs stay unchanged.
+- **Price audit:** run `mrg-finance price-check`, select the bill, and decline opening the add-to-cart link. This is an estimate; failed reads can use allocation fallbacks. Keep its cart additions separate from the verified purchase.
+- **DigiKey:** show automatic quote reading and the comparison's GT free-shipping adjustment if the main purchase used Amazon.
 
-Once dependencies are installed and cached, `uv run --offline pytest -q` avoids dependency downloads. Global CLI installation alone does not give you the repository's test files; run tests from a checkout.
+A standalone `mrg-finance report --order <ID>` can overwrite that order's verified report filenames. Use another order or record it **before** purchase. Developer installation/tests and offline modes belong in separate videos.
 
-## Companion clip: manual and offline usage
+## Editing handoff — do this after recording
 
-Show downloading the workbook from SharePoint and running commands without `--fresh`. rclone is optional for loading a local workbook. For a recording copy, use a separate directory and set `FINANCE_XLSX_PATH` to that file; only use read-only diagnostics/reports during an offline rehearsal.
+Keep the original `.mov` files in `scratch/video/raw`. No overlays need to be added while recording. Use short chapter cards, one callout at a time, and close-up zooms for totals and field names. Cut waits and repeated entries while keeping meaningful choices/results. Do not imply instant approval.
 
-Offline workflow: edit the workbook → run doctor → review a baseline report → reconnect to obtain verified prices and prepare Engage. Standalone report generation attempts live price requests and falls back if unavailable; don't promise instantaneous offline runs. Installing dependencies from scratch needs internet or a prepared cache. Live screenshots, cart verification, vendor discovery, and Engage require internet.
-
-There is no `review` command or side-by-side review server in v0.2.11. Review the workbook, screenshot audit CSV, and generated comparison workbook instead.
-
-## Companion clip: rclone connection
-
-Use the [official OneDrive/SharePoint setup documentation](https://rclone.org/onedrive/). Run `rclone config`, create a remote named `onedrive` (the CLI expects that name), select OneDrive storage, leave client credentials blank for the usual setup, authenticate with your GT account, and select the SharePoint site and Documents library. Prompt wording and available site-selection choices can vary with rclone version and tenant permissions; show the choices actually displayed rather than promising identical numbered prompts.
-
-Site: `https://gtvault.sharepoint.com/sites/MarineRoboticsGroup`
+FFmpeg is optional for recording; install it for command-based editing afterward:
 
 ```bash
-rclone ls "onedrive:OPS-1 Operations/FY27 Finances"
-rclone copy --ignore-checksum --ignore-size --update "onedrive:OPS-1 Operations/FY27 Finances/FY27_Bills_Budget.xlsx" .
-mrg-finance doctor --fresh
+brew install ffmpeg
 ```
 
-Pause recording before the configuration summary, which can contain tokens. Use a separate recording configuration/account if you need to film a fresh login; keep the working remote intact.
+In `scratch/video/edit-notes.txt`, list preferred takes and sensitive timestamps using:
 
-See [Purchase requests](PURCHASE_GUIDE.md), [Bill requests](BILL_REQUEST_GUIDE.md), and [CLI usage](CLI_GUIDE.md) for the full command references.
+```text
+<filename> | <mm:ss–mm:ss> | cut / blur / use this retake
+Funding result: prepared draft / submitted draft
+Purchase result: prepared form / submitted request
+```
+
+Then give the editing agent this instruction:
+
+> Edit `scratch/video/raw` using `docs/user/VIDEO_RUNBOOK.md` and `scratch/video/edit-notes.txt`. Join the six chapters into an 8–10 minute walkthrough including installation and rclone. Keep my narration, cut waits/retakes, add the chapter and field/total overlays, and remove or blur sensitive material. Preserve raw files. Export H.264/AAC at 1920 × 1080 to `scratch/video/exports/mrg-finance-walkthrough.mp4` and include chapter timestamps. Label the actual demonstrated result accurately.
+
+To film a fresh rclone wizard while keeping an existing connection, choose a separate config **before** that take:
+
+```bash
+mkdir -p "$HOME/mrg/finance/scratch/video/rclone-demo"
+export RCLONE_CONFIG="$HOME/mrg/finance/scratch/video/rclone-demo/rclone.conf"
+rclone config
+```
+
+The CLI uses this config in the same Terminal session. `unset RCLONE_CONFIG` returns to your normal config. Keep either config private.

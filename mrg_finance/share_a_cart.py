@@ -3,6 +3,8 @@ import re
 from typing import Optional
 from urllib.parse import urlparse
 
+SHARE_A_CART_CHROME_URL = "https://chromewebstore.google.com/detail/share-a-cart-%E2%80%93-easily-sha/hcjohblbkdgcoikaedjndgbcgcfoojmj"
+
 def find_share_a_cart_extension() -> Optional[str]:
     """
     Search for Share-A-Cart extension files (.crx or unpacked extension directories)
@@ -116,7 +118,7 @@ def create_share_a_cart_link(items: list[dict], vendor_name: str = "amazon", ord
         print(f"  ⚠️ Automatic Share-A-Cart generation notice: {e}")
     return None
 
-def prompt_for_share_a_cart(item_count: int, vendor_name: str = "Vendor", auto_url: Optional[str] = None) -> Optional[str]:
+def prompt_for_share_a_cart(item_count: int, vendor_name: str = "Vendor", auto_url: Optional[str] = None, *, required=False) -> Optional[str]:
     """
     Interactive prompt presenting the automatically generated Share-A-Cart link,
     or letting the user paste/override it.
@@ -128,22 +130,32 @@ def prompt_for_share_a_cart(item_count: int, vendor_name: str = "Vendor", auto_u
         print(f"  ✨ Automatically Created Cart Link: {auto_url}")
         print("  Press Enter to use this link, or paste a replacement below:")
     else:
-        print("  1. In your open browser window, open your shopping cart.")
-        print("  2. Click the 'Share-A-Cart' extension icon and click 'Create Cart'.")
-        print("  3. Paste the Share-A-Cart link or code below (or press Enter to skip):")
+        print("  Use the vendor/cart Chrome window opened by the CLI. The Engage window is separate.")
+        print("  If Share-A-Cart is missing, leave this prompt waiting and open a new tab in that cart window:")
+        print(f"    {SHARE_A_CART_CHROME_URL}")
+        print("  Click Add to Chrome, then Add extension. Use the puzzle-piece menu to find/pin Share-A-Cart.")
+        print("  Install in the cart window, not the incognito Engage window or your regular Chrome profile.")
+        print("  Amazon and DigiKey cart profiles retain the installation across runs and working folders.")
+        print("  Return to the vendor cart tab (reload if needed), open Share-A-Cart, and click Create Cart ID.")
+        print("  Paste the resulting link or code below" + (" (required; 'cancel' to stop):" if required else " (or press Enter to skip):"))
     
     try:
-        user_input = input("👉 Share-A-Cart Link/Code: ").strip()
-        if not user_input and auto_url:
-            print(f"  ✅ Using Share-A-Cart link: {auto_url}")
-            return auto_url
-        url = normalize_share_a_cart_url(user_input)
-        if url:
-            print(f"  ✅ Registered Share-A-Cart link: {url}")
-            return url
-        else:
+        while True:
+            user_input = input("👉 Share-A-Cart Link/Code: ").strip()
+            if user_input.lower() in ("cancel", "quit", "q"):
+                return None
+            if not user_input and auto_url:
+                print(f"  ✅ Using Share-A-Cart link: {auto_url}")
+                return auto_url
+            url = normalize_share_a_cart_url(user_input)
+            if url:
+                print(f"  ✅ Registered Share-A-Cart link: {url}")
+                return url
+            if required:
+                print("A valid Share-A-Cart URL/code is required. Create it from the verified cart, then paste it here (or 'cancel').")
+                continue
             print("  ⏩ Skipped Share-A-Cart link (none provided).")
             return None
     except (KeyboardInterrupt, EOFError):
         print("\n  ⏩ Skipped Share-A-Cart link.")
-        return auto_url
+        return None if required else auto_url

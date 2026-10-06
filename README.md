@@ -245,7 +245,9 @@ mrg-finance purchase --fresh
 ```
 This verifies the real cart quantities and prices, captures screenshots, builds the Budget vs Quoted comparison report (`.xlsx`/`.csv`), and fills the Engage request form. The requested amount includes shipping/tax and must match the verified vendor total before attachments upload. Review the spreadsheet and submit manually in Engage.
 
-Use `mrg-finance purchase --order <ORDER_ID> --cart-source personal` to sign into your own Amazon account in a dedicated Chrome profile and create a Share-A-Cart link from the actual cart. DigiKey uses the Share-A-Cart Everything extension and manual cart confirmation. See the [purchase guide](docs/user/PURCHASE_GUIDE.md) for CAPTCHA handling, payee lookup, field mapping, and reconciliation. The side-by-side review GUI has been removed.
+Run `mrg-finance purchase --order <ORDER_ID>` to use the default automated cart source; there is no cart-source selection prompt. For Amazon, use `--cart-source personal` to sign into your own account in a dedicated Chrome profile and create a Share-A-Cart link from the actual cart. DigiKey attempts to add products to an empty cart in a persistent browser, pauses for manual bot verification, and uses the Share-A-Cart Everything extension; no cart-source flag is required. The CLI reads DigiKey cart products, quantities, prices, and displayed charges automatically; manual quote entry is an explicit fallback when reading fails. Verified quotes fill the comparison workbook before GT login. Enter at the final continue prompt opens Engage; final submission stays manual. Vendor cart profiles retain Share-A-Cart across runs and working folders. Funding references are read from the approved bill’s Menu → Budget view. The cart link is saved and verified in every matching Ordering row before Engage preparation. See the [purchase guide](docs/user/PURCHASE_GUIDE.md) for CAPTCHA handling, payee lookup, field mapping, and reconciliation. The side-by-side review GUI has been removed.
+
+Purchase offers replacement product URLs before cart preparation and when verified prices exceed allocation. It saves accepted replacements to the active workbook's Ordering Link/Vendor cells and rebuilds the cart for the detected vendor, including Amazon-to-DigiKey changes. Approved bill prices remain the baseline.
 
 *(If submitting manually without the CLI: take a vendor cart screenshot, open [Create Purchase Request in Engage](https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/Finance/CreatePurchaseRequest), attach your cart screenshot and price comparison, and record the Engage URL in Col V and cart link in Col U).*
 
@@ -285,7 +287,7 @@ export FINANCE_XLSX_PATH="/path/to/my_custom_budget.xlsx"
 `mrg-finance` v0.2.8+ automatically handles usernames and paths containing spaces on Windows without splitting arguments.
 
 ### Headless Chrome / Selenium Issues
-Selenium automatically manages the appropriate `chromedriver` binary matching your local Google Chrome installation. Ensure Google Chrome is installed on your system.
+Selenium Manager uses installed Chrome or downloads Chrome for Testing and its matching driver when Chrome is unavailable. New Mac users normally do not need a manual Chrome installation. The first browser run needs internet to obtain uncached components; manually installing Chrome is a fallback when browser downloads are blocked. [Selenium browser management](https://www.selenium.dev/documentation/selenium_manager/)
 
 ---
 

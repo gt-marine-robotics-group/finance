@@ -12,11 +12,13 @@ KNOWN_PAYEES = {
     "amazon": {
         "name": "Amazon.com Services LLC",
         "address": "410 Terry Avenue North, Seattle, WA 98109, USA",
+        "street": "410 Terry Avenue North", "city": "Seattle", "state": "WA", "postal_code": "98109",
         "source": "https://shipping.amazon.com/privacy-notice",
     },
     "digikey": {
         "name": "Digi-Key Electronics",
         "address": "701 Brooks Avenue South, Thief River Falls, MN 56701, USA",
+        "street": "701 Brooks Avenue South", "city": "Thief River Falls", "state": "MN", "postal_code": "56701",
         "phone": "1-800-344-4539",
         "email": "orders@digikey.com",
         "source": "https://www.digikey.com/en/help/browser-support",
@@ -83,6 +85,8 @@ def lookup_vendor_payee(vendor, product_url):
                             address.get("addressRegion"), address.get("postalCode"), country,
                         ) if v),
                         "phone": org.get("telephone"), "email": org.get("email"), "source": response.url,
+                        "street": address.get("streetAddress"), "city": address.get("addressLocality"),
+                        "state": address.get("addressRegion"), "postal_code": address.get("postalCode"),
                     })
                     return result
         except (requests.RequestException, ValueError, TypeError):
