@@ -38,6 +38,7 @@ from mrg_finance.screenshot_capture import save_page_screenshot
 from mrg_finance.purchase_sources import (
     CartReplacement, OrderingLinkStore, edit_links_before_cart,
     offer_quote_replacements, purchase_source,
+    needs_quote_attachment,
 )
 
 # === CONFIG & PATHS ===
@@ -283,8 +284,8 @@ def main():
             raise SystemExit(f"Quantity must be a whole number for {item_name}.")
         if vendor_key(item_vendor) != vendor_key(vendor_name):
             raise SystemExit("Each Order ID must contain only one vendor; split this order before purchasing.")
-        if qty <= 0 or not item_bill_no or not item_name or not link:
-            raise SystemExit(f"Invalid order row: {item_name or b_id}. Need positive quantity, bill number, and product link.")
+        if qty <= 0 or not item_bill_no or not item_name:
+            raise SystemExit(f"Invalid order row: {item_name or b_id}. Need positive quantity, bill number, and item name.")
         total = cost * qty
 
         funding_kind = funding_kind_from_title(source_bill_title)
@@ -329,14 +330,18 @@ def main():
     if "--cart-source" in sys.argv:
         source = sys.argv[sys.argv.index("--cart-source") + 1]
     print(f"\nWorkbook: {os.path.abspath(XLSX_PATH)}")
-    print(f"Cart mode: {source}")
+    quote_workflow = needs_quote_attachment(requests_to_submit, vendor_name)
+    print(f"Preparation mode: {'saved vendor quote (no cart)' if quote_workflow else source}")
     print(f"Evidence directory: {Path('screenshots', selected_order_id).resolve()}")
     print("Review prices in the comparison spreadsheet; submission stays manual in Engage.")
-    if input("\nPrepare and verify vendor cart? [Y/n]: ").strip().lower() in ("n", "no"):
+    preparation = "Prepare this request from a saved vendor quote?" if quote_workflow else "Prepare and verify vendor cart?"
+    if input(f"\n{preparation} [Y/n]: ").strip().lower() in ("n", "no"):
         raise SystemExit(0)
     try:
-        store = OrderingLinkStore(XLSX_PATH, selected_order_id, requests_to_submit, df_orders.attrs["header_row"])
-        vendor_name = edit_links_before_cart(requests_to_submit, vendor_name, store)
+        store = None
+        if not quote_workflow:
+            store = OrderingLinkStore(XLSX_PATH, selected_order_id, requests_to_submit, df_orders.attrs["header_row"])
+            vendor_name = edit_links_before_cart(requests_to_submit, vendor_name, store)
         def save_cart_link(url):
             count = spreadsheet_utils.update_order_table_links(XLSX_PATH, selected_order_id,
                 share_cart_url=url, expected_rows=len(requests_to_submit))
@@ -347,7 +352,7 @@ def main():
         while True:
             try:
                 cart = prepare_cart(requests_to_submit, vendor_name, selected_order_id, source,
-                                    quote_review=lambda items, vendor: offer_quote_replacements(items, vendor, store),
+                                    quote_review=(lambda items, vendor: offer_quote_replacements(items, vendor, store)) if store else None,
                                     save_share_url=save_cart_link)
                 break
             except CartReplacement as replacement:
@@ -366,11 +371,11 @@ def main():
             r["total"] = r["quoted_total"]
         payee = lookup_vendor_payee(vendor_name, requests_to_submit[0]["link"])
         print(f"\nApproved allocation: ${grand_total:.2f}")
-        print(f"Verified merchandise: ${cart['subtotal']}")
-        print(f"Shipping: ${cart['shipping']} | Tax: ${cart['tax']}")
+        print(f"{'Reviewed quote' if quote_workflow else 'Verified merchandise'}: ${cart['subtotal']}")
+        print(cart["quote_basis"] if quote_workflow else f"Shipping: ${cart['shipping']} | Tax: ${cart['tax']}")
         print(f"Engage requested amount: ${order_amount:.2f}")
         print(f"Change from allocation: ${order_amount - grand_total:+.2f}")
-        print(f"\n{'Item':<35} {'Qty':>4} {'Approved/unit':>15} {'Cart/unit':>12}")
+        print(f"\n{'Item':<35} {'Qty':>4} {'Approved/unit':>15} {'Quote/unit' if quote_workflow else 'Cart/unit':>12}")
         for r in requests_to_submit:
             print(f"{r['item_name'][:35]:<35} {r['quantity']:>4} ${r['cost']:>14.2f} ${r['quoted_unit_cost']:>11.2f}")
         print(f"Payee: {payee['name']}\nAddress: {payee.get('address', 'Needs manual review')}")
@@ -383,7 +388,7 @@ def main():
         )
         print(f"Automatically filled comparison workbook: {os.path.abspath(preview_path)}\n"
               f"CSV: {os.path.abspath(preview_csv)}\n"
-              "Cart prices and charges are saved. Funding line/section references will be completed after Engage lookup.\n"
+              "Quoted prices and charges are saved. Funding line/section references will be completed after Engage lookup.\n"
               "Close the comparison workbook before continuing so those references can be updated.")
         print("Press Enter to open and fill Engage, or type 'n' to stop with the comparison workbook saved; "
               "final submission remains manual.")
@@ -552,7 +557,7 @@ def main():
         )
         print(f"  Comparison spreadsheet: {os.path.abspath(excel_detail_path)}")
         print(f"  CSV: {os.path.abspath(csv_detail_path)}")
-        print(f"  Cart screenshot: {cart['screenshot']}")
+        print(f"  {'Quote attachment' if quote_workflow else 'Cart screenshot'}: {cart['screenshot']}")
         input("Review the comparison spreadsheet, then Enter to fill Engage: ")
 
         print(f"\n{'='*60}")
@@ -594,7 +599,8 @@ def main():
 
             # Verify precise custom fields before attaching any documentation.
             expected_funding = " and ".join("SGA " + kind.title() for kind in funding_lines)
-            input(f"Select the funding Category/Account and {expected_funding} option in Engage, then Enter: ")
+            input(f"Select the funding Category/Account in Engage, then Enter. "
+                  f"The tool will select {expected_funding} if no SGA option is selected: ")
             run_engage_step(driver, order_shot_dir, "Engage form filling", lambda: fill_purchase_fields(
                 driver, amount=order_amount, cart_total=cart["total"],
                 bill_refs=order_bill_refs, payee=payee,
@@ -679,12 +685,14 @@ def main():
         except Exception as e:
             print(f"\nPurchase stopped: {e}")
             save_engage_diagnostic(driver, order_shot_dir)
-            input("Both Chrome windows remain open. Inspect or finish the form manually; "
+            windows = "Chrome remains open." if quote_workflow else "Both Chrome windows remain open."
+            input(windows + " Inspect or finish the form manually; "
                   "press Enter only when you are ready to end this run and close them: ")
             raise SystemExit(1) from e
 
     finally:
-        cart["driver"].quit()
+        if cart["driver"] is not None:
+            cart["driver"].quit()
         if driver is not None:
             driver.quit()
 

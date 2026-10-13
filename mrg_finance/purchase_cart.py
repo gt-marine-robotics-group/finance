@@ -21,6 +21,7 @@ from .screenshot_capture import BrowserChallenge, capture_evidence, navigate_for
 from .vendor_payee import vendor_key
 from .digikey_cart import prepare_digikey_items
 from .browser_profiles import cart_profile
+from .purchase_sources import is_product_url, needs_quote_attachment
 
 
 def _cart_count(driver):
@@ -317,6 +318,13 @@ def verify_digikey_cart_with_retry(driver, items, folder):
 def prepare_cart(items, vendor, order_id, source="automated", *, quote_review=None, save_share_url=None):
     folder = Path("screenshots", order_id).resolve()
     folder.mkdir(parents=True, exist_ok=True)
+    if needs_quote_attachment(items, vendor):
+        from .quote_attachment import prepare_quote
+        return prepare_quote(items, vendor, folder)
+    invalid = [item["item_name"] for item in items if not is_product_url(item.get("link"))]
+    if invalid:
+        raise ValueError("A complete HTTP(S) product URL is required for " + ", ".join(invalid)
+                         + ". Correct the Ordering links before preparing this vendor cart.")
     options = Options()
     options.add_argument("--window-size=1600,1000")
     options.add_argument("--disable-blink-features=AutomationControlled")
@@ -474,6 +482,9 @@ def prepare_cart(items, vendor, order_id, source="automated", *, quote_review=No
 
 def recheck_cart(cart, items):
     """Recheck the supported vendor quote before upload, retaining the cart session."""
+    if cart.get("mode") == "quote":
+        from .quote_attachment import recheck_quote
+        return recheck_quote(cart, items)
     driver = cart["driver"]
     if cart["vendor_key"] == "amazon":
         navigate_for_evidence(driver, "https://www.amazon.com/gp/cart/view.html")

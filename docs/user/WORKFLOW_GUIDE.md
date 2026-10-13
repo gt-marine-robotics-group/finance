@@ -27,8 +27,8 @@ flowchart TD
     end
 
     subgraph Stage3["Stage 3: Engage Submission & Audit Trail"]
-        S1["Submit Purchase Request on Engage"] --> S2["Attach cart screenshot & comparison report"]
-        S2 --> S3["Record Engage Request Link (Col V) & Share-A-Cart Link (Col U)"]
+        S1["Submit Purchase Request on Engage"] --> S2["Attach cart or quote evidence & comparison report"]
+        S2 --> S3["Record Engage Request Link (Col V); cart link (Col U) when applicable"]
     end
 
     Stage1 --> Stage2
@@ -68,7 +68,7 @@ Used when preparing an SGA Bill Request for funding.
 | **H** | `Quantity` | Number | Quantity to request. |
 | **I** | `Cost` | Currency | Price of **one unit or pack** (e.g. enter `$12.50` for a pack of 10, not the total extended cost). |
 | **K** | **`Total Cost`** | **Formula** | **DO NOT OVERWRITE.** Calculated as `=Quantity * Cost`. |
-| **L** | `Link` | URL | Direct link to the vendor product page for screenshot verification. |
+| **L** | `Link` | URL | Vendor product page; leave blank for a saved quote PDF/image, such as flights. |
 | **M** | `Person Requesting` | Text | Your name / GT username. |
 | **N** | `Status` | Text | `Draft`, `Submitted`, or `Approved`. |
 
@@ -87,7 +87,7 @@ Used when arranging an approved purchase. Note: Row 1 contains summary subtotals
 | **K** | `Purchaser` | Text | Name of the person coordinating the order. |
 | **L** | `Status` | Text | `Pending`, `Ordered`, `Delivered`, or `Reimbursed`. |
 | **O** | `Budget Section` | **Calculated** | **DO NOT OVERWRITE.** Pulled from the source bill item. |
-| **U** | `Share-A-Cart Link` | URL | Link generated from vendor cart (e.g. Share-A-Cart). **Paste on every row sharing this Order ID.** |
+| **U** | `Share-A-Cart Link` | URL | Vendor cart link, saved on every row sharing this Order ID. Not needed for saved-quote purchases. |
 | **V** | `Engage Request Link` | URL | URL of the submitted Engage purchase request. **Paste on every row sharing this Order ID.** |
 
 > [!IMPORTANT]
@@ -113,10 +113,10 @@ If you are not using the automated CLI tool, follow these step-by-step instructi
 ### B. Submitting a Purchase Request (Spending Approved Funds)
 
 1. **Verify Funding:** Confirm that the bill is marked `Approved` by SGA and that you have sufficient remaining allocation.
-2. **Build Vendor Cart & Gather Evidence:**
+2. **Gather Vendor Cart or Quote Evidence:**
    - Add the exact products and quantities to your cart on the vendor website.
    - Take a clear screenshot of the cart showing items, quantities, and estimated total (`screenshots/<Order ID>/cart.png`).
-   - Generate a Share-A-Cart link if available.
+   - Generate a Share-A-Cart link if available. For flights without a product page, use the saved vendor quote instead; no cart link is needed.
 3. **Create Budget vs Quoted Comparison Spreadsheet:**
    - Create a separate Excel workbook titled `Budget_vs_Quoted_Detail_<Order ID>.xlsx`.
    - Required columns:
@@ -134,11 +134,11 @@ If you are not using the automated CLI tool, follow these step-by-step instructi
    - **Category / Account:** Select the designated funding account (consult the finance officer if unsure).
    - **Budget/Bill # and Request Line #:** List each item's verified reference in the approved bill (e.g. `Bill 344042, Line 34`). *Note: Engage line numbers must be checked on the approved Engage bill; they are NOT Excel row numbers.*
    - **SGA Breakdown:** State the amount per line and budget section (e.g., `$49.95, Line 34, Bill 344042, B06 - Non-Inventoried Items`).
-   - **Attachments:** Upload `cart.png` and `Budget_vs_Quoted_Detail_<Order ID>.xlsx`.
+   - **Attachments:** Upload the cart screenshot or saved vendor quote, plus `Budget_vs_Quoted_Detail_<Order ID>.xlsx`.
    - **Signature:** Enter your full name and submit.
 5. **Record URLs in Excel:**
    - Copy the URL of the submitted purchase request into Column V (**`Engage Request Link`**) on **every row** with that `Order ID` in `Ordering`.
-   - Copy the cart link into Column U (**`Share-A-Cart Link`**) on those same rows.
+   - For cart-based purchases, copy the cart link into Column U (**`Share-A-Cart Link`**) on those same rows.
 
 ---
 

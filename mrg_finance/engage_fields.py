@@ -108,8 +108,10 @@ def sga_funding_controls(driver, excluded):
     return driver.execute_script(r"""
         // __sga_funding_groups__: do not match SGA labels elsewhere in the form.
         return [...document.querySelectorAll('input[type=checkbox]')].flatMap(e => {
-          if (!e.getClientRects().length) return [];
-          const label = [...(e.labels || [])].map(l => l.innerText).join(' ').trim();
+          const labels = [...(e.labels || [])];
+          const visibleLabel = labels.find(l => l.getClientRects().length);
+          if (!e.getClientRects().length && !visibleLabel) return [];
+          const label = (labels.map(l => l.innerText).join(' ') || e.getAttribute('aria-label') || '').trim();
           const match = label.match(/^SGA\s+(Budget|Bill)\b/i);
           if (!match) return [];
           let field = document.getElementById('answerTextBox-' + e.id + '-free');
@@ -120,9 +122,56 @@ def sga_funding_controls(driver, excluded):
               if (fields.length>1) break;
             }
           }
-          return [{kind:match[1].toLowerCase(), selected:e.checked, field}];
+          return [{kind:match[1].toLowerCase(), selected:e.checked, field,
+                   control:e, click_target:e.getClientRects().length ? e : visibleLabel}];
         });
     """, ["__sga_funding_groups__"], excluded)
+
+
+def ensure_sga_funding(driver, expected, excluded):
+    """Select unchosen SGA options from verified references; never override a conflict."""
+    expected = set(expected)
+    def current():
+        return [c for c in sga_funding_controls(driver, excluded) if isinstance(c, dict)]
+    controls = current()
+    if not controls:
+        return []  # Older forms expose labeled answers without native checkboxes.
+    selected = {c["kind"] for c in controls if c["selected"]}
+    if selected and selected != expected:
+        raise FormFieldError(f"Select {' and '.join('SGA ' + k.title() for k in sorted(expected))} in Engage. "
+                             f"Currently selected: {', '.join(sorted(selected))}.")
+    if not selected:
+        for kind in sorted(expected):
+            def select_current(_, kind=kind):
+                fresh = current()
+                if any(c["selected"] and c["kind"] not in expected for c in fresh):
+                    raise FormFieldError("A conflicting SGA option was selected. Correct it in Chrome and retry.")
+                matches = [c for c in fresh if c["kind"] == kind]
+                if len(matches) != 1:
+                    raise FormFieldError(f"Expected one SGA {kind.title()} option, found {len(matches)}.")
+                if matches[0]["selected"]:
+                    return True
+                target = matches[0].get("click_target")
+                if target is None:
+                    raise FormFieldError(f"Could not click SGA {kind.title()}. Select it in Chrome and retry.")
+                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", target)
+                target.click()
+                return False  # Re-read fresh controls to confirm the checked state.
+            try:
+                WebDriverWait(driver, 5, poll_frequency=.1,
+                    ignored_exceptions=(StaleElementReferenceException,)).until(select_current)
+            except TimeoutException as error:
+                raise FormFieldError(f"Engage did not retain SGA {kind.title()}. Select it in Chrome and retry.") from error
+        print("  Selected " + " and ".join("SGA " + k.title() for k in sorted(expected)))
+        try:
+            WebDriverWait(driver, 5, poll_frequency=.1,
+                ignored_exceptions=(StaleElementReferenceException,)).until(lambda _: all(
+                    any(c["kind"] == kind and c["selected"] and c["field"] is not None
+                        and c["field"].is_displayed() and c["field"].is_enabled() for c in current())
+                    for kind in expected))
+        except TimeoutException as error:
+            raise FormFieldError("The selected SGA write-in answers have not loaded. Wait and retry.") from error
+    return current()
 
 
 def fill_native_payee(driver, payee, excluded):
@@ -221,8 +270,7 @@ def fill_purchase_fields(driver, *, amount, cart_total, bill_refs, payee, sga_li
     if amount_data["id"]:
         excluded.append(amount_data["id"])
     groups = funding_lines or {"bill": sga_lines}
-    native_groups = [{"kind": c["kind"], "selected": c["selected"]}
-                     for c in sga_funding_controls(driver, excluded) if isinstance(c, dict)]
+    native_groups = ensure_sga_funding(driver, groups, excluded)
     if native_groups:
         selected = {c["kind"] for c in native_groups if c["selected"]}
         if selected != set(groups):

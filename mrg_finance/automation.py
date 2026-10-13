@@ -95,7 +95,7 @@ def prepare_bill_budget(driver, bill_url, folder):
         cancel_message="Bill preparation cancelled; checked screenshots remain saved and Chrome stays open.")
 
 
-def _find_screenshot(item_name, bill_title=""):
+def _find_screenshot(item_name, bill_title="", *, accept=None):
     """Find screenshot file for an item using exact, sanitized, and alphanumeric normalized matching."""
     if not item_name:
         return None
@@ -117,6 +117,7 @@ def _find_screenshot(item_name, bill_title=""):
                 dirs_to_check.append(sp)
 
     alnum_target = re.sub(r'[^a-zA-Z0-9]+', '', item_name.lower())
+    candidates = []
 
     for d in dirs_to_check:
         if not os.path.isdir(d):
@@ -124,14 +125,14 @@ def _find_screenshot(item_name, bill_title=""):
         for ext in [".png", ".jpg", ".jpeg", ".pdf"]:
             exact = os.path.join(d, f"{safe_name}{ext}")
             if os.path.exists(exact):
-                return exact
+                candidates.append(exact)
             exact_orig = os.path.join(d, f"{item_name}{ext}")
             if os.path.exists(exact_orig):
-                return exact_orig
+                candidates.append(exact_orig)
             alnum_fn = "".join(c if c.isalnum() or c in " -_" else "_" for c in item_name) + ext
             alnum_path = os.path.join(d, alnum_fn)
             if os.path.exists(alnum_path):
-                return alnum_path
+                candidates.append(alnum_path)
 
         # Alphanumeric fallback scan across all files in directory
         try:
@@ -139,17 +140,21 @@ def _find_screenshot(item_name, bill_title=""):
                 f_base, f_ext = os.path.splitext(f)
                 if f_ext.lower() in [".png", ".jpg", ".jpeg", ".pdf"]:
                     if re.sub(r'[^a-zA-Z0-9]+', '', f_base.lower()) == alnum_target:
-                        return os.path.join(d, f)
+                        candidates.append(os.path.join(d, f))
         except Exception:
             pass
 
-    return None
+    if accept:
+        candidates = [p for p in set(candidates) if accept(p)]
+        # A newly reviewed PDF must win over an older screenshot of the same item.
+        return max(candidates, key=lambda p: os.path.getmtime(p + ".evidence.json"), default=None)
+    return candidates[0] if candidates else None
 
 
 def _verified_screenshot(item_name, bill_title, url):
     from mrg_finance.screenshot_capture import validate_evidence
-    path = _find_screenshot(item_name, bill_title)
-    return path if path and validate_evidence(path, source_url=url or None) else None
+    return _find_screenshot(item_name, bill_title,
+                            accept=lambda p: validate_evidence(p, source_url=url or None))
 
 
 def require_bill_evidence(items, bill_title):
@@ -388,16 +393,29 @@ def main():
 
     # Interactive Screenshot Audit & On-Demand Capture
     safe_bill = "".join(c if c.isalnum() or c in " -_" else "_" for c in BILL_NO)
+    bill_shot_dir = os.path.join(SCREENSHOT_DIR, safe_bill)
     bill_items_df = _df_temp[_df_temp["Bill Title"].astype(str).str.strip().str.lower() == BILL_NO.lower()]
 
     missing_items = []
     existing_items = []
+    from mrg_finance.purchase_sources import is_product_url
+    from mrg_finance.quote_attachment import prompt_quote_attachment
 
     for _, row in bill_items_df.iterrows():
         item_name = str(row.get("Item Name", "")).strip()
         url = str(row.get("Link", "")).strip()
         if item_name:
             found_shot = _verified_screenshot(item_name, BILL_NO, url)
+            if not is_product_url(url):
+                if not found_shot:
+                    print(f"\n{item_name}: no product URL; attach a saved vendor quote instead of capturing a webpage.")
+                    try:
+                        found_shot = prompt_quote_attachment(
+                            bill_shot_dir, item_name, source_url=url)
+                    except ValueError as error:
+                        raise SystemExit(f"Bill preparation stopped: {error}") from error
+                existing_items.append((item_name, url, found_shot))
+                continue
             if found_shot and os.path.exists(found_shot):
                 existing_items.append((item_name, url, found_shot))
             else:
@@ -418,10 +436,10 @@ def main():
         take_missing = input("\nCapture missing screenshots in Chrome? (Y/n): ").strip().lower()
         if take_missing in ("", "y", "yes"):
             items_to_capture = missing_items
-    else:
+    elif any(is_product_url(url) for _, url, _ in existing_items):
         retake = input("\nAll screenshots exist! Re-capture screenshots anyway? (y/N): ").strip().lower()
         if retake in ("y", "yes"):
-            items_to_capture = existing_items
+            items_to_capture = [item for item in existing_items if is_product_url(item[1])]
 
     if items_to_capture:
         from mrg_finance.screenshot_capture import invalidate_evidence

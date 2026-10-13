@@ -39,6 +39,9 @@ def write_cart_reconciliation(wb, order_id, cart_quote, *, preliminary=False,
     if payee:
         rows.extend((label, payee.get(key, "")) for label, key in (
             ("Payee", "name"), ("Payee address", "address"), ("Payee source", "source")))
+    if cart_quote.get("quote_basis"):
+        rows.extend([("Quote basis", cart_quote["quote_basis"]),
+                     ("Quote attachment", os.path.basename(cart_quote["screenshot"]))])
     for row in rows:
         summary.append(row)
     summary.column_dimensions["A"].width = 35
@@ -100,7 +103,8 @@ def generate_order_budget_vs_quoted_excel(
     ws.cell(row=1, column=1, value="Budget Request & Quoted Line Items Comparison").font = font_title
     ws.cell(row=2, column=1, value=f"Approved allocation and quoted line items ({all_bill_nos})").font = font_subtitle
     if preliminary:
-        ws.cell(row=2, column=1, value="PRELIMINARY CART QUOTE — Engage funding line/section lookup pending").font = font_subtitle
+        quote_type = "VENDOR QUOTE" if cart_quote and cart_quote.get("mode") == "quote" else "CART QUOTE"
+        ws.cell(row=2, column=1, value=f"PRELIMINARY {quote_type} — Engage funding line/section lookup pending").font = font_subtitle
 
     # Table Headers (Row 4)
     headers = [

@@ -15,7 +15,27 @@ from .spreadsheet_utils import COLUMN_ALIASES, clean_id, find_sheet_name, get_co
 from .vendor_payee import vendor_key
 
 
+def is_product_url(value):
+    """Only send complete HTTP(S) URLs to the vendor browser."""
+    if not isinstance(value, str) or any(c.isspace() for c in value.strip()):
+        return False
+    try:
+        parsed = urlparse(value.strip())
+        return (parsed.scheme in ("http", "https") and bool(parsed.hostname)
+                and not parsed.username and not parsed.password)
+    except ValueError:
+        return False
+
+
+def needs_quote_attachment(items, vendor):
+    """Non-catalog purchases such as flights can use a saved vendor quote."""
+    return vendor_key(vendor) not in ("amazon", "digikey") and any(
+        not is_product_url(item.get("link")) for item in items)
+
+
 def vendor_for_link(url, fallback=""):
+    if not is_product_url(url):
+        return fallback
     host = (urlparse(url).hostname or "").lower()
     domains = {
         "Amazon": ("amazon.com", "amazon.co.uk", "amazon.ca", "amazon.de", "a.co", "amzn.to"),

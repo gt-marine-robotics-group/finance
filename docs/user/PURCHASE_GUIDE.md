@@ -4,6 +4,14 @@ Run `mrg-finance purchase --fresh --order <Order ID>` after the source bills hav
 
 The CLI shows the workbook path, approved allocation, current quote, shipping, tax, change from allocation, payee details, and absolute paths to all evidence. Review the generated comparison spreadsheet before filling Engage. The CLI prepares the form; you submit it manually.
 
+## Flights and other purchases without product links
+
+Use the normal `mrg-finance purchase --order <Order ID>` command. For vendors other than Amazon/DigiKey, an empty or incomplete product URL automatically selects **saved vendor quote** preparation instead of a cart. No extra flag is needed.
+
+Paste or drag a saved quote PDF, PNG or JPEG into the terminal when asked, confirm its contents, and enter the quoted amount including taxes/fees. For one item with quantity one, enter the total once. For multiple items, enter each quoted unit price and the attachment's total so the tool can reconcile them. The tool copies the attachment into `screenshots/<Order ID>/`, preserves the original, and fills the comparison workbook. These amounts are manually read from your quote, not scraped prices. Approved Bills allocations remain unchanged.
+
+This flow skips the vendor Chrome window and Share-A-Cart. It still looks up funding references, fills Engage, checks that the requested amount matches the quote, and attaches the quote plus the comparison workbook. Before upload, confirm that the quote is still current. A changed or missing evidence file stops the upload. Amazon/DigiKey orders still require complete product URLs for cart verification.
+
 ## Choose a cart
 
 ```bash
@@ -76,7 +84,7 @@ Immediately before uploading attachments, the CLI refreshes automatically read A
 
 After GT sign-in and Duo MFA, the CLI looks up each item's line number and section on the approved Engage budget or bill. The live request title identifies annual budget funding, with the workbook title as a fallback. If a lookup fails, enter the verified Engage line and section. Excel Bill Item IDs are not used as Engage line numbers. Nonzero shipping and tax also require funding references. A blank reference re-prompts with both Chrome windows open; type `cancel` to stop. DigiKey’s waived shipping skips this prompt.
 
-Select the Category/Account and the prompted SGA Budget or SGA Bill funding option in Engage. The CLI checks the selected checkbox and fills its own write-in answer; an unchecked funding option is left untouched. An order funded by both sources can fill both selected options. The CLI matches controls through labels, ARIA references, or a local question container and checks that values were retained:
+Select the Category/Account in Engage. If no SGA option is selected, the CLI selects SGA Budget and/or SGA Bill from the resolved funding references and waits for its write-in answer to appear. If a conflicting option is already selected, it pauses for correction instead of changing that choice. It fills only the expected funding answers, including both when an order uses both sources. The CLI matches controls through labels, ARIA references, or a local question container and checks that values were retained:
 
 Multiple item references use semicolons in single-line answers and line breaks in text areas. The CLI does not send Enter keys into single-line fields, which could submit an incomplete form. Controls are re-found during filling and before reading the requested amount, so form updates do not reuse stale element references. Brief control replacement is retried automatically; persistent errors still pause in the same Chrome window.
 
@@ -103,11 +111,11 @@ For approved-bill references, the CLI opens the bill, expands **Menu**, selects 
 
 Evidence is stored under `screenshots/<Order ID>/`:
 
-- `cart.png`: freshly verified vendor cart.
+- `cart.png`: freshly verified vendor cart, or `vendor_quote.pdf`/`.png`/`.jpg`/`.jpeg` for a manually reviewed saved quote.
 - `Budget_vs_Quoted_Detail_<Order ID>.xlsx`: approved versus quoted prices and verified bill references, plus a Cart Reconciliation tab recording fees, vendor total, Engage amount, and payee source.
 - `Budget_vs_Quoted_Detail_<Order ID>.csv`: merchandise comparison for spreadsheet review.
 
-The screenshot and Excel report are uploaded only after the field and total checks pass. Review the form, complete any remaining required fields, sign, and submit in Engage. Paste the resulting Engage URL if it cannot be detected. The CLI writes cart and request links to every matching Ordering row and reports whether SharePoint synchronization succeeded.
+The cart screenshot or saved quote and Excel report are uploaded only after the field and total checks pass. Review the form, complete any remaining required fields, sign, and submit in Engage. Paste the resulting Engage URL if it cannot be detected. The CLI writes cart and request links to every matching Ordering row and reports whether SharePoint synchronization succeeded.
 
 To regenerate an offline comparison without opening Engage, run `mrg-finance report --order <Order ID>`. Offline reports may use allocation fallbacks; they do not count as verified purchase quotes.
 

@@ -46,8 +46,10 @@ Before running the tool, log in to [MRG Budgeting in Engage](https://gatech.camp
 | **H** | `Quantity` | Integer | Total units needed. |
 | **I** | `Cost` | Currency | Unit price (or pack price) of one unit. |
 | **K** | `Total Cost` | *Formula* | **Do NOT edit.** Auto-multiplies `Quantity * Cost`. |
-| **L** | `Link` | URL | Direct vendor product URL for quote verification. |
+| **L** | `Link` | URL | Direct vendor product URL. Leave blank for flights or other items supported by a saved quote. |
 | **M** | `Person Requesting` | Text | Your GT username or full name. |
+
+For an item without a product URL, `bill-request` asks you to paste or drag in a saved quote PDF, PNG or JPEG and confirm that its item, quantity and price are current. It copies the file into the bill's evidence folder and attaches it to that line in Engage without opening a product browser. Enter the requested unit cost and quantity in the Bills sheet beforehand; the quote file does not automatically change those values. Checked quote attachments can be reused on later runs.
 
 ---
 

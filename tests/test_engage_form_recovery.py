@@ -79,6 +79,23 @@ def test_wrong_funding_checkbox_pauses_for_correction_in_same_form(monkeypatch, 
     assert fields["budget-answer"].get_attribute("value").startswith("$600.00")
 
 
+@pytest.mark.parametrize("kind", ["bill", "budget"])
+def test_empty_sga_selection_is_checked_and_filled_from_verified_references(kind):
+    driver, fields, groups = native_form()
+    for group in groups:
+        group["selected"] = False
+        group["click_target"] = MagicMock()
+        group["click_target"].click.side_effect = lambda group=group: group.update(selected=True)
+    engage_fields.fill_purchase_fields(driver, amount=600, cart_total=600,
+        bill_refs=f"{kind} 344042, B03, Line 1", funding_lines={kind: "$600.00, B03, Line 1"},
+        payee=lookup_vendor_payee("DigiKey", ""))
+    assert {g["kind"] for g in groups if g["selected"]} == {kind}
+    assert fields[kind + "-answer"].get_attribute("value") == "$600.00, B03, Line 1"
+    other = "budget" if kind == "bill" else "bill"
+    fields[other + "-answer"].send_keys.assert_not_called()
+    driver.get.assert_not_called()
+
+
 def test_missing_payee_waits_for_user_and_retries_without_navigating(monkeypatch, tmp_path):
     driver, fields, groups = native_form()
     original = driver.find_elements.side_effect
@@ -253,6 +270,48 @@ def test_real_dom_multiline_bill_reference_and_replaced_controls_do_not_submit(t
         assert engage_fields.read_requested_amount(driver) == "25.00"
         assert driver.find_element(By.ID, "Subject").get_attribute("value") == "Amazon purchase"
         assert driver.find_element(By.ID, "Description").get_attribute("value").endswith("NOF2A")
+    finally:
+        driver.quit()
+
+
+@pytest.mark.skipif(os.environ.get("MRG_RUN_BROWSER_TESTS") != "1", reason="Opt-in local Chrome DOM regression")
+def test_real_dom_auto_selects_labeled_hidden_bill_checkbox_and_waits_for_answer():
+    from selenium import webdriver
+    options = webdriver.ChromeOptions()
+    options.add_argument("--headless=new")
+    driver = webdriver.Chrome(options=options)
+    html = '''<form>
+      <label for="Amount">Requested Amount</label><input id="Amount" type="number">
+      <label for="refs">What is the Budget/Bill # and Request Line #?</label><input id="refs">
+      <div><input id="budget" type="checkbox"><label for="budget">SGA Budget</label>
+        <textarea id="answerTextBox-budget-free" style="display:none"></textarea></div>
+      <div><input id="bill" type="checkbox" style="display:none"><label for="bill">SGA Bill</label>
+        <textarea id="answerTextBox-bill-free" style="display:none"></textarea></div>
+      <input id="PayeeFirstName"><input id="PayeeLastName">
+      <label for="email">Payee Email</label><input id="email">
+      <button type="submit">Submit</button>
+      </form><script>
+      window.submitted=0;
+      document.querySelector('form').addEventListener('submit', e=>{e.preventDefault();window.submitted++});
+      document.getElementById('bill').addEventListener('change', ()=>{
+        setTimeout(()=>{
+          document.getElementById('answerTextBox-bill-free').style.display='block';
+          for (const e of document.querySelectorAll('input,textarea')) {
+            const copy=e.cloneNode(true);copy.value=e.value;copy.checked=e.checked;e.replaceWith(copy);
+          }
+        },150);
+      });</script>'''
+    try:
+        driver.get("data:text/html," + quote(html))
+        result = engage_fields.fill_purchase_fields(driver, amount=25, cart_total=25,
+            bill_refs="Bill 376582, B03, Line 1", funding_lines={"bill": "$25.00, Bill 376582, B03, Line 1"},
+            payee=lookup_vendor_payee("DigiKey", ""))
+        assert result == "25.00"
+        assert driver.find_element(By.ID, "bill").is_selected()
+        assert not driver.find_element(By.ID, "budget").is_selected()
+        assert driver.find_element(By.ID, "answerTextBox-bill-free").get_attribute("value").startswith("$25.00")
+        assert driver.find_element(By.ID, "answerTextBox-budget-free").get_attribute("value") == ""
+        assert driver.execute_script("return window.submitted") == 0
     finally:
         driver.quit()
 

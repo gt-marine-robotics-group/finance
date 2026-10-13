@@ -202,8 +202,8 @@ All commands accept `--fresh` (`-f`) when `rclone` is configured to sync directl
 | `mrg-finance price-check [--bill <TITLE>] [--cart]` | Scrapes live vendor prices, reports price deltas, and generates 1-Click Amazon multi-item cart links. |
 | `mrg-finance report --order <ORDER_ID>` | Compiles formatted Budget vs Quoted Excel (`.xlsx`) & `.csv` comparison reports. *(Works offline)*. |
 | `mrg-finance screenshots [--bill <TITLE>] [--fresh] [--headless] [--browser chrome]` | Opens visible Chrome by default, saves screenshots and a price audit, and offers regular Chrome when verification blocks Selenium. |
-| `mrg-finance bill-request [--bill <TITLE>] [--fresh]` | Automates Engage funding bill submission and screenshot attachments. |
-| `mrg-finance purchase [--order <ORDER_ID>] [--fresh] [--cart-source personal]` | Verifies cart quantities and totals, builds comparison reports, and fills Engage bill and payee fields. |
+| `mrg-finance bill-request [--bill <TITLE>] [--fresh]` | Fills an existing Engage funding draft with screenshot or saved-quote attachments. |
+| `mrg-finance purchase [--order <ORDER_ID>] [--fresh] [--cart-source personal]` | Checks cart or saved-quote amounts, builds comparison reports, and fills Engage funding and payee fields. |
 
 ---
 
@@ -216,7 +216,7 @@ All team purchasing data lives in **`FY27_Bills_Budget.xlsx`**:
 
 1. Open the **`Bills`** sheet on SharePoint.
 2. Group items under a shared **`Bill Title`** (e.g. `Marine Robotics Group RobotX Testing Equipment Bill`).
-3. Fill in: `Item Name`, `Vendor`, unit `Cost`, `Quantity`, product `Link`, `Budget Section` (`B03` for equipment/tools, `B06` for supplies), and `Person Requesting`.
+3. Fill in: `Item Name`, `Vendor`, unit `Cost`, `Quantity`, product `Link` (leave blank when using a saved quote), `Budget Section` (`B03` for equipment/tools, `B06` for supplies), and `Person Requesting`.
 4. **Do not edit `Bill Item ID` or `Total Cost`** — Excel calculates these automatically.
 5. Create and save the funding request draft in [Engage Budgeting](https://gatech.campuslabs.com/engage/actionCenter/organization/MRG/budgeting) first. Use the same bill title and fiscal year. Copy the numeric request ID from its edit URL (`.../requests#/edit/344042`) into **`Bill No.` on every item row** for that bill. Save and close Excel; let OneDrive finish syncing before using `--fresh`.
 6. Fill the existing Engage draft:
@@ -244,7 +244,11 @@ Run the automated purchasing assistant:
 ```bash
 mrg-finance purchase --fresh
 ```
-This verifies the real cart quantities and prices, captures screenshots, builds the Budget vs Quoted comparison report (`.xlsx`/`.csv`), and fills the Engage request form. The requested amount includes shipping/tax and must match the verified vendor total before attachments upload. Review the spreadsheet and submit manually in Engage.
+This checks the vendor cart or records a reviewed saved quote, builds the Budget vs Quoted comparison report (`.xlsx`/`.csv`), and fills the Engage request form. The requested amount includes shipping/tax and must match the verified vendor total before attachments upload. Review the spreadsheet and submit manually in Engage.
+
+For flights or other non-catalog purchases from vendors other than Amazon/DigiKey, leave the product link blank. The CLI asks for a saved quote PDF/image and its amount, fills the comparison workbook, and attaches the quote in Engage without a cart or Share-A-Cart. `bill-request` also accepts saved quotes for items without links. See the [purchase guide](docs/user/PURCHASE_GUIDE.md#flights-and-other-purchases-without-product-links).
+
+Select the funding Category/Account in Engage. If neither SGA option is selected, the CLI selects Bill/Budget from the resolved funding references; conflicting selections pause for correction.
 
 Run `mrg-finance purchase --order <ORDER_ID>` to use the default automated cart source; there is no cart-source selection prompt. For Amazon, use `--cart-source personal` to sign into your own account in a dedicated Chrome profile and create a Share-A-Cart link from the actual cart. DigiKey attempts to add products to an empty cart in a persistent browser, pauses for manual bot verification, and uses the Share-A-Cart Everything extension; no cart-source flag is required. The CLI reads DigiKey cart products, quantities, prices, and displayed charges automatically; manual quote entry is an explicit fallback when reading fails. Verified quotes fill the comparison workbook before GT login. Enter at the final continue prompt opens Engage; final submission stays manual. Vendor cart profiles retain Share-A-Cart across runs and working folders. Funding references are read from the approved bill’s Menu → Budget view. The cart link is saved and verified in every matching Ordering row before Engage preparation. See the [purchase guide](docs/user/PURCHASE_GUIDE.md) for CAPTCHA handling, payee lookup, field mapping, and reconciliation. The side-by-side review GUI has been removed.
 
@@ -298,7 +302,7 @@ If verification loops in Selenium, use `mrg-finance screenshots --browser chrome
 - [Video Recording Runbook](docs/user/VIDEO_RUNBOOK.md) — Recording sequence, narration, and setup notes for installation, funding bills, purchases, and optional feature clips.
 - [Bill Request Automation Guide](docs/user/BILL_REQUEST_GUIDE.md) — Step-by-step interactive walkthrough for `mrg-finance bill-request`, GT Duo MFA, form autofill, and quote screenshots.
 - [Regular Chrome & Local Workbook Guide](docs/user/REGULAR_CHROME_GUIDE.md) — Cross-platform screenshot fallback, one-time extension setup, and local spreadsheet commands.
-- [Purchase Request Automation Guide](docs/user/PURCHASE_GUIDE.md) — Step-by-step interactive walkthrough for `mrg-finance purchase`, price auditing, cart creation, Engage line lookups, and mandatory attachments (`cart.png` + Excel detail report).
+- [Purchase Request Automation Guide](docs/user/PURCHASE_GUIDE.md) — Cart or saved-quote preparation, Engage funding lookups, and quote/cart evidence plus the Excel comparison report.
 - [Spreadsheet & Manual Workflow Guide](docs/user/WORKFLOW_GUIDE.md) — Comprehensive schema, formulas, column reference, and manual Engage walkthrough.
 - [CLI & Troubleshooting Guide](docs/user/CLI_GUIDE.md) — Full CLI flags, custom paths, and troubleshooting FAQs.
 - [Developer & Architecture Guide](docs/dev/DEVELOPMENT.md) — System architecture, simulation test suites, SIM PC deployment, and Graph API.
